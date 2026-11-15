@@ -1,0 +1,21 @@
+{
+  "name": "طب الحجايزة - حجز العيادات والملف الطبي",
+  "short_name": "طب الحجايزة",
+  "description": "منصة طب الحجايزة لحجز مواعيد العيادات ومستشفى الحجايزة التخصصي وإدارة الملف الطبي الموحد والروشتة الذكية.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#F4F8F9",
+  "theme_color": "#0D7377",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

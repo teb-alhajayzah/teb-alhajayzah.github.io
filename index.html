@@ -1,0 +1,2152 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0D7377" />
+  <meta name="description" content="طب الحجايزة - منصة متكاملة لحجز مواعيد العيادات ومستشفى الحجايزة التخصصي وإدارة الملفات الطبية والروشتة الذكية." />
+  <title>طب الحجايزة | حجز المواعيد والملف الطبي</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --teal: #0D7377;
+      --teal-dark: #095256;
+      --teal-soft: #D9F2F2;
+      --teal-text: #043638;
+      --bg: #F4F8F9;
+      --surface: #FFFFFF;
+      --surface-soft: #EAF0F2;
+      --text: #132226;
+      --text-muted: #4F646B;
+      --border: #D0DCE0;
+      --avail-bg: #DCFCE7;
+      --avail-border: #16A34A;
+      --avail-text: #14532D;
+      --booked-bg: #FEE2E2;
+      --booked-border: #DC2626;
+      --booked-text: #7F1D1D;
+      --done-bg: #E2E8F0;
+      --done-border: #64748B;
+      --done-text: #334155;
+      --warn-bg: #FEF3C7;
+      --warn-border: #D97706;
+      --warn-text: #78350F;
+      --shadow: 0 4px 16px rgba(13, 115, 119, 0.08);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Tajawal', 'Cairo', system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      padding-bottom: 84px;
+    }
+
+    h1, h2, h3, h4, .brand-title {
+      font-family: 'Cairo', 'Tajawal', sans-serif;
+      margin: 0;
+    }
+
+    button, input, select, textarea {
+      font-family: inherit;
+    }
+
+    /* Header */
+    .top-header {
+      background: linear-gradient(180deg, var(--teal) 0%, var(--teal-dark) 100%);
+      color: #fff;
+      padding: 14px 16px 12px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    }
+
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .brand-sub {
+      font-size: 0.82rem;
+      opacity: 0.88;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .icon-btn {
+      min-width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.22);
+      background: rgba(255,255,255,0.14);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.15rem;
+      position: relative;
+      padding: 0 10px;
+      transition: background 0.15s;
+    }
+
+    .icon-btn:hover {
+      background: rgba(255,255,255,0.24);
+    }
+
+    .badge-dot {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      background: #EF4444;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      min-width: 18px;
+      height: 18px;
+      border-radius: 99px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+    }
+
+    .role-switcher {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      background: rgba(255,255,255,0.16);
+      border: 1px solid rgba(255,255,255,0.26);
+      border-radius: 14px;
+      padding: 4px;
+    }
+
+    .role-btn {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.94rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: transparent;
+      color: #fff;
+      transition: all 0.15s ease;
+    }
+
+    .role-btn.active {
+      background: #fff;
+      color: var(--teal);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+
+    /* Layout Container */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Hero Banner */
+    .hero-card {
+      background: linear-gradient(125deg, #084C4F 0%, #0D7377 65%, #14919B 100%);
+      color: #fff;
+      border-radius: 22px;
+      padding: 22px 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hero-pill {
+      display: inline-block;
+      align-self: flex-start;
+      background: rgba(255,255,255,0.2);
+      padding: 5px 12px;
+      border-radius: 99px;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    /* Cards & Surfaces */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .alert-banner {
+      background: var(--warn-bg);
+      border: 1.5px solid var(--warn-border);
+      color: var(--warn-text);
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* 4 Main Sections Grid */
+    .sections-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .section-tile {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      text-align: right;
+      transition: transform 0.12s, border-color 0.15s;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    }
+
+    .section-tile:hover {
+      transform: translateY(-2px);
+      border-color: var(--teal);
+    }
+
+    .tile-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+
+    .tile-title {
+      font-family: 'Cairo', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .tile-sub {
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    /* Chips */
+    .chips-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .chip {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 8px 14px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 40px;
+    }
+
+    .chip.active {
+      background: var(--teal);
+      color: #fff;
+      border-color: var(--teal);
+    }
+
+    /* Buttons & Inputs */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 46px;
+      padding: 10px 16px;
+      border-radius: 13px;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-primary { background: var(--teal); color: #fff; }
+    .btn-green { background: var(--avail-border); color: #fff; }
+    .btn-warn { background: var(--warn-border); color: #fff; }
+    .btn-outline {
+      background: transparent;
+      color: var(--teal);
+      border: 1.5px solid var(--teal);
+    }
+    .btn-danger-outline {
+      background: transparent;
+      color: var(--booked-border);
+      border: 1.5px solid var(--booked-border);
+    }
+    .btn-block { width: 100%; }
+
+    .input, .select, .textarea {
+      width: 100%;
+      min-height: 46px;
+      padding: 10px 14px;
+      border-radius: 13px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    .input:focus, .textarea:focus {
+      border-color: var(--teal);
+    }
+
+    .textarea { min-height: 82px; resize: vertical; }
+
+    /* Doctor Directory Card */
+    .doctors-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+    }
+
+    .doctor-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .badge-avail { background: var(--avail-bg); color: var(--avail-text); border: 1px solid var(--avail-border); }
+    .badge-booked { background: var(--booked-bg); color: var(--booked-text); border: 1px solid var(--booked-border); }
+    .badge-done { background: var(--done-bg); color: var(--done-text); border: 1px solid var(--done-border); }
+    .badge-rating { background: #FEF9C3; color: #854D0E; }
+
+    /* Real-time Slots Grid */
+    .slots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+
+    .slot-tile {
+      border-radius: 16px;
+      padding: 14px 10px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      border: 1.5px solid;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    .slot-tile.avail {
+      background: var(--avail-bg);
+      border-color: var(--avail-border);
+      color: var(--avail-text);
+    }
+    .slot-tile.avail:hover { transform: scale(1.02); }
+
+    .slot-tile.booked {
+      background: var(--booked-bg);
+      border-color: var(--booked-border);
+      color: var(--booked-text);
+      cursor: not-allowed;
+    }
+
+    .slot-tile.completed {
+      background: var(--done-bg);
+      border-color: var(--done-border);
+      color: var(--done-text);
+      cursor: default;
+    }
+
+    .slot-time { font-size: 1.05rem; font-weight: 800; }
+    .slot-state { font-size: 0.84rem; font-weight: 700; }
+
+    /* Bottom Navigation */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      padding: 6px 4px;
+      z-index: 45;
+      box-shadow: 0 -4px 14px rgba(0,0,0,0.06);
+    }
+
+    .nav-item {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 0.76rem;
+      font-weight: 700;
+      min-width: 58px;
+    }
+
+    .nav-item.active {
+      color: var(--teal);
+      background: var(--teal-soft);
+    }
+
+    .nav-icon { font-size: 1.2rem; }
+
+    /* APK Download Card */
+    .apk-card {
+      background: linear-gradient(135deg, #E0F5F3 0%, #D9F2F2 100%);
+      border: 1.5px solid rgba(13, 115, 119, 0.45);
+      border-radius: 20px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Timeline & Prescriptions */
+    .med-box {
+      background: var(--bg);
+      border-radius: 12px;
+      padding: 12px;
+      white-space: pre-line;
+      font-size: 0.94rem;
+    }
+
+    .attach-img {
+      width: 100%;
+      max-height: 210px;
+      object-fit: cover;
+      border-radius: 12px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+    }
+
+    /* Doctor Admin Stats */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .stat-box {
+      border-radius: 14px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .stat-num { font-size: 1.4rem; font-weight: 800; }
+
+    /* Modals */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 100;
+    }
+
+    .modal-panel {
+      background: var(--surface);
+      border-radius: 22px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.25);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid var(--surface-soft);
+      padding-bottom: 10px;
+    }
+
+    .med-catalog-list {
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 8px;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .med-item-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 82px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #132226;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-weight: 600;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      max-width: 90%;
+      text-align: center;
+    }
+
+    /* Print Area */
+    #printSheet { display: none; }
+
+    @media print {
+      body > *:not(#printSheet) { display: none !important; }
+      #printSheet {
+        display: block !important;
+        padding: 20px;
+        color: #132226;
+        direction: rtl;
+      }
+      .rx-print-header {
+        border-bottom: 3px solid #0D7377;
+        padding-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .rx-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 14px;
+      }
+      .rx-table th, .rx-table td {
+        border: 1px solid #CBD5E1;
+        padding: 10px;
+        text-align: right;
+      }
+      .rx-table th {
+        background: #E0F2F1;
+      }
+    }
+
+    @media (min-width: 720px) {
+      .sections-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Persistent Header & Role Switcher -->
+  <header class="top-header">
+    <div class="header-inner">
+      <div class="header-row">
+        <div class="brand-box">
+          <img src="./icon.svg" alt="شعار طب الحجايزة" class="brand-logo" />
+          <div>
+            <div class="brand-title" id="hdrBrandName">طب الحجايزة</div>
+            <div class="brand-sub" id="hdrVillageName">قرية الحجايزة والقرى المجاورة</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" id="btnNotifications" title="التنبيهات">
+            🔔<span class="badge-dot" id="alertBadge" style="display:none">0</span>
+          </button>
+          <button class="icon-btn" id="btnAccount" title="الحساب وأفراد العائلة">👤</button>
+          <button class="icon-btn" id="btnConfig" title="إعدادات المنصة">⚙️</button>
+        </div>
+      </div>
+
+      <div class="role-switcher">
+        <button class="role-btn active" id="rolePatientBtn">🏥 واجهة المريض</button>
+        <button class="role-btn" id="roleDoctorBtn">🩺 لوحة الدكتور والسكرتيرة</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="appRoot"></main>
+
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-item active" data-tab="HOME"><span class="nav-icon">🏠</span><span>الرئيسية</span></button>
+    <button class="nav-item" data-tab="PRIVATE"><span class="nav-icon">🩺</span><span>العيادات</span></button>
+    <button class="nav-item" data-tab="HOSPITAL"><span class="nav-icon">🏥</span><span>المستشفى</span></button>
+    <button class="nav-item" data-tab="SPECIALTIES"><span class="nav-icon">📋</span><span>التخصصات</span></button>
+    <button class="nav-item" data-tab="EMR"><span class="nav-icon">📁</span><span>ملفي الطبي</span></button>
+  </nav>
+
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast" style="display:none"></div>
+  <div id="printSheet"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ================================================================
+      // 1. ملف الإعدادات الموحد (Unified Config) لسهولة التوسع لأي قرية أو مركز
+      // ================================================================
+      const DEFAULT_CONFIG = {
+        platformNameAr: 'طب الحجايزة',
+        platformNameEn: 'Teb Al-Hajayzah',
+        villageNameAr: 'قرية الحجايزة والقرى المجاورة',
+        hospitalNameAr: 'مستشفى الحجايزة التخصصي',
+        taglineAr: 'منصتك الطبية لحجز العيادات والملف الصحي الموحد',
+        supportPhone: '0100-555-0199',
+        appVersionLabel: 'v1.0.0',
+        apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/app-release.apk',
+        medicationsApiUrl: ''
+      };
+
+      const STORAGE_KEY = 'teb_alhajayzah_web_state_v1';
+
+      // ================================================================
+      // 2. قاعدة بيانات الأدوية المصرية المدمجة (Offline) + الدعم السحابي
+      // ================================================================
+      const DOSAGE_PRESETS = [
+        'قرص كل 12 ساعة',
+        'قرص كل 8 ساعات',
+        'قرص صباحاً يومياً',
+        'قبل الفطار بنصف ساعة',
+        'بعد الأكل مباشرة',
+        '5 سم كل 12 ساعة',
+        '5 سم كل 8 ساعات',
+        'كيس على نصف كوب ماء عند اللزوم',
+        'قطرة 3 مرات يومياً',
+        'دهان موضعي مرتين يومياً',
+        'لمدة 5 أيام',
+        'لمدة 7 أيام'
+      ];
+
+      const BUILTIN_MEDICATIONS = [
+        { id: 'med_controloc', tradeName: 'كونترولوك (Controloc)', activeIngredient: 'بانتوبرازول / Pantoprazole', strength: '40 مجم', specialty: 'باطنة وجهاز هضمي', form: 'أقراص', defaultDosage: 'قرص قبل الفطار بنصف ساعة' },
+        { id: 'med_nexium', tradeName: 'نيكسيوم (Nexium)', activeIngredient: 'إيسوميبرازول / Esomeprazole', strength: '40 مجم', specialty: 'باطنة وجهاز هضمي', form: 'أقراص', defaultDosage: 'قرص قبل الفطار بنصف ساعة' },
+        { id: 'med_gaviscon', tradeName: 'جافيسكون (Gaviscon)', activeIngredient: 'ألجينات الصوديوم', strength: 'شراب معلق', specialty: 'باطنة وجهاز هضمي', form: 'شراب', defaultDosage: 'ملعقة كبيرة بعد الأكل وعند اللزوم' },
+        { id: 'med_motilium', tradeName: 'موتيليوم (Motilium)', activeIngredient: 'دومبيريدون / Domperidone', strength: '10 مجم', specialty: 'باطنة وجهاز هضمي', form: 'أقراص', defaultDosage: 'قرص قبل الأكل بنصف ساعة 3 مرات' },
+        { id: 'med_antinal', tradeName: 'أنتينال (Antinal)', activeIngredient: 'نيفوروكسازيد / Nifuroxazide', strength: '200 مجم', specialty: 'باطنة وجهاز هضمي', form: 'كبسول', defaultDosage: 'كبسولة كل 6 ساعات لمدة 5 أيام' },
+        { id: 'med_colospasmin', tradeName: 'كولوسبازمين فورت', activeIngredient: 'ميبيفيرين / Mebeverine', strength: '135 مجم', specialty: 'باطنة وجهاز هضمي', form: 'أقراص', defaultDosage: 'قرص قبل الأكل بنصف ساعة 3 مرات' },
+        { id: 'med_glucophage', tradeName: 'جلوكوفاج (Glucophage)', activeIngredient: 'ميتفورمين / Metformin', strength: '1000 مجم', specialty: 'باطنة وجهاز هضمي', form: 'أقراص', defaultDosage: 'قرص بعد وجبة الغداء يومياً' },
+
+        { id: 'med_augmentin_ped', tradeName: 'أوجمنتين شراب (Augmentin)', activeIngredient: 'أموكسيسيلين + كلافولانيك', strength: '457 مجم/5 مل', specialty: 'أطفال وحديثي الولادة', form: 'شراب', defaultDosage: '5 سم كل 12 ساعة لمدة 7 أيام' },
+        { id: 'med_hibiotic_ped', tradeName: 'هايبوتيك شراب (Hibiotic)', activeIngredient: 'أموكسيسيلين + كلافولانيك', strength: '457 مجم/5 مل', specialty: 'أطفال وحديثي الولادة', form: 'شراب', defaultDosage: '5 سم كل 12 ساعة لمدة 7 أيام' },
+        { id: 'med_brufen_ped', tradeName: 'بروفين شراب (Brufen)', activeIngredient: 'إيبوبروفين / Ibuprofen', strength: '100 مجم/5 مل', specialty: 'أطفال وحديثي الولادة', form: 'شراب', defaultDosage: '5 سم كل 8 ساعات بعد الأكل' },
+        { id: 'med_cetal_ped', tradeName: 'سيتال شراب (Cetal)', activeIngredient: 'باراسيتامول / Paracetamol', strength: '250 مجم/5 مل', specialty: 'أطفال وحديثي الولادة', form: 'شراب', defaultDosage: '5 سم كل 6 ساعات عند اللزوم' },
+        { id: 'med_farcolin', tradeName: 'فاركولين محلول (Farcolin)', activeIngredient: 'سالبوتامول / Salbutamol', strength: '5 مجم/مل', specialty: 'أطفال وحديثي الولادة', form: 'بخار', defaultDosage: 'جلسة بخار صباحاً ومساءً' },
+
+        { id: 'med_cataflam', tradeName: 'كتافلام (Cataflam)', activeIngredient: 'ديكلوفيناك بوتاسيوم', strength: '50 مجم', specialty: 'عظام ومفاصل', form: 'أقراص', defaultDosage: 'قرص بعد الأكل كل 12 ساعة لمدة 5 أيام' },
+        { id: 'med_dimra', tradeName: 'ديمرا (Dimra)', activeIngredient: 'ديكلوفيناك + ميثوكاربامول', strength: '50/500 مجم', specialty: 'عظام ومفاصل', form: 'أقراص', defaultDosage: 'قرص كل 8 ساعات بعد الأكل' },
+        { id: 'med_myolgin', tradeName: 'ميولجين (Myolgin)', activeIngredient: 'باراسيتامول + كلورزوكسازون', strength: '300/250 مجم', specialty: 'عظام ومفاصل', form: 'كبسول', defaultDosage: 'كبسولة كل 8 ساعات بعد الأكل' },
+        { id: 'med_alphintern', tradeName: 'ألفينترن (Alphintern)', activeIngredient: 'كيموتربسين + تربسين', strength: '300 وحدة', specialty: 'عظام ومفاصل', form: 'أقراص', defaultDosage: 'قرص قبل الأكل بساعة 3 مرات يومياً' },
+        { id: 'med_osteocare', tradeName: 'أوستيوكير (Osteocare)', activeIngredient: 'كالسيوم + ماغنيسيوم + د3', strength: '400 مجم', specialty: 'عظام ومفاصل', form: 'أقراص', defaultDosage: 'قرص بعد الغداء يومياً' },
+
+        { id: 'med_folic_acid', tradeName: 'فوليك أسيد (Folic Acid)', activeIngredient: 'حمض الفوليك', strength: '5 مجم', specialty: 'نساء وتوليد', form: 'أقراص', defaultDosage: 'قرص صباحاً يومياً' },
+        { id: 'med_ferrotron', tradeName: 'فيروترون (Ferrotron)', activeIngredient: 'حديد + فيتامينات ومعادن', strength: 'كبسولات حديد', specialty: 'نساء وتوليد', form: 'كبسول', defaultDosage: 'كبسولة بعد الغداء بساعتين يومياً' },
+        { id: 'med_duphaston', tradeName: 'دوفاستون (Duphaston)', activeIngredient: 'ديدروجستيرون / Dydrogesterone', strength: '10 مجم', specialty: 'نساء وتوليد', form: 'أقراص', defaultDosage: 'قرص كل 12 ساعة' },
+        { id: 'med_pregnacare', tradeName: 'بريجناكير (Pregnacare)', activeIngredient: 'فيتامينات الحمل المتكاملة', strength: 'كبسول', specialty: 'نساء وتوليد', form: 'كبسول', defaultDosage: 'كبسولة بعد الوجبة الرئيسية يومياً' },
+
+        { id: 'med_augmentin_1g', tradeName: 'أوجمنتين (Augmentin)', activeIngredient: 'أموكسيسيلين + كلافولانيك', strength: '1 جم', specialty: 'أسنان', form: 'أقراص', defaultDosage: 'قرص كل 12 ساعة لمدة 7 أيام' },
+        { id: 'med_flagyl_500', tradeName: 'فلاجيل (Flagyl)', activeIngredient: 'ميترونيدازول / Metronidazole', strength: '500 مجم', specialty: 'أسنان', form: 'أقراص', defaultDosage: 'قرص كل 8 ساعات بعد الأكل لمدة 5 أيام' },
+        { id: 'med_catafast', tradeName: 'كتافاست فوار (Catafast)', activeIngredient: 'ديكلوفيناك بوتاسيوم', strength: '50 مجم', specialty: 'أسنان', form: 'أكياس فوارة', defaultDosage: 'كيس على نصف كوب ماء عند اللزوم' },
+        { id: 'med_dalacin_c', tradeName: 'دالاسين سي (Dalacin C)', activeIngredient: 'كليندامايسين / Clindamycin', strength: '300 مجم', specialty: 'أسنان', form: 'كبسول', defaultDosage: 'كبسولة كل 8 ساعات لمدة 5 أيام' },
+        { id: 'med_hexitol', tradeName: 'هيكسيتول مضمضة (Hexitol)', activeIngredient: 'كلورهيكسيدين / Chlorhexidine', strength: '0.125%', specialty: 'أسنان', form: 'مضمضة', defaultDosage: 'مضمضة مرتين يومياً بعد الأكل' },
+
+        { id: 'med_concor_5', tradeName: 'كونكور (Concor)', activeIngredient: 'بيسوبرولول / Bisoprolol', strength: '5 مجم', specialty: 'قلب وأوعية دموية', form: 'أقراص', defaultDosage: 'قرص صباحاً يومياً' },
+        { id: 'med_aspocid_75', tradeName: 'أسبوسيد (Aspocid)', activeIngredient: 'أسبرين أطفال / Acetylsalicylic', strength: '75 مجم', specialty: 'قلب وأوعية دموية', form: 'أقراص', defaultDosage: 'قرص بعد الغداء يومياً' },
+        { id: 'med_lipitor_20', tradeName: 'ليبيتور (Lipitor)', activeIngredient: 'أتورفاستاتين / Atorvastatin', strength: '20 مجم', specialty: 'قلب وأوعية دموية', form: 'أقراص', defaultDosage: 'قرص مساءً يومياً' },
+
+        { id: 'med_tobradex', tradeName: 'توبراديكس قطرة (Tobradex)', activeIngredient: 'توبراميسين + ديكساميثازون', strength: '0.3% / 0.1%', specialty: 'رمد وجراحة عيون', form: 'قطرة عين', defaultDosage: 'قطرة 3 مرات يومياً' },
+        { id: 'med_systane', tradeName: 'سيستان ألترا (Systane Ultra)', activeIngredient: 'مرطب للعين', strength: 'قطرة مرطبة', specialty: 'رمد وجراحة عيون', form: 'قطرة عين', defaultDosage: 'قطرة كل 6 ساعات' },
+
+        { id: 'med_tavanic', tradeName: 'تافانيك (Tavanic)', activeIngredient: 'ليفوفلوكساسين / Levofloxacin', strength: '500 مجم', specialty: 'أنف وأذن وحنجرة', form: 'أقراص', defaultDosage: 'قرص واحد يومياً لمدة 7 أيام' },
+        { id: 'med_clarinase', tradeName: 'كلارينيز (Clarinase)', activeIngredient: 'لوراتادين + سودوإيفيدرين', strength: '5/120 مجم', specialty: 'أنف وأذن وحنجرة', form: 'أقراص', defaultDosage: 'قرص كل 12 ساعة لمدة 5 أيام' },
+
+        { id: 'med_fusiderm', tradeName: 'فيوسيدرم كريم (Fusiderm)', activeIngredient: 'حمض الفيوسيديك', strength: '2%', specialty: 'جلدية وتجميل', form: 'كريم موضعي', defaultDosage: 'دهان موضعي 3 مرات يومياً' },
+        { id: 'med_telfast_180', tradeName: 'تلفاست (Telfast)', activeIngredient: 'فيكسوفينادين / Fexofenadine', strength: '180 مجم', specialty: 'جلدية وتجميل', form: 'أقراص', defaultDosage: 'قرص مساءً يومياً' }
+      ];
+
+      // ================================================================
+      // 3. البيانات المبدئية لعيادات ومستشفى الحجايزة (Seed Data)
+      // ================================================================
+      function buildDoctorSlots(doc, preBooked) {
+        const list = [];
+        let cur = doc.workStartMinutes;
+        let idx = 0;
+        while (cur < doc.workEndMinutes) {
+          const pre = preBooked[idx];
+          list.push({
+            id: doc.id + '_today_' + idx,
+            doctorId: doc.id,
+            startMinutes: cur,
+            delayMinutes: 0,
+            status: pre ? pre.status : 'AVAILABLE',
+            patientName: pre ? pre.name : '',
+            patientPhone: pre ? pre.phone : '',
+            familyMemberId: pre ? (pre.memberId || '') : '',
+            bookingSource: pre ? 'APP' : ''
+          });
+          cur += doc.slotDurationMinutes;
+          idx++;
+        }
+        return list;
+      }
+
+      function createSeedState() {
+        const doctors = [
+          { id: 'doc_batna_1', doctorName: 'د. محمد عبد الرحمن', specialty: 'باطنة وجهاز هضمي', clinicName: 'عيادة الشفاء التخصصية', clinicType: 'PRIVATE', locationLabel: 'شارع المستشفى، الحجايزة', feeEgp: 150, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_kids_1', doctorName: 'د. سارة محمود النجار', specialty: 'أطفال وحديثي الولادة', clinicName: 'عيادة براعم الحجايزة', clinicType: 'PRIVATE', locationLabel: 'بجوار المسجد الكبير، الحجايزة', feeEgp: 130, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_ortho_1', doctorName: 'د. طارق حسن الشافعي', specialty: 'عظام ومفاصل', clinicName: 'مستشفى الحجايزة التخصصي - قسم العظام', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', feeEgp: 100, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
+          { id: 'doc_obgyn_1', doctorName: 'د. نادية إبراهيم زكي', specialty: 'نساء وتوليد', clinicName: 'مستشفى الحجايزة التخصصي - قسم النساء', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الثاني', feeEgp: 120, workStartMinutes: 18 * 60, workEndMinutes: 21 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_dental_1', doctorName: 'د. كريم طارق المنصوري', specialty: 'أسنان', clinicName: 'عيادة الابتسامة للأسنان', clinicType: 'PRIVATE', locationLabel: 'أمام الوحدة المحلية، الحجايزة', feeEgp: 150, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_cardio_1', doctorName: 'د. خالد مصطفى العطار', specialty: 'قلب وأوعية دموية', clinicName: 'مستشفى الحجايزة التخصصي - وحدة القلب', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأرضي', feeEgp: 160, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
+          { id: 'doc_eye_1', doctorName: 'د. هالة فؤاد سلامة', specialty: 'رمد وجراحة عيون', clinicName: 'مركز النور للعيون', clinicType: 'PRIVATE', locationLabel: 'ميدان الحجايزة الرئيسي', feeEgp: 140, workStartMinutes: 17 * 60 + 20, workEndMinutes: 20 * 60 + 40, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
+          { id: 'doc_ent_1', doctorName: 'د. عمرو يحيى البنا', specialty: 'أنف وأذن وحنجرة', clinicName: 'مستشفى الحجايزة التخصصي - عيادة 4', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', feeEgp: 100, workStartMinutes: 16 * 60, workEndMinutes: 19 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
+          { id: 'doc_derm_1', doctorName: 'د. ريم عادل الدسوقي', specialty: 'جلدية وتجميل', clinicName: 'عيادة الندى للجلدية', clinicType: 'PRIVATE', locationLabel: 'طريق المركز، الحجايزة', feeEgp: 120, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 }
+        ];
+
+        const preBookMap = {
+          doc_batna_1: {
+            0: { name: 'محمود إبراهيم علي', phone: '01022334455', status: 'COMPLETED' },
+            1: { name: 'أحمد محمد السيد', phone: '01012345678', memberId: 'mem_self_ahmed', status: 'BOOKED' },
+            4: { name: 'سيد عبد الفتاح', phone: '01144556677', status: 'BOOKED' }
+          },
+          doc_kids_1: {
+            2: { name: 'كريم أحمد محمد', phone: '01012345678', memberId: 'mem_son', status: 'BOOKED' }
+          },
+          doc_ortho_1: {
+            1: { name: 'سعاد حسن عبد الله', phone: '01012345678', memberId: 'mem_mother', status: 'BOOKED' },
+            3: { name: 'حسن عبد القادر', phone: '01288990011', status: 'BOOKED' }
+          }
+        };
+
+        let slots = [];
+        doctors.forEach((doc) => {
+          slots = slots.concat(buildDoctorSlots(doc, preBookMap[doc.id] || { 1: { name: 'علاء فتحي سالم', phone: '01077889900', status: 'BOOKED' } }));
+        });
+
+        return {
+          config: Object.assign({}, DEFAULT_CONFIG),
+          account: { id: 'acc_ahmed', fullName: 'أحمد محمد السيد', phone: '01012345678', nationalId: '29005141200451' },
+          familyMembers: [
+            { id: 'mem_self_ahmed', fullName: 'أحمد محمد السيد', relation: 'نفسي (صاحب الحساب)', age: 36, phone: '01012345678' },
+            { id: 'mem_mother', fullName: 'سعاد حسن عبد الله', relation: 'الأم', age: 62, phone: '01012345678' },
+            { id: 'mem_wife', fullName: 'فاطمة علي محمود', relation: 'الزوجة', age: 31, phone: '01098765432' },
+            { id: 'mem_son', fullName: 'كريم أحمد محمد', relation: 'الابن', age: 9, phone: '01012345678' }
+          ],
+          activeMemberId: 'mem_self_ahmed',
+          doctors: doctors,
+          slots: slots,
+          records: [
+            {
+              id: 'rec_1',
+              familyMemberId: 'mem_self_ahmed',
+              patientName: 'أحمد محمد السيد',
+              patientPhone: '01012345678',
+              doctorId: 'doc_batna_1',
+              doctorName: 'د. محمد عبد الرحمن',
+              specialty: 'باطنة وجهاز هضمي',
+              visitDateLabel: '10 نوفمبر 2026',
+              diagnosis: 'التهاب بسيط بالمعدة وارتجاع مريئي',
+              medications: '• كونترولوك (Controloc) 40 مجم — قرص قبل الفطار بنصف ساعة\n• جافيسكون (Gaviscon) — ملعقة كبيرة بعد الأكل وعند اللزوم',
+              notes: 'الابتعاد عن الأطعمة الدسمة والمشروبات الغازية لمدة أسبوعين.',
+              attachmentDataUrl: '',
+              recordType: 'PRESCRIPTION',
+              createdAtMillis: Date.now() - 5 * 86400000
+            },
+            {
+              id: 'rec_2',
+              familyMemberId: 'mem_mother',
+              patientName: 'سعاد حسن عبد الله',
+              patientPhone: '01012345678',
+              doctorId: 'doc_cardio_1',
+              doctorName: 'د. خالد مصطفى العطار',
+              specialty: 'قلب وأوعية دموية',
+              visitDateLabel: '3 نوفمبر 2026',
+              diagnosis: 'متابعة ضغط الدم المرتفع (مستقر)',
+              medications: '• كونكور (Concor) 5 مجم — قرص صباحاً يومياً\n• أسبوسيد (Aspocid) 75 مجم — قرص بعد الغداء',
+              notes: 'قياس الضغط مرتين أسبوعياً وتقليل الملح.',
+              attachmentDataUrl: '',
+              recordType: 'PRESCRIPTION',
+              createdAtMillis: Date.now() - 12 * 86400000
+            },
+            {
+              id: 'rec_3',
+              familyMemberId: 'mem_son',
+              patientName: 'كريم أحمد محمد',
+              patientPhone: '01012345678',
+              doctorId: 'doc_kids_1',
+              doctorName: 'د. سارة محمود النجار',
+              specialty: 'أطفال وحديثي الولادة',
+              visitDateLabel: '28 أكتوبر 2026',
+              diagnosis: 'نزلة شعبية حادة مع ارتفاع طفيف في الحرارة',
+              medications: '• أوجمنتين شراب (Augmentin) 457 مجم/5 مل — 5 سم كل 12 ساعة لمدة 7 أيام\n• بروفين شراب (Brufen) 100 مجم/5 مل — عند اللزوم لخفض الحرارة',
+              notes: 'شرب سوائل دافئة والراحة التامة.',
+              attachmentDataUrl: '',
+              recordType: 'PRESCRIPTION',
+              createdAtMillis: Date.now() - 18 * 86400000
+            }
+          ],
+          notifications: [],
+          doctorFavorites: {
+            doc_batna_1: ['med_controloc', 'med_gaviscon', 'med_motilium'],
+            doc_kids_1: ['med_augmentin_ped', 'med_brufen_ped'],
+            doc_dental_1: ['med_augmentin_1g', 'med_catafast']
+          }
+        };
+      }
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.doctors) && Array.isArray(parsed.slots)) {
+              return parsed;
+            }
+          }
+        } catch (e) { /* fallback to seed */ }
+        const seed = createSeedState();
+        saveState(seed);
+        return seed;
+      }
+
+      function saveState(nextState) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+        } catch (e) {
+          showToast('تنبيه: مساحة التخزين المحلية ممتلئة');
+        }
+      }
+
+      let db = loadState();
+
+      // Ephemeral UI State
+      const ui = {
+        roleMode: 'PATIENT', // PATIENT | DOCTOR
+        patientTab: 'HOME', // HOME | PRIVATE | HOSPITAL | SPECIALTIES | EMR
+        bookingDoctorId: null,
+        selectedSpecialty: null,
+        searchQuery: '',
+        activeAdminDoctorId: db.doctors[0].id,
+        medications: BUILTIN_MEDICATIONS.slice(),
+        isLiveMedsApi: false
+      };
+
+      // ================================================================
+      // 4. أدوات مساعدة (Formatting, Escaping, Toast, Print)
+      // ================================================================
+      function esc(str) {
+        return String(str == null ? '' : str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatMinutesAr(totalMinutes) {
+        const norm = ((totalMinutes % 1440) + 1440) % 1440;
+        const h24 = Math.floor(norm / 60);
+        const m = norm % 60;
+        const period = h24 >= 12 ? 'م' : 'ص';
+        const h12 = h24 === 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
+        return h12 + ':' + (m < 10 ? '0' + m : m) + ' ' + period;
+      }
+
+      function formatTodayAr() {
+        try {
+          return new Intl.DateTimeFormat('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+        } catch (e) {
+          return new Date().toLocaleDateString();
+        }
+      }
+
+      let toastTimer = null;
+      function showToast(msg) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.style.display = 'block';
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3200);
+      }
+
+      function getActiveMember() {
+        return db.familyMembers.find((m) => m.id === db.activeMemberId) || db.familyMembers[0];
+      }
+
+      function printPrescription(record) {
+        const cfg = db.config;
+        const lines = String(record.medications || '')
+          .split('\n')
+          .map((l) => l.replace(/^•\s*/, '').trim())
+          .filter(Boolean);
+
+        const rowsHtml = lines.length
+          ? lines.map((line, i) => {
+              const parts = line.split('—');
+              const name = esc((parts[0] || '').trim());
+              const dose = esc((parts.slice(1).join('—') || 'حسب إرشادات الطبيب').trim());
+              return '<tr><td>' + (i + 1) + '. <strong>' + name + '</strong></td><td>' + dose + '</td></tr>';
+            }).join('')
+          : '<tr><td colspan="2">لا توجد أدوية نصية مسجلة</td></tr>';
+
+        const notesHtml = record.notes
+          ? '<div style="margin-top:14px;padding:10px;background:#FFFBEB;border:1px solid #F59E0B;border-radius:10px;"><strong>تعليمات وملاحظات:</strong> ' + esc(record.notes) + '</div>'
+          : '';
+
+        document.getElementById('printSheet').innerHTML =
+          '<div class="rx-print-header">' +
+            '<div>' +
+              '<h2 style="color:#0D7377;margin:0;">' + esc(cfg.platformNameAr) + '</h2>' +
+              '<div style="font-size:13px;color:#4F646B;">' + esc(cfg.villageNameAr) + ' • هاتف: ' + esc(cfg.supportPhone) + '</div>' +
+            '</div>' +
+            '<div style="text-align:left;">' +
+              '<div><strong>' + esc(record.doctorName) + '</strong></div>' +
+              '<div style="font-size:13px;color:#4F646B;">' + esc(record.specialty) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="margin:14px 0;padding:12px;background:#F4F8F9;border:1px solid #D0DCE0;border-radius:10px;">' +
+            '<div><strong>اسم المريض:</strong> ' + esc(record.patientName) + ' &nbsp;|&nbsp; <strong>التاريخ:</strong> ' + esc(record.visitDateLabel) + '</div>' +
+            '<div><strong>التشخيص:</strong> ' + esc(record.diagnosis) + '</div>' +
+          '</div>' +
+          '<h3 style="color:#0D7377;margin:10px 0 6px;">℞ الروشتة الطبية</h3>' +
+          '<table class="rx-table">' +
+            '<thead><tr><th>الدواء والتركيز</th><th>الجرعة وطريقة الاستخدام</th></tr></thead>' +
+            '<tbody>' + rowsHtml + '</tbody>' +
+          '</table>' +
+          notesHtml +
+          '<div style="margin-top:34px;border-top:1px dashed #94A3B8;padding-top:10px;display:flex;justify-content:space-between;font-size:12px;color:#4F646B;">' +
+            '<span>صدرت إلكترونياً عبر منصة ' + esc(cfg.platformNameAr) + ' (' + esc(cfg.appVersionLabel) + ')</span>' +
+            '<span>توقيع الطبيب: ____________________</span>' +
+          '</div>';
+
+        window.print();
+      }
+
+      async function refreshMedicationsFromApi() {
+        const url = (db.config.medicationsApiUrl || '').trim();
+        if (!url) {
+          ui.medications = BUILTIN_MEDICATIONS.slice();
+          ui.isLiveMedsApi = false;
+          return;
+        }
+        try {
+          const res = await fetch(url, { headers: { Accept: 'application/json' } });
+          if (res.ok) {
+            const json = await res.json();
+            const arr = Array.isArray(json) ? json : (json.medications || json.data || []);
+            if (Array.isArray(arr) && arr.length > 0) {
+              ui.medications = arr.map((item, idx) => ({
+                id: item.id || ('remote_' + idx),
+                tradeName: item.tradeName || item.name || 'دواء',
+                activeIngredient: item.activeIngredient || item.generic || 'مادة فعالة',
+                strength: item.strength || item.concentration || '',
+                specialty: item.specialty || 'باطنة وجهاز هضمي',
+                form: item.form || 'أقراص',
+                defaultDosage: item.defaultDosage || 'حسب إرشادات الطبيب'
+              }));
+              ui.isLiveMedsApi = true;
+              return;
+            }
+          }
+        } catch (e) { /* offline fallback */ }
+        ui.medications = BUILTIN_MEDICATIONS.slice();
+        ui.isLiveMedsApi = false;
+      }
+
+      // ================================================================
+      // 5. العرض والتفاعل (Rendering Engine)
+      // ================================================================
+      function updateHeader() {
+        document.getElementById('hdrBrandName').textContent = db.config.platformNameAr;
+        document.getElementById('hdrVillageName').textContent = db.config.villageNameAr;
+
+        const unread = db.notifications.filter((n) => !n.isRead).length;
+        const badge = document.getElementById('alertBadge');
+        badge.textContent = String(unread);
+        badge.style.display = unread > 0 ? 'flex' : 'none';
+
+        document.getElementById('rolePatientBtn').classList.toggle('active', ui.roleMode === 'PATIENT');
+        document.getElementById('roleDoctorBtn').classList.toggle('active', ui.roleMode === 'DOCTOR');
+
+        const showNav = ui.roleMode === 'PATIENT' && !ui.bookingDoctorId;
+        const nav = document.getElementById('bottomNav');
+        nav.style.display = showNav ? 'flex' : 'none';
+        nav.querySelectorAll('.nav-item').forEach((btn) => {
+          btn.classList.toggle('active', btn.getAttribute('data-tab') === ui.patientTab);
+        });
+      }
+
+      function renderDoctorCardHtml(doc) {
+        const docSlots = db.slots.filter((s) => s.doctorId === doc.id);
+        const avail = docSlots.filter((s) => s.status === 'AVAILABLE').length;
+        const booked = docSlots.filter((s) => s.status === 'BOOKED').length;
+        return '<div class="doctor-card">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">' +
+            '<div>' +
+              '<div style="font-weight:800;font-size:1.05rem;">' + esc(doc.doctorName) + '</div>' +
+              '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(doc.specialty) + '</div>' +
+              '<div style="color:var(--text-muted);font-size:0.84rem;">' + esc(doc.clinicName) + '</div>' +
+            '</div>' +
+            '<span class="badge badge-rating">⭐ ' + esc(doc.rating) + '</span>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;font-size:0.86rem;color:var(--text-muted);">' +
+            '<span>📍 ' + esc(doc.locationLabel) + '</span>' +
+            '<strong style="color:var(--teal);">الكشف: ' + esc(doc.feeEgp) + ' ج.م</strong>' +
+          '</div>' +
+          (doc.currentDelayMinutes > 0
+            ? '<div class="alert-banner" style="padding:8px 10px;font-size:0.84rem;">⚠️ تأخير حالي: +' + doc.currentDelayMinutes + ' دقيقة</div>'
+            : '') +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;">' +
+            '<div style="display:flex;gap:6px;">' +
+              '<span class="badge badge-avail">متاح: ' + avail + '</span>' +
+              '<span class="badge badge-booked">محجوز: ' + booked + '</span>' +
+            '</div>' +
+            '<button class="btn btn-primary" data-open-doc="' + esc(doc.id) + '" style="min-height:40px;padding:8px 14px;">عرض المواعيد</button>' +
+          '</div>' +
+        '</div>';
+      }
+
+      function renderApkDownloadCardHtml() {
+        const cfg = db.config;
+        return '<section class="apk-card" id="apkDownloadSection">' +
+          '<div style="display:flex;align-items:center;gap:12px;">' +
+            '<div style="width:48px;height:48px;border-radius:14px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0;">📲</div>' +
+            '<div>' +
+              '<h3 style="font-size:1.06rem;color:var(--teal-text);">تحميل وتحديث تطبيق ' + esc(cfg.platformNameAr) + ' (الإصدار ' + esc(cfg.appVersionLabel) + ')</h3>' +
+              '<div style="font-size:0.86rem;color:var(--text-muted);">تحميل مباشر لنسخة الأندرويد الرسمية المحدّثة تلقائياً من GitHub Releases</div>' +
+            '</div>' +
+          '</div>' +
+          '<a class="btn btn-primary btn-block" href="' + esc(cfg.apkDownloadUrl) + '" download="teb-alhajayzah-' + esc(cfg.appVersionLabel) + '.apk" rel="noopener">' +
+            '⬇️ تحميل مباشر للتطبيق (APK)' +
+          '</a>' +
+        '</section>';
+      }
+
+      function renderMedicalRecordCardHtml(rec) {
+        const isUpload = rec.recordType === 'PATIENT_UPLOAD';
+        return '<article class="card" style="border-color:' + (isUpload ? '#0284C7' : 'rgba(13,115,119,0.35)') + ';">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">' +
+            '<div>' +
+              '<div style="font-weight:800;font-size:1.02rem;">' + (isUpload ? '📄 ' : '🩺 ') + esc(rec.doctorName) + '</div>' +
+              '<div style="color:var(--teal);font-weight:700;font-size:0.86rem;">' + esc(rec.specialty) + '</div>' +
+            '</div>' +
+            '<span class="badge" style="background:var(--surface-soft);color:var(--text-muted);">' + esc(rec.visitDateLabel) + '</span>' +
+          '</div>' +
+          '<div class="med-box">' +
+            '<div><strong>' + (isUpload ? 'العنوان: ' : 'التشخيص الطبي: ') + '</strong>' + esc(rec.diagnosis) + '</div>' +
+            (rec.medications ? '<div style="margin-top:6px;"><strong>💊 الأدوية:</strong>\n' + esc(rec.medications) + '</div>' : '') +
+            (rec.notes ? '<div style="margin-top:6px;color:var(--text-muted);"><strong>ملاحظات:</strong> ' + esc(rec.notes) + '</div>' : '') +
+          '</div>' +
+          (rec.attachmentDataUrl
+            ? '<div style="margin-top:10px;"><img class="attach-img" src="' + esc(rec.attachmentDataUrl) + '" alt="مرفق طبي" data-preview-img="' + esc(rec.id) + '" /></div>'
+            : '') +
+          (!isUpload
+            ? '<div style="margin-top:10px;"><button class="btn btn-outline btn-block" data-print-rec="' + esc(rec.id) + '">🖨️ طباعة الروشتة (Print / PDF)</button></div>'
+            : '') +
+        '</article>';
+      }
+
+      function renderPatientHome() {
+        const activeMember = getActiveMember();
+        const familyIds = new Set(db.familyMembers.map((m) => m.id));
+        const familyNames = new Set(db.familyMembers.map((m) => m.fullName));
+
+        const myBooked = db.slots
+          .filter((s) => s.status === 'BOOKED' && (familyIds.has(s.familyMemberId) || familyNames.has(s.patientName)))
+          .sort((a, b) => (a.startMinutes + a.delayMinutes) - (b.startMinutes + b.delayMinutes));
+
+        const latestDelay = db.notifications[0];
+        const privateCount = db.doctors.filter((d) => d.clinicType === 'PRIVATE').length;
+        const hospitalCount = db.doctors.filter((d) => d.clinicType === 'HOSPITAL').length;
+        const specsCount = new Set(db.doctors.map((d) => d.specialty)).size;
+
+        return '<section class="hero-card">' +
+            '<h2 style="font-size:1.35rem;">أهلاً بك، ' + esc(activeMember.fullName) + '</h2>' +
+            '<div style="opacity:0.94;">' + esc(db.config.taglineAr) + '</div>' +
+            '<span class="hero-pill">احجز موعدك في ثوانٍ بدون انتظار • ' + esc(db.config.hospitalNameAr) + '</span>' +
+          '</section>' +
+
+          (latestDelay ? '<div class="alert-banner">⚠️ ' + esc(latestDelay.message) + '</div>' : '') +
+
+          '<section>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+              '<h3>الحجز والملف الطبي باسم:</h3>' +
+              '<button class="btn btn-outline" id="btnAddFamilyQuick" style="min-height:38px;padding:6px 12px;">+ إضافة فرد عائلة</button>' +
+            '</div>' +
+            '<div class="chips-row">' +
+              db.familyMembers.map((m) =>
+                '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" data-select-member="' + esc(m.id) + '">' +
+                  '👤 ' + esc(m.fullName.split(' ')[0]) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
+                '</button>'
+              ).join('') +
+            '</div>' +
+          '</section>' +
+
+          '<section>' +
+            '<h3 style="margin-bottom:10px;">الأقسام الرئيسية</h3>' +
+            '<div class="sections-grid">' +
+              '<button class="section-tile" data-goto-tab="PRIVATE">' +
+                '<div class="tile-icon" style="background:#E0F2F1;color:#0D7377;">🩺</div>' +
+                '<div class="tile-title">العيادات الخاصة</div>' +
+                '<div class="tile-sub" style="color:#0D7377;">' + privateCount + ' عيادات متاحة</div>' +
+              '</button>' +
+              '<button class="section-tile" data-goto-tab="HOSPITAL">' +
+                '<div class="tile-icon" style="background:#E3F2FD;color:#0F5E8C;">🏥</div>' +
+                '<div class="tile-title">المستشفى التخصصي</div>' +
+                '<div class="tile-sub" style="color:#0F5E8C;">' + hospitalCount + ' أقسام طبية</div>' +
+              '</button>' +
+              '<button class="section-tile" data-goto-tab="SPECIALTIES">' +
+                '<div class="tile-icon" style="background:#ECFDF5;color:#15803D;">📋</div>' +
+                '<div class="tile-title">التخصصات الطبية</div>' +
+                '<div class="tile-sub" style="color:#15803D;">' + specsCount + ' تخصصات</div>' +
+              '</button>' +
+              '<button class="section-tile" data-goto-tab="EMR">' +
+                '<div class="tile-icon" style="background:#FFF7ED;color:#C2410C;">📁</div>' +
+                '<div class="tile-title">ملفي الطبي</div>' +
+                '<div class="tile-sub" style="color:#C2410C;">الروشتات والتحاليل</div>' +
+              '</button>' +
+            '</div>' +
+          '</section>' +
+
+          '<section>' +
+            '<h3 style="margin-bottom:10px;">مواعيد العائلة المحجوزة اليوم (' + myBooked.length + ')</h3>' +
+            (myBooked.length === 0
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد حجوزات قادمة اليوم. اختر عيادة لحجز موعدك بضغطة واحدة.</div>'
+              : '<div style="display:flex;flex-direction:column;gap:10px;">' + myBooked.map((slot) => {
+                  const doc = db.doctors.find((d) => d.id === slot.doctorId);
+                  if (!doc) return '';
+                  const eff = slot.startMinutes + slot.delayMinutes;
+                  return '<div class="card" style="border-color:rgba(13,115,119,0.4);">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+                      '<div>' +
+                        '<strong>' + esc(doc.doctorName) + '</strong>' +
+                        '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(doc.specialty) + ' • ' + esc(doc.clinicName) + '</div>' +
+                      '</div>' +
+                      '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);font-size:0.98rem;">' + formatMinutesAr(eff) + '</span>' +
+                    '</div>' +
+                    (slot.delayMinutes > 0
+                      ? '<div style="color:var(--warn-border);font-size:0.84rem;font-weight:700;margin-top:4px;">تم تعديل الموعد (+' + slot.delayMinutes + ' دقيقة تأخير)</div>'
+                      : '') +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;">' +
+                      '<span style="font-weight:700;">المريض: ' + esc(slot.patientName) + '</span>' +
+                      '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-danger-outline" data-cancel-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;">إلغاء</button>' +
+                        '<button class="btn btn-primary" data-open-doc="' + esc(doc.id) + '" style="min-height:38px;padding:6px 12px;">تفاصيل العيادة</button>' +
+                      '</div>' +
+                    '</div>' +
+                  '</div>';
+                }).join('') + '</div>') +
+          '</section>' +
+
+          '<section>' +
+            '<h3 style="margin-bottom:10px;">أطباء متاحون الآن في ' + esc(db.config.villageNameAr) + '</h3>' +
+            '<div class="doctors-grid">' + db.doctors.slice(0, 4).map(renderDoctorCardHtml).join('') + '</div>' +
+          '</section>' +
+
+          renderApkDownloadCardHtml();
+      }
+
+      function renderDirectory(title, clinicTypeFilter, showSpecChips) {
+        const specs = Array.from(new Set(db.doctors.map((d) => d.specialty)));
+        const q = ui.searchQuery.trim().toLowerCase();
+        const filtered = db.doctors.filter((doc) => {
+          const matchType = !clinicTypeFilter || doc.clinicType === clinicTypeFilter;
+          const matchSpec = !showSpecChips || !ui.selectedSpecialty || doc.specialty === ui.selectedSpecialty;
+          const matchQ = !q ||
+            doc.doctorName.toLowerCase().includes(q) ||
+            doc.specialty.toLowerCase().includes(q) ||
+            doc.clinicName.toLowerCase().includes(q);
+          return matchType && matchSpec && matchQ;
+        });
+
+        return '<section>' +
+            '<h2 style="margin-bottom:10px;">' + esc(title) + '</h2>' +
+            '<input class="input" id="dirSearchInput" type="search" placeholder="ابحث باسم الدكتور أو التخصص أو العيادة..." value="' + esc(ui.searchQuery) + '" />' +
+          '</section>' +
+          (showSpecChips
+            ? '<div class="chips-row">' +
+                '<button class="chip ' + (!ui.selectedSpecialty ? 'active' : '') + '" data-spec="">كل التخصصات</button>' +
+                specs.map((s) => '<button class="chip ' + (ui.selectedSpecialty === s ? 'active' : '') + '" data-spec="' + esc(s) + '">' + esc(s) + '</button>').join('') +
+              '</div>'
+            : '') +
+          (filtered.length === 0
+            ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد عيادات مطابقة للبحث</div>'
+            : '<div class="doctors-grid">' + filtered.map(renderDoctorCardHtml).join('') + '</div>');
+      }
+
+      function renderDoctorBooking() {
+        const doc = db.doctors.find((d) => d.id === ui.bookingDoctorId);
+        if (!doc) return '';
+        const activeMember = getActiveMember();
+        const familyIds = new Set(db.familyMembers.map((m) => m.id));
+        const familyNames = new Set(db.familyMembers.map((m) => m.fullName));
+        const slots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+
+        return '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<button class="btn btn-outline" id="btnBookingBack" style="min-height:42px;">→ رجوع</button>' +
+            '<h2>الحجز اللحظي للمواعيد</h2>' +
+          '</div>' +
+
+          '<section class="card">' +
+            '<h3 style="font-size:1.2rem;">' + esc(doc.doctorName) + '</h3>' +
+            '<div style="color:var(--teal);font-weight:700;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
+            '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:4px;">📍 ' + esc(doc.locationLabel) + ' • سعر الكشف: ' + doc.feeEgp + ' ج.م</div>' +
+            '<div style="font-size:0.88rem;margin-top:4px;">🕒 مواعيد العمل: ' + formatMinutesAr(doc.workStartMinutes) + ' إلى ' + formatMinutesAr(doc.workEndMinutes) + ' (كل ' + doc.slotDurationMinutes + ' دقيقة)</div>' +
+            (doc.currentDelayMinutes > 0
+              ? '<div class="alert-banner" style="margin-top:8px;">تحديث: العيادة متأخرة ' + doc.currentDelayMinutes + ' دقيقة والأوقات الظاهرة معدّلة تلقائياً.</div>'
+              : '') +
+          '</section>' +
+
+          '<section>' +
+            '<div style="font-weight:700;margin-bottom:6px;">احجز الموعد لصالح:</div>' +
+            '<div class="chips-row">' +
+              db.familyMembers.map((m) =>
+                '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" data-select-member="' + esc(m.id) + '">' +
+                  esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
+                '</button>'
+              ).join('') +
+            '</div>' +
+          '</section>' +
+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+            '<span class="badge badge-avail">متاح للحجز</span>' +
+            '<span class="badge badge-booked">محجوز (مغلق)</span>' +
+            '<span class="badge badge-done">تم الكشف</span>' +
+          '</div>' +
+
+          '<section class="slots-grid">' +
+            slots.map((slot) => {
+              const eff = slot.startMinutes + slot.delayMinutes;
+              const isMine = slot.status === 'BOOKED' && (familyIds.has(slot.familyMemberId) || familyNames.has(slot.patientName));
+              const cls = slot.status === 'AVAILABLE' ? 'avail' : (slot.status === 'BOOKED' ? 'booked' : 'completed');
+              const label = slot.status === 'AVAILABLE' ? 'متاح' : (isMine ? 'محجوز لك' : (slot.status === 'BOOKED' ? 'محجوز' : 'تم الكشف'));
+              return '<div class="slot-tile ' + cls + '" ' + (slot.status === 'AVAILABLE' ? 'data-book-slot="' + esc(slot.id) + '"' : '') + '>' +
+                '<div class="slot-time">' + formatMinutesAr(eff) + '</div>' +
+                '<div class="slot-state">' + label + '</div>' +
+                (isMine ? '<button class="chip" style="min-height:28px;padding:2px 8px;font-size:0.75rem;color:var(--booked-border);margin-top:4px;" data-cancel-slot="' + esc(slot.id) + '">إلغاء</button>' : '') +
+              '</div>';
+            }).join('') +
+          '</section>';
+      }
+
+      function renderMedicalFileScreen() {
+        const activeMember = getActiveMember();
+        const records = db.records
+          .filter((r) => r.familyMemberId === activeMember.id || r.patientName === activeMember.fullName)
+          .sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+
+        return '<section>' +
+            '<h2>ملفي الطبي الموحد</h2>' +
+            '<div style="color:var(--text-muted);font-size:0.9rem;">جميع الزيارات السابقة، التشخيصات، الروشتات، وصور التحاليل والأشعة مع إمكانية الطباعة PDF.</div>' +
+          '</section>' +
+
+          '<div class="chips-row">' +
+            db.familyMembers.map((m) =>
+              '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" data-select-member="' + esc(m.id) + '">' +
+                esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
+              '</button>'
+            ).join('') +
+          '</div>' +
+
+          '<section class="card" style="background:rgba(217,242,242,0.55);border-color:rgba(13,115,119,0.35);">' +
+            '<h3 style="margin-bottom:4px;">📤 إضافة تحاليل أو أشعة جديدة</h3>' +
+            '<div style="color:var(--text-muted);font-size:0.86rem;margin-bottom:10px;">ارفع صورة التحليل أو التقطها بالكاميرا لتظهر فوراً لجميع الأطباء</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+              '<input class="input" id="uploadLabTitle" placeholder="اسم التحليل (مثال: صورة دم كاملة)" />' +
+              '<input class="input" id="uploadLabNotes" placeholder="ملاحظات للطبيب (اختياري)" />' +
+            '</div>' +
+            '<label class="btn btn-primary btn-block" style="cursor:pointer;">' +
+              '📷 اختيار أو تصوير صورة التحليل / الأشعة' +
+              '<input type="file" id="labPhotoInput" accept="image/*" capture="environment" style="display:none;" />' +
+            '</label>' +
+          '</section>' +
+
+          (records.length === 0
+            ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد سجلات طبية مسجلة لـ ' + esc(activeMember.fullName) + ' بعد.</div>'
+            : '<div style="display:flex;flex-direction:column;gap:12px;">' + records.map(renderMedicalRecordCardHtml).join('') + '</div>');
+      }
+
+      function renderDoctorDashboard() {
+        const doc = db.doctors.find((d) => d.id === ui.activeAdminDoctorId) || db.doctors[0];
+        const slots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+        const bookedCount = slots.filter((s) => s.status === 'BOOKED').length;
+        const availCount = slots.filter((s) => s.status === 'AVAILABLE').length;
+        const doneCount = slots.filter((s) => s.status === 'COMPLETED').length;
+
+        return '<section>' +
+            '<h2>لوحة تحكم الدكتور والسكرتيرة</h2>' +
+            '<div style="color:var(--text-muted);font-size:0.9rem;">إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، والروشتة الإلكترونية الذكية.</div>' +
+          '</section>' +
+
+          '<div class="chips-row">' +
+            db.doctors.map((d) =>
+              '<button class="chip ' + (d.id === doc.id ? 'active' : '') + '" data-admin-doc="' + esc(d.id) + '">' +
+                esc(d.doctorName) + ' (' + esc(d.specialty) + ')' +
+              '</button>'
+            ).join('') +
+          '</div>' +
+
+          '<section class="card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
+              '<div>' +
+                '<h3 style="font-size:1.15rem;">' + esc(doc.doctorName) + '</h3>' +
+                '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(doc.clinicName) + ' • ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + '</div>' +
+              '</div>' +
+              (doc.currentDelayMinutes > 0
+                ? '<span class="badge" style="background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);">تأخير: +' + doc.currentDelayMinutes + ' د</span>'
+                : '') +
+            '</div>' +
+
+            '<div class="stats-row" style="margin-bottom:12px;">' +
+              '<div class="stat-box" style="background:var(--booked-bg);color:var(--booked-text);"><div class="stat-num">' + bookedCount + '</div><div>محجوز</div></div>' +
+              '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + availCount + '</div><div>متاح</div></div>' +
+              '<div class="stat-box" style="background:var(--done-bg);color:var(--done-text);"><div class="stat-num">' + doneCount + '</div><div>تم الكشف</div></div>' +
+            '</div>' +
+
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+              '<button class="btn btn-warn" id="btnDelay15">🕒 تأخير 15 دقيقة</button>' +
+              '<button class="btn btn-outline" id="btnDelay30">تأخير 30 دقيقة</button>' +
+            '</div>' +
+            '<button class="btn btn-outline btn-block" id="btnOpenScheduleGen">📅 توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)</button>' +
+          '</section>' +
+
+          '<section>' +
+            '<h3 style="margin-bottom:10px;">قائمة مواعيد اليوم (' + slots.length + ')</h3>' +
+            '<div style="display:flex;flex-direction:column;gap:10px;">' +
+              slots.map((slot) => {
+                const eff = slot.startMinutes + slot.delayMinutes;
+                const badgeCls = slot.status === 'AVAILABLE' ? 'badge-avail' : (slot.status === 'BOOKED' ? 'badge-booked' : 'badge-done');
+                const titleText = slot.status === 'AVAILABLE' ? 'موعد متاح للحجز' : (slot.status === 'BOOKED' ? slot.patientName : slot.patientName + ' (تم الكشف ✓)');
+                const sourceText = slot.bookingSource === 'PHONE_WALKIN' ? 'حجز هاتفي/حضور' : 'حجز عبر التطبيق';
+                return '<div class="card">' +
+                  '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+                    '<span class="badge ' + badgeCls + '" style="font-size:1rem;padding:6px 12px;">' + formatMinutesAr(eff) + '</span>' +
+                    '<div>' +
+                      '<div style="font-weight:800;">' + esc(titleText) + '</div>' +
+                      (slot.status !== 'AVAILABLE' ? '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(slot.patientPhone) + ' • ' + sourceText + '</div>' : '') +
+                    '</div>' +
+                  '</div>' +
+                  (slot.status === 'AVAILABLE'
+                    ? '<button class="btn btn-green btn-block" data-manual-slot="' + esc(slot.id) + '">📞 إضافة حجز هاتفي / حضور مباشر</button>'
+                    : (slot.status === 'BOOKED'
+                        ? '<div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;">' +
+                            '<button class="btn btn-outline" data-view-emr="' + esc(slot.id) + '">📁 ملف المريض</button>' +
+                            '<button class="btn btn-primary" data-write-rx="' + esc(slot.id) + '">💊 كتابة روشتة</button>' +
+                          '</div>' +
+                          '<div style="text-align:left;margin-top:6px;"><button class="btn" style="background:transparent;color:var(--booked-border);min-height:34px;padding:4px 8px;" data-cancel-slot="' + esc(slot.id) + '">إلغاء الحجز وإتاحته</button></div>'
+                        : '<button class="btn btn-outline btn-block" data-view-emr="' + esc(slot.id) + '">📁 عرض الملف الطبي والروشتة</button>')) +
+                '</div>';
+              }).join('') +
+            '</div>' +
+          '</section>';
+      }
+
+      function renderApp() {
+        updateHeader();
+        const root = document.getElementById('appRoot');
+        if (ui.roleMode === 'DOCTOR') {
+          root.innerHTML = renderDoctorDashboard();
+          bindDoctorDashboardEvents();
+          return;
+        }
+
+        if (ui.bookingDoctorId) {
+          root.innerHTML = renderDoctorBooking();
+          bindPatientBookingEvents();
+          return;
+        }
+
+        if (ui.patientTab === 'HOME') {
+          root.innerHTML = renderPatientHome();
+        } else if (ui.patientTab === 'PRIVATE') {
+          root.innerHTML = renderDirectory('العيادات الخاصة بالحجايزة', 'PRIVATE', false);
+        } else if (ui.patientTab === 'HOSPITAL') {
+          root.innerHTML = renderDirectory(db.config.hospitalNameAr, 'HOSPITAL', false);
+        } else if (ui.patientTab === 'SPECIALTIES') {
+          root.innerHTML = renderDirectory('التخصصات الطبية الشاملة', null, true);
+        } else {
+          root.innerHTML = renderMedicalFileScreen();
+        }
+        bindPatientEvents();
+      }
+
+      // ================================================================
+      // 6. النوافذ المنبثقة (Modals) والروشتة الذكية
+      // ================================================================
+      function closeModal() {
+        document.getElementById('modalRoot').innerHTML = '';
+      }
+
+      function openModal(title, bodyHtml, onMount) {
+        const root = document.getElementById('modalRoot');
+        root.innerHTML =
+          '<div class="modal-backdrop" id="modalBackdrop">' +
+            '<div class="modal-panel">' +
+              '<div class="modal-header">' +
+                '<h3>' + esc(title) + '</h3>' +
+                '<button class="btn btn-outline" id="btnCloseModal" style="min-height:36px;padding:4px 12px;">✕ إغلاق</button>' +
+              '</div>' +
+              '<div id="modalBody" style="display:flex;flex-direction:column;gap:10px;">' + bodyHtml + '</div>' +
+            '</div>' +
+          '</div>';
+
+        document.getElementById('btnCloseModal').onclick = closeModal;
+        document.getElementById('modalBackdrop').onclick = function (e) {
+          if (e.target.id === 'modalBackdrop') closeModal();
+        };
+        if (onMount) onMount();
+      }
+
+      function openBookConfirmModal(slotId) {
+        const slot = db.slots.find((s) => s.id === slotId);
+        if (!slot || slot.status !== 'AVAILABLE') {
+          showToast('عذراً، تم حجز هذا الموعد للتو');
+          renderApp();
+          return;
+        }
+        const doc = db.doctors.find((d) => d.id === slot.doctorId);
+        const member = getActiveMember();
+        openModal('تأكيد حجز الموعد',
+          '<div><strong>الطبيب:</strong> ' + esc(doc.doctorName) + '</div>' +
+          '<div><strong>العيادة:</strong> ' + esc(doc.clinicName) + '</div>' +
+          '<div><strong>الموعد:</strong> ' + formatMinutesAr(slot.startMinutes + slot.delayMinutes) + '</div>' +
+          '<div><strong>اسم المريض:</strong> ' + esc(member.fullName) + '</div>' +
+          '<div style="color:var(--text-muted);font-size:0.86rem;">سيتم إغلاق الموعد فوراً باللون الأحمر عند تأكيد الحجز لمنع التضارب.</div>' +
+          '<button class="btn btn-green btn-block" id="btnConfirmBook">✓ تأكيد الحجز الآن</button>',
+          function () {
+            document.getElementById('btnConfirmBook').onclick = function () {
+              slot.status = 'BOOKED';
+              slot.patientName = member.fullName;
+              slot.patientPhone = member.phone;
+              slot.familyMemberId = member.id;
+              slot.bookingSource = 'APP';
+              saveState(db);
+              closeModal();
+              showToast('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح');
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function openAccountModal() {
+        const mHtml = db.familyMembers.map((m) =>
+          '<div class="card" style="padding:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;' +
+            (m.id === db.activeMemberId ? 'border-color:var(--teal);background:var(--teal-soft);' : '') +
+            '" data-pick-mem="' + esc(m.id) + '">' +
+            '<div><strong>' + esc(m.fullName) + '</strong><div style="font-size:0.82rem;color:var(--text-muted);">' + esc(m.relation) + ' • ' + m.age + ' سنة</div></div>' +
+            (m.id === db.activeMemberId ? '<strong style="color:var(--teal);">نشط ✓</strong>' : '') +
+          '</div>'
+        ).join('');
+
+        openModal('الحساب وأفراد العائلة',
+          '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;">' +
+            '<div><strong>الحساب النشط:</strong> ' + esc(db.account.fullName) + '</div>' +
+            '<div style="font-size:0.84rem;">الهاتف: ' + esc(db.account.phone) + ' • القومي: ' + esc(db.account.nationalId) + '</div>' +
+          '</div>' +
+          '<h4>أفراد العائلة المسجلون</h4>' + mHtml +
+          '<h4 style="margin-top:6px;">إضافة فرد جديد من العائلة</h4>' +
+          '<input class="input" id="newMemName" placeholder="الاسم الكامل" />' +
+          '<div style="display:grid;grid-template-columns:1.3fr 0.7fr;gap:8px;">' +
+            '<input class="input" id="newMemRel" value="الابن" placeholder="صلة القرابة" />' +
+            '<input class="input" id="newMemAge" type="number" placeholder="العمر" />' +
+          '</div>' +
+          '<input class="input" id="newMemPhone" value="' + esc(db.account.phone) + '" placeholder="رقم الهاتف" />' +
+          '<button class="btn btn-primary btn-block" id="btnSubmitFamily">+ إضافة إلى العائلة</button>',
+          function () {
+            document.querySelectorAll('[data-pick-mem]').forEach((el) => {
+              el.onclick = function () {
+                db.activeMemberId = el.getAttribute('data-pick-mem');
+                saveState(db);
+                closeModal();
+                renderApp();
+              };
+            });
+            document.getElementById('btnSubmitFamily').onclick = function () {
+              const name = document.getElementById('newMemName').value.trim();
+              if (!name) { showToast('يرجى كتابة اسم فرد العائلة'); return; }
+              const mem = {
+                id: 'mem_' + Date.now(),
+                fullName: name,
+                relation: document.getElementById('newMemRel').value.trim() || 'فرد عائلة',
+                age: parseInt(document.getElementById('newMemAge').value, 10) || 25,
+                phone: document.getElementById('newMemPhone').value.trim() || db.account.phone
+              };
+              db.familyMembers.push(mem);
+              db.activeMemberId = mem.id;
+              saveState(db);
+              closeModal();
+              showToast('تمت إضافة ' + name + ' إلى قائمة العائلة');
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function openConfigModal() {
+        const cfg = db.config;
+        openModal('إعدادات المنصة الموحدة (Config)',
+          '<div style="font-size:0.85rem;color:var(--text-muted);">تعديل اسم المنصة، المستشفى، رابط تحميل الـ APK، ورابط قاعدة الأدوية المصرية (workers.dev):</div>' +
+          '<input class="input" id="cfgPlatform" value="' + esc(cfg.platformNameAr) + '" placeholder="اسم المنصة" />' +
+          '<input class="input" id="cfgVillage" value="' + esc(cfg.villageNameAr) + '" placeholder="اسم القرية / المركز" />' +
+          '<input class="input" id="cfgHospital" value="' + esc(cfg.hospitalNameAr) + '" placeholder="اسم المستشفى التخصصي" />' +
+          '<input class="input" id="cfgApk" value="' + esc(cfg.apkDownloadUrl) + '" placeholder="رابط تحميل APK المباشر" dir="ltr" />' +
+          '<input class="input" id="cfgMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" placeholder="رابط API الأدوية المصرية (workers.dev - اختياري)" dir="ltr" />' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<button class="btn btn-outline" id="btnResetCfg">استعادة الافتراضي</button>' +
+            '<button class="btn btn-primary" id="btnSaveCfg">حفظ وتطبيق</button>' +
+          '</div>',
+          function () {
+            document.getElementById('btnSaveCfg').onclick = async function () {
+              db.config.platformNameAr = document.getElementById('cfgPlatform').value.trim() || DEFAULT_CONFIG.platformNameAr;
+              db.config.villageNameAr = document.getElementById('cfgVillage').value.trim() || DEFAULT_CONFIG.villageNameAr;
+              db.config.hospitalNameAr = document.getElementById('cfgHospital').value.trim() || DEFAULT_CONFIG.hospitalNameAr;
+              db.config.apkDownloadUrl = document.getElementById('cfgApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
+              db.config.medicationsApiUrl = document.getElementById('cfgMedsApi').value.trim();
+              saveState(db);
+              await refreshMedicationsFromApi();
+              closeModal();
+              showToast('تم حفظ إعدادات المنصة الموحدة');
+              renderApp();
+            };
+            document.getElementById('btnResetCfg').onclick = async function () {
+              db.config = Object.assign({}, DEFAULT_CONFIG);
+              saveState(db);
+              await refreshMedicationsFromApi();
+              closeModal();
+              showToast('تم استعادة الإعدادات الافتراضية');
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function openNotificationsModal() {
+        db.notifications.forEach((n) => { n.isRead = true; });
+        saveState(db);
+        updateHeader();
+
+        const listHtml = db.notifications.length === 0
+          ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">لا توجد تنبيهات تأخير حالياً. جميع العيادات تعمل في مواعيدها.</div>'
+          : db.notifications.map((n) => '<div class="alert-banner">⚠️ ' + esc(n.message) + '</div>').join('');
+
+        openModal('تنبيهات تأخير المواعيد', listHtml);
+      }
+
+      function openManualPhoneModal(slotId) {
+        const slot = db.slots.find((s) => s.id === slotId);
+        const doc = db.doctors.find((d) => d.id === slot.doctorId);
+        openModal('تسجيل حجز هاتفي / حضور مباشر',
+          '<div style="color:var(--teal);font-weight:700;">' + esc(doc.doctorName) + ' • الساعة ' + formatMinutesAr(slot.startMinutes + slot.delayMinutes) + '</div>' +
+          '<input class="input" id="manName" placeholder="اسم المريض ثلاثي" />' +
+          '<input class="input" id="manPhone" type="tel" placeholder="رقم الهاتف" />' +
+          '<button class="btn btn-green btn-block" id="btnConfirmManual">✓ تأكيد وإغلاق الموعد فوراً</button>',
+          function () {
+            document.getElementById('btnConfirmManual').onclick = function () {
+              const name = document.getElementById('manName').value.trim();
+              const phone = document.getElementById('manPhone').value.trim();
+              if (!name || !phone) { showToast('يرجى إدخال اسم المريض ورقم الهاتف'); return; }
+              slot.status = 'BOOKED';
+              slot.patientName = name;
+              slot.patientPhone = phone;
+              slot.familyMemberId = '';
+              slot.bookingSource = 'PHONE_WALKIN';
+              saveState(db);
+              closeModal();
+              showToast('تم تسجيل الحجز الهاتفي وإغلاق الموعد باللون الأحمر');
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function openScheduleGenModal(doc) {
+        openModal('توليد جدول المواعيد التلقائي',
+          '<label>بداية العيادة (ساعة 24): <input class="input" id="schedStart" type="number" min="8" max="22" value="' + Math.floor(doc.workStartMinutes / 60) + '" /></label>' +
+          '<label>نهاية العيادة (ساعة 24): <input class="input" id="schedEnd" type="number" min="10" max="24" value="' + Math.floor(doc.workEndMinutes / 60) + '" /></label>' +
+          '<label>مدة الكشف بالدقائق:<select class="select" id="schedDur"><option value="15">كل 15 دقيقة</option><option value="20" selected>كل 20 دقيقة</option><option value="30">كل 30 دقيقة</option></select></label>' +
+          '<button class="btn btn-primary btn-block" id="btnRunSchedGen">توليد المواعيد الجديدة</button>',
+          function () {
+            document.getElementById('schedDur').value = String(doc.slotDurationMinutes);
+            document.getElementById('btnRunSchedGen').onclick = function () {
+              const sH = parseInt(document.getElementById('schedStart').value, 10) || 17;
+              const eH = parseInt(document.getElementById('schedEnd').value, 10) || 21;
+              const dur = parseInt(document.getElementById('schedDur').value, 10) || 20;
+              if (eH <= sH) { showToast('وقت النهاية يجب أن يكون بعد البداية'); return; }
+              doc.workStartMinutes = sH * 60;
+              doc.workEndMinutes = eH * 60;
+              doc.slotDurationMinutes = dur;
+              doc.currentDelayMinutes = 0;
+              db.slots = db.slots.filter((s) => s.doctorId !== doc.id).concat(buildDoctorSlots(doc, {}));
+              saveState(db);
+              closeModal();
+              showToast('تم توليد جدول المواعيد بنجاح');
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function openSmartPrescriptionModal(slotId) {
+        const slot = db.slots.find((s) => s.id === slotId);
+        const doc = db.doctors.find((d) => d.id === slot.doctorId);
+        let filterMode = 'SPECIALTY'; // SPECIALTY | FAV | ALL
+        let medQuery = '';
+        let selectedRx = [];
+        let rxAttachmentUrl = '';
+
+        function renderRxModalBody() {
+          const favSet = new Set(db.doctorFavorites[doc.id] || []);
+          const q = medQuery.trim().toLowerCase();
+          const filteredMeds = ui.medications.filter((m) => {
+            const matchQ = !q ||
+              m.tradeName.toLowerCase().includes(q) ||
+              m.activeIngredient.toLowerCase().includes(q) ||
+              m.strength.toLowerCase().includes(q);
+            if (filterMode === 'FAV') return favSet.has(m.id) && matchQ;
+            if (q) return matchQ;
+            if (filterMode === 'SPECIALTY') return m.specialty === doc.specialty;
+            return true;
+          });
+
+          document.getElementById('rxCatalogContainer').innerHTML = filteredMeds.length === 0
+            ? '<div style="text-align:center;padding:16px;color:var(--text-muted);">لا توجد أدوية مطابقة</div>'
+            : filteredMeds.map((m) => {
+                const isFav = favSet.has(m.id);
+                const isAdded = selectedRx.some((x) => x.id === m.id);
+                return '<div class="med-item-row">' +
+                  '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">' +
+                    '<button class="chip" data-fav-med="' + esc(m.id) + '" style="min-height:36px;padding:4px 8px;">' + (isFav ? '⭐' : '☆') + '</button>' +
+                    '<div style="min-width:0;">' +
+                      '<div style="font-weight:700;font-size:0.92rem;">' + esc(m.tradeName) + '</div>' +
+                      '<div style="font-size:0.8rem;color:var(--teal);font-weight:600;">' + esc(m.activeIngredient) + ' • ' + esc(m.strength) + '</div>' +
+                    '</div>' +
+                  '</div>' +
+                  '<button class="btn ' + (isAdded ? 'btn-green' : 'btn-primary') + '" data-add-med="' + esc(m.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.84rem;" ' + (isAdded ? 'disabled' : '') + '>' +
+                    (isAdded ? '✓ مضاف' : '+ إضافة') +
+                  '</button>' +
+                '</div>';
+              }).join('');
+
+          document.getElementById('rxSelectedContainer').innerHTML = selectedRx.length === 0
+            ? '<div style="font-size:0.86rem;color:var(--text-muted);">اضغط (+ إضافة) بجانب أي دواء أعلاه لإدراجه في الروشتة.</div>'
+            : selectedRx.map((item, idx) =>
+                '<div class="card" style="padding:10px;background:rgba(217,242,242,0.3);">' +
+                  '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                    '<strong>' + (idx + 1) + '. ' + esc(item.tradeName) + ' ' + esc(item.strength) + '</strong>' +
+                    '<button class="chip" data-del-rx="' + idx + '" style="min-height:30px;padding:2px 8px;color:var(--booked-border);">حذف</button>' +
+                  '</div>' +
+                  '<input class="input" data-edit-dose="' + idx + '" value="' + esc(item.dosage) + '" placeholder="الجرعة وطريقة الاستخدام" />' +
+                  '<div class="chips-row" style="margin-top:6px;">' +
+                    DOSAGE_PRESETS.map((p) =>
+                      '<button class="chip" data-preset-idx="' + idx + '" data-preset-val="' + esc(p) + '" style="min-height:30px;padding:4px 8px;font-size:0.78rem;">' + esc(p) + '</button>'
+                    ).join('') +
+                  '</div>' +
+                '</div>'
+              ).join('');
+
+          // Bind catalog & selected handlers
+          document.querySelectorAll('[data-fav-med]').forEach((btn) => {
+            btn.onclick = function () {
+              const medId = btn.getAttribute('data-fav-med');
+              const arr = db.doctorFavorites[doc.id] || [];
+              const idx = arr.indexOf(medId);
+              if (idx >= 0) arr.splice(idx, 1); else arr.push(medId);
+              db.doctorFavorites[doc.id] = arr;
+              saveState(db);
+              renderRxModalBody();
+            };
+          });
+          document.querySelectorAll('[data-add-med]').forEach((btn) => {
+            btn.onclick = function () {
+              const m = ui.medications.find((x) => x.id === btn.getAttribute('data-add-med'));
+              if (m && !selectedRx.some((x) => x.id === m.id)) {
+                selectedRx.push({ id: m.id, tradeName: m.tradeName, strength: m.strength, dosage: m.defaultDosage });
+                renderRxModalBody();
+              }
+            };
+          });
+          document.querySelectorAll('[data-del-rx]').forEach((btn) => {
+            btn.onclick = function () {
+              selectedRx.splice(parseInt(btn.getAttribute('data-del-rx'), 10), 1);
+              renderRxModalBody();
+            };
+          });
+          document.querySelectorAll('[data-edit-dose]').forEach((inp) => {
+            inp.oninput = function () {
+              selectedRx[parseInt(inp.getAttribute('data-edit-dose'), 10)].dosage = inp.value;
+            };
+          });
+          document.querySelectorAll('[data-preset-idx]').forEach((btn) => {
+            btn.onclick = function () {
+              const i = parseInt(btn.getAttribute('data-preset-idx'), 10);
+              selectedRx[i].dosage = btn.getAttribute('data-preset-val');
+              renderRxModalBody();
+            };
+          });
+        }
+
+        function buildMedicationsText() {
+          return selectedRx.map((x) => '• ' + x.tradeName + (x.strength ? ' ' + x.strength : '') + ' — ' + (x.dosage || 'حسب إرشادات الطبيب')).join('\n');
+        }
+
+        openModal('الروشتة الإلكترونية الذكية — ' + slot.patientName,
+          '<div class="badge ' + (ui.isLiveMedsApi ? 'badge-avail' : '') + '" style="background:var(--teal-soft);color:var(--teal-text);">' +
+            (ui.isLiveMedsApi ? '☁️ متصل بقاعدة الأدوية المصرية (' + ui.medications.length + ' دواء)' : '💊 قاعدة الأدوية المصرية المدمجة Offline (' + ui.medications.length + ' دواء)') +
+          '</div>' +
+          '<input class="input" id="rxDiagnosis" placeholder="التشخيص الطبي *" />' +
+          '<input class="input" id="rxMedSearch" type="search" placeholder="ابحث بالاسم التجاري أو المادة الفعالة أو التركيز..." />' +
+          '<div class="chips-row">' +
+            '<button class="chip active" id="rxTabSpec">تخصص العيادة</button>' +
+            '<button class="chip" id="rxTabFav">المفضلة ⭐</button>' +
+            '<button class="chip" id="rxTabAll">كل الأدوية</button>' +
+          '</div>' +
+          '<div class="med-catalog-list" id="rxCatalogContainer"></div>' +
+          '<h4>الأدوية المختارة بالروشتة</h4>' +
+          '<div id="rxSelectedContainer" style="display:flex;flex-direction:column;gap:8px;"></div>' +
+          '<div style="display:grid;grid-template-columns:1.2fr 1fr auto;gap:6px;">' +
+            '<input class="input" id="customMedName" placeholder="دواء خارج القائمة (اختياري)" />' +
+            '<input class="input" id="customMedDose" value="قرص كل 12 ساعة" placeholder="الجرعة" />' +
+            '<button class="btn btn-outline" id="btnAddCustomMed">+</button>' +
+          '</div>' +
+          '<textarea class="textarea" id="rxNotes" placeholder="تعليمات وملاحظات إضافية للمريض (اختياري)"></textarea>' +
+          '<label class="btn btn-outline btn-block" style="cursor:pointer;">📷 إرفاق صورة روشتة ورقية (اختياري)<input type="file" id="rxPhotoInput" accept="image/*" style="display:none;" /></label>' +
+          '<div id="rxPhotoPreview"></div>' +
+          '<button class="btn btn-outline btn-block" id="btnPrintRxModal">🖨️ طباعة الروشتة (Print / PDF)</button>' +
+          '<button class="btn btn-primary btn-block" id="btnSaveCompleteRx">✓ إرسال لملف المريض وإنهاء الكشف</button>',
+          function () {
+            renderRxModalBody();
+
+            document.getElementById('rxMedSearch').oninput = function (e) {
+              medQuery = e.target.value;
+              renderRxModalBody();
+            };
+
+            function setTab(mode, activeBtnId) {
+              filterMode = mode;
+              ['rxTabSpec', 'rxTabFav', 'rxTabAll'].forEach((id) => {
+                document.getElementById(id).classList.toggle('active', id === activeBtnId);
+              });
+              renderRxModalBody();
+            }
+
+            document.getElementById('rxTabSpec').onclick = () => setTab('SPECIALTY', 'rxTabSpec');
+            document.getElementById('rxTabFav').onclick = () => setTab('FAV', 'rxTabFav');
+            document.getElementById('rxTabAll').onclick = () => setTab('ALL', 'rxTabAll');
+
+            document.getElementById('btnAddCustomMed').onclick = function () {
+              const n = document.getElementById('customMedName').value.trim();
+              const d = document.getElementById('customMedDose').value.trim() || 'حسب إرشادات الطبيب';
+              if (!n) return;
+              selectedRx.push({ id: 'custom_' + Date.now(), tradeName: n, strength: '', dosage: d });
+              document.getElementById('customMedName').value = '';
+              renderRxModalBody();
+            };
+
+            document.getElementById('rxPhotoInput').onchange = function (e) {
+              const file = e.target.files[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = function () {
+                rxAttachmentUrl = reader.result;
+                document.getElementById('rxPhotoPreview').innerHTML = '<img class="attach-img" src="' + esc(rxAttachmentUrl) + '" alt="روشتة" />';
+              };
+              reader.readAsDataURL(file);
+            };
+
+            document.getElementById('btnPrintRxModal').onclick = function () {
+              printPrescription({
+                patientName: slot.patientName,
+                doctorName: doc.doctorName,
+                specialty: doc.specialty,
+                visitDateLabel: formatTodayAr(),
+                diagnosis: document.getElementById('rxDiagnosis').value.trim() || 'كشف طبي عام',
+                medications: buildMedicationsText(),
+                notes: document.getElementById('rxNotes').value.trim()
+              });
+            };
+
+            document.getElementById('btnSaveCompleteRx').onclick = function () {
+              const diag = document.getElementById('rxDiagnosis').value.trim();
+              if (!diag) { showToast('يرجى كتابة التشخيص الطبي'); return; }
+              slot.status = 'COMPLETED';
+              db.records.unshift({
+                id: 'rec_' + Date.now(),
+                familyMemberId: slot.familyMemberId || '',
+                patientName: slot.patientName,
+                patientPhone: slot.patientPhone,
+                doctorId: doc.id,
+                doctorName: doc.doctorName,
+                specialty: doc.specialty,
+                visitDateLabel: formatTodayAr(),
+                diagnosis: diag,
+                medications: buildMedicationsText(),
+                notes: document.getElementById('rxNotes').value.trim(),
+                attachmentDataUrl: rxAttachmentUrl,
+                recordType: 'PRESCRIPTION',
+                createdAtMillis: Date.now()
+              });
+              saveState(db);
+              closeModal();
+              showToast('تم حفظ الروشتة وإرسالها فوراً إلى ملف المريض');
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function openPatientEmrModal(slotId) {
+        const slot = db.slots.find((s) => s.id === slotId);
+        const recs = db.records.filter((r) =>
+          (slot.familyMemberId && r.familyMemberId === slot.familyMemberId) ||
+          (slot.patientName && r.patientName === slot.patientName)
+        ).sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+
+        openModal('الملف الطبي: ' + slot.patientName,
+          recs.length === 0
+            ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">لا توجد زيارات سابقة لهذا المريض.</div>'
+            : recs.map(renderMedicalRecordCardHtml).join(''),
+          bindSharedRecordActions
+        );
+      }
+
+      // ================================================================
+      // 7. ربط الأحداث (Event Wiring)
+      // ================================================================
+      function bindSharedRecordActions() {
+        document.querySelectorAll('[data-print-rec]').forEach((btn) => {
+          btn.onclick = function () {
+            const rec = db.records.find((r) => r.id === btn.getAttribute('data-print-rec'));
+            if (rec) printPrescription(rec);
+          };
+        });
+        document.querySelectorAll('[data-preview-img]').forEach((img) => {
+          img.onclick = function () {
+            const rec = db.records.find((r) => r.id === img.getAttribute('data-preview-img'));
+            if (rec && rec.attachmentDataUrl) {
+              openModal(rec.diagnosis || 'معاينة الصورة', '<img src="' + esc(rec.attachmentDataUrl) + '" style="width:100%;border-radius:14px;" />');
+            }
+          };
+        });
+      }
+
+      function bindCommonPatientClicks() {
+        document.querySelectorAll('[data-select-member]').forEach((btn) => {
+          btn.onclick = function () {
+            db.activeMemberId = btn.getAttribute('data-select-member');
+            saveState(db);
+            renderApp();
+          };
+        });
+        document.querySelectorAll('[data-open-doc]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.bookingDoctorId = btn.getAttribute('data-open-doc');
+            renderApp();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+        });
+        document.querySelectorAll('[data-cancel-slot]').forEach((btn) => {
+          btn.onclick = function () {
+            const slot = db.slots.find((s) => s.id === btn.getAttribute('data-cancel-slot'));
+            if (slot && slot.status === 'BOOKED') {
+              slot.status = 'AVAILABLE';
+              slot.patientName = '';
+              slot.patientPhone = '';
+              slot.familyMemberId = '';
+              slot.bookingSource = '';
+              saveState(db);
+              showToast('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر');
+              renderApp();
+            }
+          };
+        });
+      }
+
+      function bindPatientEvents() {
+        bindCommonPatientClicks();
+        bindSharedRecordActions();
+
+        const addFamBtn = document.getElementById('btnAddFamilyQuick');
+        if (addFamBtn) addFamBtn.onclick = openAccountModal;
+
+        document.querySelectorAll('[data-goto-tab]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.patientTab = btn.getAttribute('data-goto-tab');
+            if (ui.patientTab === 'SPECIALTIES') ui.selectedSpecialty = null;
+            renderApp();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+        });
+
+        const searchInp = document.getElementById('dirSearchInput');
+        if (searchInp) {
+          searchInp.oninput = function (e) {
+            const pos = e.target.selectionStart;
+            ui.searchQuery = e.target.value;
+            renderApp();
+            const again = document.getElementById('dirSearchInput');
+            if (again) {
+              again.focus();
+              again.setSelectionRange(pos, pos);
+            }
+          };
+        }
+
+        document.querySelectorAll('[data-spec]').forEach((btn) => {
+          btn.onclick = function () {
+            const val = btn.getAttribute('data-spec') || null;
+            ui.selectedSpecialty = ui.selectedSpecialty === val ? null : val;
+            renderApp();
+          };
+        });
+
+        const labInp = document.getElementById('labPhotoInput');
+        if (labInp) {
+          labInp.onchange = function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const member = getActiveMember();
+            const title = (document.getElementById('uploadLabTitle').value || '').trim() || 'صورة تحليل / أشعة';
+            const notes = (document.getElementById('uploadLabNotes').value || '').trim();
+            const reader = new FileReader();
+            reader.onload = function () {
+              db.records.unshift({
+                id: 'upload_' + Date.now(),
+                familyMemberId: member.id,
+                patientName: member.fullName,
+                patientPhone: member.phone,
+                doctorId: '',
+                doctorName: 'رفع شخصي من المريض',
+                specialty: 'تحاليل وأشعة',
+                visitDateLabel: formatTodayAr(),
+                diagnosis: title,
+                medications: '',
+                notes: notes,
+                attachmentDataUrl: reader.result,
+                recordType: 'PATIENT_UPLOAD',
+                createdAtMillis: Date.now()
+              });
+              saveState(db);
+              showToast('تم حفظ صورة التحليل/الأشعة في ملف ' + member.fullName);
+              renderApp();
+            };
+            reader.readAsDataURL(file);
+          };
+        }
+      }
+
+      function bindPatientBookingEvents() {
+        bindCommonPatientClicks();
+        const backBtn = document.getElementById('btnBookingBack');
+        if (backBtn) backBtn.onclick = function () { ui.bookingDoctorId = null; renderApp(); };
+        document.querySelectorAll('[data-book-slot]').forEach((el) => {
+          el.onclick = function () { openBookConfirmModal(el.getAttribute('data-book-slot')); };
+        });
+      }
+
+      function bindDoctorDashboardEvents() {
+        const doc = db.doctors.find((d) => d.id === ui.activeAdminDoctorId) || db.doctors[0];
+
+        document.querySelectorAll('[data-admin-doc]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.activeAdminDoctorId = btn.getAttribute('data-admin-doc');
+            renderApp();
+          };
+        });
+
+        function applyDelay(mins) {
+          doc.currentDelayMinutes += mins;
+          db.slots.forEach((s) => {
+            if (s.doctorId === doc.id && s.status !== 'COMPLETED') s.delayMinutes += mins;
+          });
+          db.notifications.unshift({
+            id: Date.now(),
+            message: 'تنبيه عاجل: تم تأخير مواعيد ' + doc.doctorName + ' (' + doc.clinicName + ') لمدة ' + mins + ' دقيقة (الإجمالي: ' + doc.currentDelayMinutes + ' دقيقة).',
+            isRead: false
+          });
+          saveState(db);
+          showToast('تم تأخير المواعيد ' + mins + ' دقيقة وإرسال تنبيه فوري للمرضى');
+          renderApp();
+        }
+
+        document.getElementById('btnDelay15').onclick = () => applyDelay(15);
+        document.getElementById('btnDelay30').onclick = () => applyDelay(30);
+        document.getElementById('btnOpenScheduleGen').onclick = () => openScheduleGenModal(doc);
+
+        document.querySelectorAll('[data-manual-slot]').forEach((btn) => {
+          btn.onclick = () => openManualPhoneModal(btn.getAttribute('data-manual-slot'));
+        });
+        document.querySelectorAll('[data-write-rx]').forEach((btn) => {
+          btn.onclick = () => openSmartPrescriptionModal(btn.getAttribute('data-write-rx'));
+        });
+        document.querySelectorAll('[data-view-emr]').forEach((btn) => {
+          btn.onclick = () => openPatientEmrModal(btn.getAttribute('data-view-emr'));
+        });
+        document.querySelectorAll('[data-cancel-slot]').forEach((btn) => {
+          btn.onclick = function () {
+            const slot = db.slots.find((s) => s.id === btn.getAttribute('data-cancel-slot'));
+            if (slot && slot.status === 'BOOKED') {
+              slot.status = 'AVAILABLE';
+              slot.patientName = '';
+              slot.patientPhone = '';
+              slot.familyMemberId = '';
+              slot.bookingSource = '';
+              saveState(db);
+              showToast('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر');
+              renderApp();
+            }
+          };
+        });
+      }
+
+      // Top Header & Nav Global Listeners
+      document.getElementById('rolePatientBtn').onclick = function () {
+        ui.roleMode = 'PATIENT';
+        renderApp();
+      };
+      document.getElementById('roleDoctorBtn').onclick = function () {
+        ui.roleMode = 'DOCTOR';
+        renderApp();
+      };
+      document.getElementById('btnNotifications').onclick = openNotificationsModal;
+      document.getElementById('btnAccount').onclick = openAccountModal;
+      document.getElementById('btnConfig').onclick = openConfigModal;
+
+      document.getElementById('bottomNav').querySelectorAll('.nav-item').forEach((btn) => {
+        btn.onclick = function () {
+          ui.bookingDoctorId = null;
+          ui.patientTab = btn.getAttribute('data-tab');
+          if (ui.patientTab === 'SPECIALTIES') ui.selectedSpecialty = null;
+          renderApp();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+      });
+
+      // Instant Cross-Tab Real-Time Sync via LocalStorage events
+      window.addEventListener('storage', function (e) {
+        if (e.key === STORAGE_KEY) {
+          db = loadState();
+          renderApp();
+        }
+      });
+
+      // Service Worker Registration for PWA Installability
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('./sw.js').catch(function () {});
+        });
+      }
+
+      // Initialize App
+      refreshMedicationsFromApi().then(renderApp);
+      renderApp();
+    })();
+  </script>
+</body>
+</html>
