@@ -1,0 +1,119 @@
+package com.example.data.local
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+object ClinicType {
+    const val PRIVATE = "PRIVATE"
+    const val HOSPITAL = "HOSPITAL"
+}
+
+object SlotStatus {
+    const val AVAILABLE = "AVAILABLE"
+    const val BOOKED = "BOOKED"
+    const val COMPLETED = "COMPLETED"
+}
+
+object BookingSource {
+    const val NONE = ""
+    const val APP = "APP"
+    const val PHONE_WALKIN = "PHONE_WALKIN"
+}
+
+object MedicalRecordType {
+    const val PRESCRIPTION = "PRESCRIPTION"
+    const val PATIENT_UPLOAD = "PATIENT_UPLOAD"
+}
+
+@Entity(tableName = "patient_accounts")
+data class PatientAccountEntity(
+    @PrimaryKey val id: String,
+    val fullName: String,
+    val phone: String,
+    val nationalId: String,
+    val password: String,
+)
+
+@Entity(tableName = "family_members")
+data class FamilyMemberEntity(
+    @PrimaryKey val id: String,
+    val accountId: String,
+    val fullName: String,
+    val relation: String,
+    val age: Int,
+    val phone: String,
+)
+
+@Entity(tableName = "clinic_doctors")
+data class ClinicDoctorEntity(
+    @PrimaryKey val id: String,
+    val doctorName: String,
+    val specialty: String,
+    val clinicName: String,
+    val clinicType: String,
+    val locationLabel: String,
+    val feeEgp: Int,
+    val workStartMinutes: Int,
+    val workEndMinutes: Int,
+    val slotDurationMinutes: Int,
+    val currentDelayMinutes: Int = 0,
+    val rating: Float = 4.8f,
+    val experienceYears: Int = 12,
+)
+
+@Entity(tableName = "appointment_slots")
+data class AppointmentSlotEntity(
+    @PrimaryKey val id: String,
+    val doctorId: String,
+    val dateLabel: String = "اليوم",
+    val startMinutes: Int,
+    val delayMinutes: Int = 0,
+    val status: String = SlotStatus.AVAILABLE,
+    val patientName: String = "",
+    val patientPhone: String = "",
+    val familyMemberId: String = "",
+    val bookingSource: String = BookingSource.NONE,
+    val bookedAtMillis: Long = 0L,
+) {
+    val effectiveMinutes: Int
+        get() = startMinutes + delayMinutes
+}
+
+@Entity(tableName = "medical_records")
+data class MedicalRecordEntity(
+    @PrimaryKey val id: String,
+    val familyMemberId: String,
+    val patientName: String,
+    val patientPhone: String,
+    val doctorId: String,
+    val doctorName: String,
+    val specialty: String,
+    val visitDateLabel: String,
+    val diagnosis: String,
+    val medications: String,
+    val notes: String,
+    val attachmentPath: String = "",
+    val recordType: String = MedicalRecordType.PRESCRIPTION,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+)
+
+@Entity(tableName = "delay_notifications")
+data class DelayNotificationEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val doctorId: String,
+    val doctorName: String,
+    val clinicName: String,
+    val delayMinutes: Int,
+    val message: String,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val isRead: Boolean = false,
+)
+
+@Entity(
+    tableName = "doctor_favorite_meds",
+    primaryKeys = ["doctorId", "medicationId"],
+)
+data class DoctorFavoriteMedEntity(
+    val doctorId: String,
+    val medicationId: String,
+)

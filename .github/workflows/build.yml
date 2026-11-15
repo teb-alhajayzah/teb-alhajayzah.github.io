@@ -1,0 +1,87 @@
+name: Build and Release Teb Al-Hajayzah APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Signed Release APK (v1.0.0)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Prepare fixed signing keystore (teb-alhajayzah.jks)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "${{ github.workspace }}/teb-alhajayzah.jks"
+          elif [ ! -f "${{ github.workspace }}/teb-alhajayzah.jks" ]; then
+            keytool -genkeypair -v \
+              -keystore "${{ github.workspace }}/teb-alhajayzah.jks" \
+              -alias upload \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "${STORE_PASSWORD:-tebalhajayzah2026}" \
+              -keypass "${KEY_PASSWORD:-tebalhajayzah2026}" \
+              -dname "CN=Teb Al-Hajayzah, OU=Medical, O=Al-Hajayzah, L=Dakahlia, C=EG"
+          fi
+
+      - name: Grant gradlew execution permissions if present
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+          fi
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/teb-alhajayzah.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'tebalhajayzah2026' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'tebalhajayzah2026' }}
+        run: |
+          if [ -x "./gradlew" ]; then
+            ./gradlew assembleRelease --no-daemon
+          else
+            gradle assembleRelease --no-daemon
+          fi
+
+      - name: Verify APK output
+        run: |
+          ls -lh app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload / Replace APK in GitHub Releases (v1.0.0)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_TAG="v1.0.0"
+          APK_FILE="app/build/outputs/apk/release/app-release.apk"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$APK_FILE" \
+              --title "طب الحجايزة - الإصدار v1.0.0" \
+              --notes "تحديث تلقائي لتطبيق طب الحجايزة (Teb Al-Hajayzah) الإصدار v1.0.0"
+          fi

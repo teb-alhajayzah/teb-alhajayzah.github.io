@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">طب الحجايزة</string>
+    <string name="mode_patient">واجهة المريض</string>
+    <string name="mode_doctor">لوحة الدكتور والسكرتيرة</string>
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_private_clinics">العيادات الخاصة</string>
+    <string name="nav_hospital">المستشفى التخصصي</string>
+    <string name="nav_specialties">التخصصات</string>
+    <string name="nav_my_file">ملفي الطبي</string>
+    <string name="slot_available">متاح</string>
+    <string name="slot_booked">محجوز</string>
+    <string name="slot_completed">تم الكشف</string>
+</resources>

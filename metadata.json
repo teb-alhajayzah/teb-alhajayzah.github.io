@@ -1,0 +1,6 @@
+{
+  "name": "طب الحجايزة",
+  "description": "منصة طبية متكاملة لحجز المواعيد وإدارة الملفات الطبية لعيادات ومستشفى الحجايزة التخصصي",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
