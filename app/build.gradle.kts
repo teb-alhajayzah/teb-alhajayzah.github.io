@@ -144,8 +144,9 @@ dependencies {
 }
 
 tasks.register<Copy>("copyUnifiedReleaseApk") {
+  dependsOn("packageRelease")
   from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
-  into(layout.buildDirectory.dir("outputs/apk/release"))
+  into(layout.buildDirectory.dir("outputs/release-unified"))
   rename { "teb-alhajayzah.apk" }
 }
 

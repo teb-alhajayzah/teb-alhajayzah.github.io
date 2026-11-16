@@ -67,20 +67,21 @@ jobs:
           else
             gradle assembleRelease copyUnifiedReleaseApk --no-daemon
           fi
-          if [ ! -f "app/build/outputs/apk/release/teb-alhajayzah.apk" ] && [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            cp -f app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/teb-alhajayzah.apk
+          mkdir -p app/build/outputs/release-unified
+          if [ ! -f "app/build/outputs/release-unified/teb-alhajayzah.apk" ] && [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            cp -f app/build/outputs/apk/release/app-release.apk app/build/outputs/release-unified/teb-alhajayzah.apk
           fi
 
       - name: Verify APK output
         run: |
-          ls -lh app/build/outputs/apk/release/teb-alhajayzah.apk
+          ls -lh app/build/outputs/release-unified/teb-alhajayzah.apk
 
       - name: Upload / Replace APK in GitHub Releases (v1.0.0)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_TAG="v1.0.0"
-          APK_FILE="app/build/outputs/apk/release/teb-alhajayzah.apk"
+          APK_FILE="app/build/outputs/release-unified/teb-alhajayzah.apk"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
           else
