@@ -52,6 +52,7 @@ object SmsGateService {
     fun formatEgyptianE164(rawPhone: String): String {
         val digits = rawPhone.filter { it.isDigit() }
         return when {
+            digits.startsWith("0020") && digits.length >= 14 -> "+${digits.substring(2)}"
             digits.startsWith("20") && digits.length >= 12 -> "+$digits"
             digits.startsWith("01") && digits.length == 11 -> "+2$digits"
             digits.startsWith("1") && digits.length == 10 -> "+20$digits"
@@ -108,7 +109,7 @@ object SmsGateService {
                     }
 
                     val payload = JSONObject().apply {
-                        put("textMessage", JSONObject().apply { put("text", messageText) })
+                        put("message", messageText)
                         put("phoneNumbers", JSONArray().apply { put(e164Phone) })
                     }
 

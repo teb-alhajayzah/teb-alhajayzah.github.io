@@ -346,6 +346,8 @@ class ExampleRobolectricTest {
             SmsGateService.resolveMessagesEndpoint("http://192.168.1.50:8080/"),
         )
         assertEquals("+201141271027", SmsGateService.formatEgyptianE164("01141271027"))
+        assertEquals("+201099667530", SmsGateService.formatEgyptianE164("01099667530"))
+        assertEquals("+201099667530", SmsGateService.formatEgyptianE164("00201099667530"))
 
         repository.updateSmsGateSettings(
             serverUrl = "https://sms-gate.app",

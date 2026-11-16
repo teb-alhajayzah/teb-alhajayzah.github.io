@@ -1219,6 +1219,7 @@
       const FirebaseReadyOtpProvider = {
         formatEgyptianE164: function (rawPhone) {
           const digits = String(rawPhone || '').replace(/\D/g, '');
+          if (digits.startsWith('0020') && digits.length >= 14) return '+' + digits.slice(2);
           if (digits.startsWith('20') && digits.length >= 12) return '+' + digits;
           if (digits.startsWith('01') && digits.length === 11) return '+2' + digits;
           if (digits.startsWith('1') && digits.length === 10) return '+20' + digits;
@@ -1256,6 +1257,12 @@
 
       const SmsGateService = {
         SMS_TIMEOUT_MS: 25000,
+        CORS_PROXIES: [
+          function (targetUrl) { return 'https://corsproxy.io/?url=' + encodeURIComponent(targetUrl); },
+          function (targetUrl) { return 'https://corsproxy.io/?' + encodeURIComponent(targetUrl); },
+          function (targetUrl) { return 'https://cors.eu.org/' + targetUrl; },
+          function (targetUrl) { return 'https://thingproxy.freeboard.io/fetch/' + targetUrl; }
+        ],
         resolveEndpoint: function (serverUrl) {
           let clean = String(serverUrl || '').trim().replace(/\/+$/, '');
           if (!clean) clean = DEFAULT_CONFIG.smsGateServerUrl;
@@ -1275,6 +1282,12 @@
           } catch (e) {
             return btoa(str);
           }
+        },
+        buildPayload: function (messageText, e164Phone) {
+          return {
+            message: messageText,
+            phoneNumbers: [e164Phone]
+          };
         },
         sendSms: async function (opts) {
           const cfg = opts || {};
@@ -1302,6 +1315,9 @@
           }
 
           const endpoint = this.resolveEndpoint(serverUrl);
+          const payloadJson = JSON.stringify(this.buildPayload(messageText, e164Phone));
+          const authHeader = 'Basic ' + this.toUtf8Base64(username + ':' + password);
+
           const controller = new AbortController();
           let timedOut = false;
           const timeoutId = setTimeout(function () {
@@ -1318,38 +1334,69 @@
             cfg.externalSignal.addEventListener('abort', onExternalAbort, { once: true });
           }
 
-          try {
-            const resp = await fetch(endpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Basic ' + this.toUtf8Base64(username + ':' + password)
-              },
-              body: JSON.stringify({
-                textMessage: { text: messageText },
-                phoneNumbers: [e164Phone]
-              }),
-              signal: controller.signal
-            });
+          const attempts = [{ url: endpoint, viaProxy: false }].concat(
+            this.CORS_PROXIES.map(function (buildProxyUrl) {
+              return { url: buildProxyUrl(endpoint), viaProxy: true };
+            })
+          );
 
-            clearTimeout(timeoutId);
-            if (!resp.ok) {
-              let detail = '';
-              try { detail = await resp.text(); } catch (e) {}
-              return {
-                ok: false,
-                timedOut: false,
-                status: resp.status,
-                error: bi(
+          let lastError = '';
+          try {
+            for (let i = 0; i < attempts.length; i++) {
+              if (timedOut || (cfg.externalSignal && cfg.externalSignal.aborted)) break;
+              const attempt = attempts[i];
+              try {
+                const resp = await fetch(attempt.url, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authHeader
+                  },
+                  body: payloadJson,
+                  signal: controller.signal
+                });
+
+                if (resp.ok) {
+                  clearTimeout(timeoutId);
+                  let data = null;
+                  try { data = await resp.json(); } catch (e) {}
+                  return {
+                    ok: true,
+                    endpoint: endpoint,
+                    usedProxy: attempt.viaProxy,
+                    phone: e164Phone,
+                    data: data
+                  };
+                }
+
+                let detail = '';
+                try { detail = await resp.text(); } catch (e) {}
+                lastError = bi(
                   'فشل الإرسال من خادم SMSGate (رمز ' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : ''),
                   'SMSGate server error (' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : '')
-                )
-              };
+                );
+
+                // If SMSGate itself responded with 400/401/422 (directly or via proxy), fail immediately;
+                // otherwise (403/404/429/5xx from proxy or edge), continue to next fallback proxy.
+                const isDirectOrProxiedAppError =
+                  resp.status === 400 || resp.status === 401 || resp.status === 422;
+                if (isDirectOrProxiedAppError) {
+                  clearTimeout(timeoutId);
+                  return { ok: false, timedOut: false, status: resp.status, error: lastError };
+                }
+              } catch (err) {
+                if (timedOut) break;
+                if (cfg.externalSignal && cfg.externalSignal.aborted) {
+                  clearTimeout(timeoutId);
+                  return { ok: false, timedOut: false, aborted: true, error: bi('تم إلغاء الطلب', 'Request cancelled') };
+                }
+                lastError = bi(
+                  'تعذر الاتصال بخادم SMSGate: ' + (err && err.message ? err.message : 'CORS / شبكة'),
+                  'Failed to reach SMSGate server: ' + (err && err.message ? err.message : 'CORS / Network error')
+                );
+              }
             }
-            let data = null;
-            try { data = await resp.json(); } catch (e) {}
-            return { ok: true, endpoint: endpoint, phone: e164Phone, data: data };
-          } catch (err) {
+
             clearTimeout(timeoutId);
             if (timedOut) {
               return {
@@ -1364,10 +1411,7 @@
             return {
               ok: false,
               timedOut: false,
-              error: bi(
-                'تعذر الاتصال بخادم SMSGate: ' + (err && err.message ? err.message : 'خطأ شبكة'),
-                'Failed to reach SMSGate server: ' + (err && err.message ? err.message : 'Network error')
-              )
+              error: lastError || bi('تعذر إرسال الرسالة عبر SMSGate', 'Failed to send SMS via SMSGate')
             };
           } finally {
             if (cfg.externalSignal) {
