@@ -25,14 +25,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sms
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -52,8 +54,10 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,13 +69,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.example.auth.OtpChallenge
 import com.example.config.PlatformBrandConfig
 import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.FamilyMemberEntity
@@ -80,8 +87,15 @@ import com.example.ui.AppRoleMode
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
 import com.example.ui.theme.DelayWarningText
+import com.example.ui.theme.SlotAvailableBg
+import com.example.ui.theme.SlotAvailableBorder
+import com.example.ui.theme.SlotAvailableText
+import com.example.ui.theme.SlotBookedBg
+import com.example.ui.theme.SlotBookedBorder
+import com.example.ui.theme.SlotBookedText
 import com.example.ui.theme.TealPrimary
 import com.example.ui.theme.TealPrimaryDark
+import kotlinx.coroutines.delay
 import java.io.File
 
 @Composable
@@ -93,8 +107,6 @@ fun TebTopHeader(
     onSwitchRole: (AppRoleMode) -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenAccount: () -> Unit,
-    onOpenSuperAdmin: () -> Unit,
-    onOpenConfig: () -> Unit,
 ) {
     Surface(
         shadowElevation = 4.dp,
@@ -187,32 +199,6 @@ fun TebTopHeader(
                             tint = Color.White,
                         )
                     }
-
-                    IconButton(
-                        onClick = onOpenSuperAdmin,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("super_admin_button"),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AdminPanelSettings,
-                            contentDescription = "إدارة المنصة (Admin)",
-                            tint = if (roleMode == AppRoleMode.SUPER_ADMIN) Color(0xFFFDE047) else Color.White,
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onOpenConfig,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("platform_config_button"),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "إعدادات المنصة الموحدة",
-                            tint = Color.White,
-                        )
-                    }
                 }
             }
 
@@ -268,8 +254,7 @@ private fun RoleModePillButton(
             .testTag(testTag),
     ) {
         Row(
-            modifier = Modifier
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -296,10 +281,15 @@ fun AccountAndFamilyDialog(
     activeAccount: PatientAccountEntity?,
     familyMembers: List<FamilyMemberEntity>,
     activeMemberId: String,
+    activeOtpChallenge: OtpChallenge?,
+    appVersionLabel: String,
     onSelectMember: (String) -> Unit,
     onAddFamilyMember: (name: String, relation: String, age: Int, phone: String) -> Unit,
     onLogin: (identifier: String, password: String) -> Unit,
     onRegister: (name: String, phone: String, nationalId: String, password: String) -> Unit,
+    onSendOrResendOtp: () -> Unit,
+    onVerifyOtp: (code: String) -> Unit,
+    onTriggerHiddenAdmin: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -315,6 +305,15 @@ fun AccountAndFamilyDialog(
     var regPhone by remember { mutableStateOf("") }
     var regNationalId by remember { mutableStateOf("") }
     var regPassword by remember { mutableStateOf("") }
+
+    var otpInput by remember { mutableStateOf("") }
+    var versionTapCount by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(activeAccount?.isPhoneVerified) {
+        if (activeAccount != null && !activeAccount.isPhoneVerified) {
+            selectedTab = 0
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -334,7 +333,7 @@ fun AccountAndFamilyDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "الحساب وأفراد العائلة",
+                        text = "حسابي وأفراد العائلة",
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     IconButton(onClick = onDismiss) {
@@ -343,34 +342,123 @@ fun AccountAndFamilyDialog(
                 }
 
                 if (activeAccount != null) {
+                    val isVerified = activeAccount.isPhoneVerified
                     Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
+                        color = if (isVerified) MaterialTheme.colorScheme.primaryContainer else SlotBookedBg,
                         shape = RoundedCornerShape(14.dp),
+                        border = if (!isVerified) BorderStroke(1.dp, SlotBookedBorder) else null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 6.dp),
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(
-                                Icons.Filled.Badge,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "الحساب النشط: ${activeAccount.fullName}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isVerified) Icons.Filled.VerifiedUser else Icons.Filled.Badge,
+                                    contentDescription = null,
+                                    tint = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer else SlotBookedText,
                                 )
-                                Text(
-                                    text = "الهاتف: ${activeAccount.phone}  •  الرقم القومي: ${activeAccount.nationalId.ifBlank { "غير مضاف" }}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
-                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "الحساب النشط: ${activeAccount.fullName}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer else SlotBookedText,
+                                    )
+                                    Text(
+                                        text = "الهاتف: ${activeAccount.phone}  •  ${if (isVerified) "موثق ✓" else "بانتظار تأكيد OTP"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else SlotBookedText,
+                                    )
+                                }
+                            }
+
+                            if (!isVerified) {
+                                Surface(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, DelayWarningBorder),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Filled.Sms, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(20.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "تأكيد الحساب برمز التحقق (OTP)",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = TealPrimary,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
+                                        Text(
+                                            text = "لا يمكن حجز أي موعد إلا بعد إدخال كود التحقق المكون من 6 أرقام لمنع الحجوزات الوهمية.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+
+                                        if (activeOtpChallenge?.testOtpCode != null) {
+                                            Surface(
+                                                color = DelayWarningBg,
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, DelayWarningBorder),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .testTag("test_otp_banner"),
+                                            ) {
+                                                Text(
+                                                    text = "إشعار تجريبي (Test OTP للرقم ${activeOtpChallenge.formattedE164Phone}):\nكود التحقق الخاص بك هو: ${activeOtpChallenge.testOtpCode}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = DelayWarningText,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(10.dp),
+                                                )
+                                            }
+                                        }
+
+                                        OutlinedTextField(
+                                            value = otpInput,
+                                            onValueChange = { ch ->
+                                                otpInput = ch.filter { it.isDigit() }.take(6)
+                                            },
+                                            label = { Text("أدخل كود التحقق (6 أرقام)") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            singleLine = true,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("otp_code_input"),
+                                        )
+
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Button(
+                                                onClick = { onVerifyOtp(otpInput) },
+                                                modifier = Modifier
+                                                    .weight(1.2f)
+                                                    .height(48.dp)
+                                                    .testTag("otp_verify_submit"),
+                                            ) {
+                                                Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("تأكيد وتفعيل")
+                                            }
+                                            OutlinedButton(
+                                                onClick = onSendOrResendOtp,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(48.dp)
+                                                    .testTag("otp_resend_button"),
+                                            ) {
+                                                Text(if (activeOtpChallenge == null) "إرسال الرمز" else "إعادة إرسال")
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -520,7 +608,7 @@ fun AccountAndFamilyDialog(
 
                         1 -> {
                             Text(
-                                text = "سجّل الدخول برقم الهاتف أو الرقم القومي (كلمة المرور الافتراضية للحساب التجريبي: 1234)",
+                                text = "سجّل الدخول برقم الهاتف أو الرقم القومي (الحساب التجريبي: 01012345678 / 1234)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -553,12 +641,20 @@ fun AccountAndFamilyDialog(
                         }
 
                         2 -> {
+                            Text(
+                                text = "يتطلب تفعيل الحساب الجديد إدخال رمز تحقق (OTP) مكون من 6 أرقام عبر الهاتف.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TealPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                             OutlinedTextField(
                                 value = regName,
                                 onValueChange = { regName = it },
                                 label = { Text("الاسم ثلاثي") },
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("reg_name_input"),
                             )
                             OutlinedTextField(
                                 value = regPhone,
@@ -566,7 +662,9 @@ fun AccountAndFamilyDialog(
                                 label = { Text("رقم الهاتف") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("reg_phone_input"),
                             )
                             OutlinedTextField(
                                 value = regNationalId,
@@ -587,16 +685,38 @@ fun AccountAndFamilyDialog(
                             Button(
                                 onClick = {
                                     onRegister(regName, regPhone, regNationalId, regPassword)
-                                    onDismiss()
+                                    selectedTab = 0
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(50.dp),
+                                    .height(50.dp)
+                                    .testTag("reg_submit_button"),
                             ) {
-                                Text("إنشاء الحساب والدخول فوراً")
+                                Text("إنشاء الحساب وإرسال رمز التحقق (OTP)")
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "إصدار التطبيق: $appVersionLabel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                versionTapCount += 1
+                                if (versionTapCount >= 5) {
+                                    versionTapCount = 0
+                                    onDismiss()
+                                    onTriggerHiddenAdmin()
+                                }
+                            }
+                            .padding(vertical = 8.dp)
+                            .testTag("hidden_version_trigger"),
+                    )
                 }
             }
         }
@@ -604,120 +724,94 @@ fun AccountAndFamilyDialog(
 }
 
 @Composable
-fun PlatformConfigDialog(
-    currentConfig: PlatformBrandConfig,
-    onSave: (
-        platformName: String,
-        villageName: String,
-        hospitalName: String,
-        apkDownloadUrl: String,
-        medsApiUrl: String,
-        adminUsername: String,
-        adminPassword: String,
-    ) -> Unit,
-    onReset: () -> Unit,
+fun AdminPinLockDialog(
+    ownerName: String,
+    failedAttempts: Int,
+    lockoutUntilMillis: Long,
+    onSubmitPin: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var platformName by remember { mutableStateOf(currentConfig.platformNameAr) }
-    var villageName by remember { mutableStateOf(currentConfig.villageNameAr) }
-    var hospitalName by remember { mutableStateOf(currentConfig.hospitalNameAr) }
-    var apkUrl by remember { mutableStateOf(currentConfig.apkDownloadUrl) }
-    var medsApiUrl by remember { mutableStateOf(currentConfig.medicationsApiUrl) }
-    var adminUser by remember { mutableStateOf(currentConfig.adminUsername) }
-    var adminPass by remember { mutableStateOf(currentConfig.adminPassword) }
+    var pinInput by remember { mutableStateOf("") }
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val isLocked = lockoutUntilMillis > nowMillis
+
+    LaunchedEffect(lockoutUntilMillis) {
+        while (lockoutUntilMillis > System.currentTimeMillis()) {
+            nowMillis = System.currentTimeMillis()
+            delay(1000L)
+        }
+        nowMillis = System.currentTimeMillis()
+    }
+
+    val remainingSeconds = ((lockoutUntilMillis - nowMillis) / 1000L).coerceAtLeast(0L)
+    val remMins = remainingSeconds / 60L
+    val remSecs = remainingSeconds % 60L
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("إعدادات المنصة الموحدة (Config)") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Lock, contentDescription = null, tint = TealPrimary)
+                Text("الدخول المحمي للإدارة")
+            }
+        },
         text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "يتم سحب اسم المنصة، المستشفى، رابط تحميل الـ APK، وبيانات الإدارة العليا من الإعدادات الموحدة:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "بوابة خاصة بالإدارة العليا ($ownerName)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                 )
-                OutlinedTextField(
-                    value = platformName,
-                    onValueChange = { platformName = it },
-                    label = { Text("اسم المنصة") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = villageName,
-                    onValueChange = { villageName = it },
-                    label = { Text("اسم القرية / المركز") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = hospitalName,
-                    onValueChange = { hospitalName = it },
-                    label = { Text("اسم المستشفى الرئيسي") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = apkUrl,
-                    onValueChange = { apkUrl = it },
-                    label = { Text("رابط تحميل APK المباشر (GitHub Releases)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = medsApiUrl,
-                    onValueChange = { medsApiUrl = it },
-                    label = { Text("رابط API الأدوية المصرية (workers.dev - اختياري)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    text = "بيانات دخول الإدارة العليا (${currentConfig.adminOwnerName}):",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TealPrimary,
-                )
-                OutlinedTextField(
-                    value = adminUser,
-                    onValueChange = { adminUser = it },
-                    label = { Text("اسم مستخدم الإدارة") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = adminPass,
-                    onValueChange = { adminPass = it },
-                    label = { Text("كلمة مرور الإدارة") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (isLocked) {
+                    Surface(
+                        color = SlotBookedBg,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, SlotBookedBorder),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = "تم قفل البوابة مؤقتاً لمدة 15 دقيقة بعد 3 محاولات خاطئة.\nالوقت المتبقي: ${remMins} د : ${remSecs.toString().padStart(2, '0')} ث",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SlotBookedText,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(10.dp),
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { pinInput = it },
+                        label = { Text("الرقم السري للوحة التحكم (Admin PIN)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("admin_pin_input"),
+                    )
+                    if (failedAttempts > 0) {
+                        Text(
+                            text = "تنبيه: محاولات خاطئة ($failedAttempts من 3) قبل القفل الأمني لمدة 15 دقيقة.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SlotBookedBorder,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    onSave(platformName, villageName, hospitalName, apkUrl, medsApiUrl, adminUser, adminPass)
-                    onDismiss()
-                }
+                onClick = { onSubmitPin(pinInput) },
+                enabled = !isLocked && pinInput.isNotBlank(),
+                modifier = Modifier.testTag("admin_pin_submit"),
             ) {
-                Text("حفظ وتطبيق")
+                Text("تحقق ودخول")
             }
         },
         dismissButton = {
-            Row {
-                TextButton(
-                    onClick = {
-                        onReset()
-                        onDismiss()
-                    }
-                ) {
-                    Text("استعادة الافتراضي")
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("إغلاق")
-                }
+            TextButton(onClick = onDismiss) {
+                Text("إغلاق")
             }
         },
     )

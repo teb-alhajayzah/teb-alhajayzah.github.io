@@ -769,8 +769,6 @@
             🔔<span class="badge-dot" id="alertBadge" style="display:none">0</span>
           </button>
           <button class="icon-btn" id="btnAccount" title="الحساب وأفراد العائلة">👤</button>
-          <button class="icon-btn" id="btnSuperAdmin" title="إدارة المنصة (Admin)">🛡️</button>
-          <button class="icon-btn" id="btnConfig" title="إعدادات المنصة">⚙️</button>
         </div>
       </div>
 
@@ -811,13 +809,13 @@
         villageNameAr: 'قرية الحجايزة والقرى المجاورة',
         hospitalNameAr: 'مستشفى الحجايزة التخصصي',
         taglineAr: 'منصتك الطبية لحجز العيادات والملف الصحي الموحد',
+        homeAnnouncementAr: '',
         supportPhone: '01125002428',
         appVersionLabel: 'v1.0.0',
         apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
         medicationsApiUrl: '',
         adminOwnerName: 'المهندس محمد يوسف',
-        adminUsername: 'admin',
-        adminPassword: 'teb2026'
+        adminPin: '202600'
       };
 
       const STORAGE_KEY = 'teb_alhajayzah_web_state_v1';
@@ -946,14 +944,26 @@
           slots = slots.concat(buildDoctorSlots(doc, preBookMap[doc.id] || { 1: { name: 'علاء فتحي سالم', phone: '01077889900', status: 'BOOKED' } }));
         });
 
+        const defaultAccount = {
+          id: 'acc_ahmed',
+          fullName: 'أحمد محمد السيد',
+          phone: '01012345678',
+          nationalId: '29005141200451',
+          password: '1234',
+          isPhoneVerified: true
+        };
+
         return {
           config: Object.assign({}, DEFAULT_CONFIG),
-          account: { id: 'acc_ahmed', fullName: 'أحمد محمد السيد', phone: '01012345678', nationalId: '29005141200451' },
+          account: defaultAccount,
+          accounts: [Object.assign({}, defaultAccount)],
+          blockedPhones: [],
+          adminSecurity: { failedAttempts: 0, lockoutUntilMillis: 0 },
           familyMembers: [
-            { id: 'mem_self_ahmed', fullName: 'أحمد محمد السيد', relation: 'نفسي (صاحب الحساب)', age: 36, phone: '01012345678' },
-            { id: 'mem_mother', fullName: 'سعاد حسن عبد الله', relation: 'الأم', age: 62, phone: '01012345678' },
-            { id: 'mem_wife', fullName: 'فاطمة علي محمود', relation: 'الزوجة', age: 31, phone: '01098765432' },
-            { id: 'mem_son', fullName: 'كريم أحمد محمد', relation: 'الابن', age: 9, phone: '01012345678' }
+            { id: 'mem_self_ahmed', accountId: 'acc_ahmed', fullName: 'أحمد محمد السيد', relation: 'نفسي (صاحب الحساب)', age: 36, phone: '01012345678' },
+            { id: 'mem_mother', accountId: 'acc_ahmed', fullName: 'سعاد حسن عبد الله', relation: 'الأم', age: 62, phone: '01012345678' },
+            { id: 'mem_wife', accountId: 'acc_ahmed', fullName: 'فاطمة علي محمود', relation: 'الزوجة', age: 31, phone: '01098765432' },
+            { id: 'mem_son', accountId: 'acc_ahmed', fullName: 'كريم أحمد محمد', relation: 'الابن', age: 9, phone: '01012345678' }
           ],
           activeMemberId: 'mem_self_ahmed',
           doctors: doctors,
@@ -1024,6 +1034,19 @@
             const parsed = JSON.parse(raw);
             if (parsed && Array.isArray(parsed.doctors) && Array.isArray(parsed.slots)) {
               parsed.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
+              if (!parsed.account) {
+                parsed.account = { id: 'acc_ahmed', fullName: 'أحمد محمد السيد', phone: '01012345678', nationalId: '29005141200451', password: '1234', isPhoneVerified: true };
+              }
+              if (typeof parsed.account.isPhoneVerified !== 'boolean') {
+                parsed.account.isPhoneVerified = true;
+              }
+              if (!Array.isArray(parsed.accounts) || parsed.accounts.length === 0) {
+                parsed.accounts = [Object.assign({}, parsed.account)];
+              }
+              if (!Array.isArray(parsed.blockedPhones)) {
+                parsed.blockedPhones = [];
+              }
+              parsed.adminSecurity = Object.assign({ failedAttempts: 0, lockoutUntilMillis: 0 }, parsed.adminSecurity || {});
               parsed.doctors = parsed.doctors.map((d, idx) => Object.assign({
                 bio: '',
                 mapsUrl: 'https://maps.google.com/?q=الحجايزة+السنبلاوين+الدقهلية',
@@ -1058,10 +1081,91 @@
         searchQuery: '',
         loggedInDoctorId: null,
         isAdminLoggedIn: false,
+        adminTab: 'CLINICS', // CLINICS | HOSPITAL | BOOKINGS | SETTINGS
         adminSearchQuery: '',
+        otpChallenge: null,
+        versionTapCount: 0,
         medications: BUILTIN_MEDICATIONS.slice(),
         isLiveMedsApi: false
       };
+
+      // ================================================================
+      // 3B. محرك التحقق عبر الهاتف (Firebase Phone Auth Ready + Test OTP)
+      //     ومحرك حماية الإدارة (Admin PIN + 15-min Lockout) وحظر الأرقام
+      // ================================================================
+      const MAX_ADMIN_PIN_ATTEMPTS = 3;
+      const ADMIN_LOCKOUT_MILLIS = 15 * 60 * 1000;
+
+      const FirebaseReadyOtpProvider = {
+        formatEgyptianE164: function (rawPhone) {
+          const digits = String(rawPhone || '').replace(/\D/g, '');
+          if (digits.startsWith('20') && digits.length >= 12) return '+' + digits;
+          if (digits.startsWith('01') && digits.length === 11) return '+2' + digits;
+          if (digits.startsWith('1') && digits.length === 10) return '+20' + digits;
+          return digits ? '+2' + digits : '';
+        },
+        sendVerificationCode: function (rawPhone) {
+          const digits = String(rawPhone || '').replace(/\D/g, '');
+          if (digits.length < 10) {
+            return { ok: false, error: 'يرجى إدخال رقم هاتف صحيح مكون من 11 رقماً' };
+          }
+          const code = String(Math.floor(100000 + Math.random() * 900000));
+          return {
+            ok: true,
+            challenge: {
+              verificationId: 'fb_test_vid_' + Date.now(),
+              formattedE164Phone: this.formatEgyptianE164(rawPhone),
+              isTestMode: true,
+              testOtpCode: code,
+              expiresAtMillis: Date.now() + 5 * 60 * 1000
+            }
+          };
+        },
+        verifyCode: function (challenge, enteredCode) {
+          const clean = String(enteredCode || '').replace(/\D/g, '');
+          if (!challenge) return { ok: false, error: 'اضغط إرسال الرمز أولاً' };
+          if (clean.length !== 6) return { ok: false, error: 'يرجى إدخال رمز التحقق المكون من 6 أرقام' };
+          if (Date.now() > challenge.expiresAtMillis) return { ok: false, error: 'انتهت صلاحية الرمز، اضغط إعادة إرسال' };
+          if (clean !== challenge.testOtpCode) return { ok: false, error: 'رمز التحقق غير صحيح، تأكد من الأرقام الستة' };
+          return { ok: true };
+        }
+      };
+
+      function normalizePhoneDigits(phone) {
+        return String(phone || '').replace(/\D/g, '');
+      }
+
+      function isPhoneBlocked(phone) {
+        const target = normalizePhoneDigits(phone);
+        if (!target) return false;
+        return (db.blockedPhones || []).some((b) => normalizePhoneDigits(b.phone) === target);
+      }
+
+      function verifyAdminPinAttempt(enteredPin) {
+        const now = Date.now();
+        const sec = db.adminSecurity || { failedAttempts: 0, lockoutUntilMillis: 0 };
+        if (sec.lockoutUntilMillis > now) {
+          const remMin = Math.ceil((sec.lockoutUntilMillis - now) / 60000);
+          return { ok: false, locked: true, error: 'تم قفل بوابة الإدارة مؤقتاً بسبب 3 محاولات خاطئة. حاول بعد ' + remMin + ' دقيقة.' };
+        }
+        const expectedPin = (db.config.adminPin || DEFAULT_CONFIG.adminPin || '202600').trim();
+        if (String(enteredPin || '').trim() === expectedPin) {
+          db.adminSecurity = { failedAttempts: 0, lockoutUntilMillis: 0 };
+          saveState(db);
+          return { ok: true };
+        }
+        const currentFails = (sec.lockoutUntilMillis > 0 && sec.lockoutUntilMillis <= now) ? 0 : (sec.failedAttempts || 0);
+        const nextFails = currentFails + 1;
+        if (nextFails >= MAX_ADMIN_PIN_ATTEMPTS) {
+          db.adminSecurity = { failedAttempts: nextFails, lockoutUntilMillis: now + ADMIN_LOCKOUT_MILLIS };
+          saveState(db);
+          return { ok: false, locked: true, error: 'تم إدخال رقم سري خاطئ 3 مرات. تم قفل الإدارة لمدة 15 دقيقة.' };
+        }
+        db.adminSecurity = { failedAttempts: nextFails, lockoutUntilMillis: 0 };
+        saveState(db);
+        const left = MAX_ADMIN_PIN_ATTEMPTS - nextFails;
+        return { ok: false, locked: false, error: 'الرقم السري غير صحيح. المحاولات المتبقية قبل القفل: ' + left };
+      }
 
       // ================================================================
       // 4. أدوات مساعدة (Formatting, Escaping, Toast, Print)
@@ -1233,11 +1337,6 @@
 
         document.getElementById('rolePatientBtn').classList.toggle('active', ui.roleMode === 'PATIENT');
         document.getElementById('roleDoctorBtn').classList.toggle('active', ui.roleMode === 'DOCTOR');
-        const adminBtn = document.getElementById('btnSuperAdmin');
-        if (adminBtn) {
-          adminBtn.style.background = ui.roleMode === 'ADMIN' ? '#fff' : 'rgba(255,255,255,0.14)';
-          adminBtn.style.color = ui.roleMode === 'ADMIN' ? 'var(--teal)' : '#fff';
-        }
 
         const showNav = ui.roleMode === 'PATIENT' && !ui.bookingDoctorId;
         const nav = document.getElementById('bottomNav');
@@ -1299,13 +1398,13 @@
                   '<div style="font-size:0.84rem;color:var(--text-muted);">تحميل وتحديث تطبيق الأندرويد الرسمي مباشرة بدون صفحات وسيطة</div>' +
                 '</div>' +
               '</div>' +
-              '<button type="button" class="btn btn-primary btn-block" id="btnApkDirectDownload" data-apk-url="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '">' +
+              '<a class="btn btn-primary btn-block" id="btnApkDirectDownload" href="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '" download="طب الحجايزة.apk" data-apk-url="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '">' +
                 '⬇️ تحميل مباشر للتطبيق (APK)' +
-              '</button>' +
+              '</a>' +
               '<div id="apkDownloadNotice" class="apk-download-notice" role="status" aria-live="polite" style="display:none;"></div>' +
             '</div>' +
 
-            // 2. روابط سريعة + بوابة الإدارة
+            // 2. روابط سريعة
             '<div class="footer-box">' +
               '<h3 style="font-size:1.02rem;color:var(--teal);">🔗 روابط سريعة</h3>' +
               '<div class="footer-quick-links">' +
@@ -1313,7 +1412,6 @@
                 '<button class="footer-link-btn" data-footer-tab="HOSPITAL">🏥 المستشفى التخصصي</button>' +
                 '<button class="footer-link-btn" data-footer-tab="SPECIALTIES">📋 التخصصات الطبية</button>' +
                 '<button class="footer-link-btn" data-footer-tab="EMR">📁 ملفي الطبي</button>' +
-                '<button class="footer-link-btn" id="footerAdminBtn" style="grid-column:1 / -1;border-color:rgba(13,115,119,0.45);color:var(--teal-text);background:var(--teal-soft);">🛡️ إدارة المنصة (Admin)</button>' +
               '</div>' +
             '</div>' +
 
@@ -1374,11 +1472,20 @@
         const hospitalCount = db.doctors.filter((d) => d.clinicType === 'HOSPITAL').length;
         const specsCount = new Set(db.doctors.map((d) => d.specialty)).size;
 
+        const announcement = (db.config.homeAnnouncementAr || '').trim();
+        const needsOtp = db.account && db.account.isPhoneVerified === false;
+
         return '<section class="hero-card">' +
             '<h2 style="font-size:1.35rem;">أهلاً بك، ' + esc(activeMember.fullName) + '</h2>' +
             '<div style="opacity:0.94;">' + esc(db.config.taglineAr) + '</div>' +
             '<span class="hero-pill">احجز موعدك في ثوانٍ بدون انتظار • ' + esc(db.config.hospitalNameAr) + '</span>' +
           '</section>' +
+
+          (announcement ? '<div class="alert-banner" style="background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);">📢 ' + esc(announcement) + '</div>' : '') +
+
+          (needsOtp
+            ? '<button type="button" class="alert-banner" id="btnHomeOtpWarning" style="cursor:pointer;width:100%;text-align:right;">🔐 حسابك قيد التفعيل: يرجى إدخال رمز التحقق (OTP) المكون من 6 أرقام لتفعيل حجز المواعيد. اضغط هنا للتأكيد.</button>'
+            : '') +
 
           (latestDelay ? '<div class="alert-banner">⚠️ ' + esc(latestDelay.message) + '</div>' : '') +
 
@@ -1672,93 +1779,169 @@
           '</section>';
       }
 
-      function renderAdminLoginGate() {
-        return '<section class="card" style="max-width:480px;margin:12px auto;padding:22px;display:flex;flex-direction:column;gap:14px;">' +
-            '<div style="display:flex;align-items:center;gap:12px;">' +
-              '<div class="tile-icon" style="background:var(--teal-soft);color:var(--teal);">🛡️</div>' +
-              '<div>' +
-                '<h2 style="font-size:1.25rem;">إدارة المنصة العليا (Super Admin)</h2>' +
-                '<div style="font-size:0.86rem;color:var(--teal);font-weight:700;">' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + '</div>' +
-              '</div>' +
-            '</div>' +
-            '<input class="input" id="admLoginUser" placeholder="اسم مستخدم الإدارة" dir="ltr" />' +
-            '<input class="input" id="admLoginPass" type="password" placeholder="كلمة مرور الإدارة" dir="ltr" />' +
-            '<div id="admLoginError" style="display:none;color:var(--booked-border);font-weight:700;font-size:0.88rem;"></div>' +
-            '<button class="btn btn-primary btn-block" id="btnAdminLoginSubmit">🔓 دخول الإدارة العليا</button>' +
-            '<button class="btn btn-outline btn-block" id="btnAdminCancelBack">← العودة لصفحة المرضى</button>' +
-            '<div style="background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">' +
-              'بيانات الدخول الافتراضية: المستخدم <code>admin</code> • كلمة المرور <code>teb2026</code> (يمكن تعديلها من إعدادات المنصة).' +
-            '</div>' +
-          '</section>';
-      }
-
       function renderSuperAdminDashboard() {
-        const privateCount = db.doctors.filter((d) => d.clinicType === 'PRIVATE').length;
-        const hospitalCount = db.doctors.filter((d) => d.clinicType === 'HOSPITAL').length;
-        const bookedTotal = db.slots.filter((s) => s.status === 'BOOKED').length;
+        const privateDocs = db.doctors.filter((d) => d.clinicType === 'PRIVATE');
+        const hospitalDocs = db.doctors.filter((d) => d.clinicType === 'HOSPITAL');
+        const allBookings = db.slots
+          .filter((s) => s.status === 'BOOKED')
+          .map((slot) => ({
+            slot: slot,
+            doc: db.doctors.find((d) => d.id === slot.doctorId)
+          }))
+          .sort((a, b) => (a.slot.startMinutes + a.slot.delayMinutes) - (b.slot.startMinutes + b.slot.delayMinutes));
+        const blockedList = db.blockedPhones || [];
         const q = (ui.adminSearchQuery || '').trim().toLowerCase();
-        const filteredDocs = db.doctors.filter((d) =>
-          !q ||
-          d.doctorName.toLowerCase().includes(q) ||
-          d.specialty.toLowerCase().includes(q) ||
-          d.clinicName.toLowerCase().includes(q) ||
-          (d.username || '').toLowerCase().includes(q)
-        );
+
+        function renderAdminDoctorsList(list, emptyLabel) {
+          const filtered = list.filter((d) =>
+            !q ||
+            d.doctorName.toLowerCase().includes(q) ||
+            d.specialty.toLowerCase().includes(q) ||
+            d.clinicName.toLowerCase().includes(q) ||
+            (d.username || '').toLowerCase().includes(q)
+          );
+          if (filtered.length === 0) {
+            return '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(emptyLabel) + '</div>';
+          }
+          return filtered.map((doc) => {
+            const typeLabel = doc.clinicType === 'HOSPITAL' ? '🏥 المستشفى التخصصي' : '🩺 عيادة خاصة';
+            return '<div class="card">' +
+              '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                '<div>' +
+                  '<div style="font-weight:800;font-size:1.08rem;">' + esc(doc.doctorName) + '</div>' +
+                  '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
+                '</div>' +
+                '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + typeLabel + '</span>' +
+              '</div>' +
+              (doc.bio ? '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' + esc(doc.bio) + '</div>' : '') +
+              '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' +
+                '📍 ' + esc(doc.locationLabel) + ' • 💰 الكشف: ' + doc.feeEgp + ' ج.م • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (كل ' + doc.slotDurationMinutes + ' د)' +
+              '</div>' +
+              '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:0.84rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
+                '<span>🔐 دخول الدكتور: <strong dir="ltr">' + esc(doc.username || doc.id) + '</strong></span>' +
+                '<span>🔑 كلمة المرور: <strong dir="ltr">' + esc(doc.password || '1234') + '</strong></span>' +
+              '</div>' +
+              '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
+                '<button class="btn btn-outline" data-admin-edit-doc="' + esc(doc.id) + '" style="flex:1;min-height:42px;">✏️ تعديل البيانات والمواعيد</button>' +
+                '<button class="btn btn-danger-outline" data-admin-delete-doc="' + esc(doc.id) + '" style="min-height:42px;">🗑️ حذف نهائي</button>' +
+              '</div>' +
+            '</div>';
+          }).join('');
+        }
+
+        let tabBodyHtml = '';
+        if (ui.adminTab === 'CLINICS') {
+          tabBodyHtml =
+            '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+              '<button class="btn btn-primary" id="btnAdminAddPrivateDoctor" style="flex:1;min-width:220px;">➕ إضافة دكتور / عيادة خاصة</button>' +
+              '<input class="input" id="adminDoctorSearch" placeholder="ابحث عن دكتور أو عيادة أو اسم مستخدم..." value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
+            '</section>' +
+            '<section style="display:flex;flex-direction:column;gap:12px;">' +
+              '<h3>العيادات الخاصة والأطباء (' + privateDocs.length + ')</h3>' +
+              renderAdminDoctorsList(privateDocs, 'لا توجد عيادات خاصة مطابقة.') +
+            '</section>';
+        } else if (ui.adminTab === 'HOSPITAL') {
+          tabBodyHtml =
+            '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+              '<button class="btn btn-primary" id="btnAdminAddHospitalDept" style="flex:1;min-width:220px;">➕ إضافة قسم / طبيب بالمستشفى</button>' +
+              '<input class="input" id="adminDoctorSearch" placeholder="ابحث داخل أقسام ' + esc(db.config.hospitalNameAr) + '..." value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
+            '</section>' +
+            '<section style="display:flex;flex-direction:column;gap:12px;">' +
+              '<h3>أقسام ' + esc(db.config.hospitalNameAr) + ' (' + hospitalDocs.length + ')</h3>' +
+              renderAdminDoctorsList(hospitalDocs, 'لا توجد أقسام مطابقة في المستشفى.') +
+            '</section>';
+        } else if (ui.adminTab === 'BOOKINGS') {
+          tabBodyHtml =
+            '<section class="card" style="display:flex;flex-direction:column;gap:8px;border-color:rgba(220,38,38,0.4);">' +
+              '<h3 style="color:var(--booked-text);">🚫 حظر رقم هاتف مسيء / حجوزات وهمية</h3>' +
+              '<div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;">' +
+                '<input class="input" id="adminBlockPhoneInp" type="tel" placeholder="رقم الهاتف المراد حظره" dir="ltr" />' +
+                '<input class="input" id="adminBlockReasonInp" placeholder="سبب الحظر (مثال: حجز وهمي)" />' +
+              '</div>' +
+              '<button class="btn btn-danger-outline btn-block" id="btnAdminBlockPhoneSubmit">🚫 حظر الرقم وإلغاء جميع حجوزاته النشطة</button>' +
+            '</section>' +
+            '<section style="display:flex;flex-direction:column;gap:10px;">' +
+              '<h3>الأرقام المحظورة حالياً (' + blockedList.length + ')</h3>' +
+              (blockedList.length === 0
+                ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد أرقام محظورة حالياً.</div>'
+                : blockedList.map((b) =>
+                    '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--booked-bg);border-color:var(--booked-border);">' +
+                      '<div><strong dir="ltr">' + esc(b.phone) + '</strong><div style="font-size:0.84rem;color:var(--booked-text);">' + esc(b.reason || 'حظر إداري') + '</div></div>' +
+                      '<button class="btn btn-outline" data-admin-unblock-phone="' + esc(b.phone) + '" style="min-height:38px;padding:6px 12px;">✓ رفع الحظر</button>' +
+                    '</div>'
+                  ).join('')) +
+            '</section>' +
+            '<section style="display:flex;flex-direction:column;gap:10px;">' +
+              '<h3>جميع الحجوزات الحالية بالمنصة (' + allBookings.length + ')</h3>' +
+              (allBookings.length === 0
+                ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد حجوزات حالية اليوم.</div>'
+                : allBookings.map((item) => {
+                    const s = item.slot;
+                    const d = item.doc;
+                    const eff = s.startMinutes + s.delayMinutes;
+                    return '<div class="card">' +
+                      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                        '<div>' +
+                          '<strong>' + esc(s.patientName) + '</strong>' +
+                          '<div style="font-size:0.84rem;color:var(--text-muted);" dir="ltr">' + esc(s.patientPhone || 'بدون هاتف') + '</div>' +
+                        '</div>' +
+                        '<span class="badge badge-booked">' + formatMinutesAr(eff) + '</span>' +
+                      '</div>' +
+                      '<div style="font-size:0.85rem;color:var(--teal);font-weight:700;margin-top:4px;">' +
+                        (d ? esc(d.doctorName + ' • ' + d.clinicName) : esc(s.doctorId)) +
+                      '</div>' +
+                      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">' +
+                        '<button class="btn btn-outline" data-admin-cancel-slot="' + esc(s.id) + '" style="flex:1;min-height:38px;">إلغاء الحجز</button>' +
+                        (s.patientPhone ? '<button class="btn btn-danger-outline" data-admin-quick-block="' + esc(s.patientPhone) + '" style="min-height:38px;">🚫 حظر الرقم</button>' : '') +
+                      '</div>' +
+                    '</div>';
+                  }).join('')) +
+            '</section>';
+        } else {
+          const cfg = db.config;
+          tabBodyHtml =
+            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
+              '<h3>⚙️ إعدادات المنصة العامة والرقم السري (PIN)</h3>' +
+              '<label style="font-size:0.84rem;font-weight:700;">اسم المنصة<input class="input" id="admSetPlatform" value="' + esc(cfg.platformNameAr) + '" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">اسم القرية / المركز<input class="input" id="admSetVillage" value="' + esc(cfg.villageNameAr) + '" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">اسم المستشفى التخصصي<input class="input" id="admSetHospital" value="' + esc(cfg.hospitalNameAr) + '" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">رقم هاتف الدعم والواتساب<input class="input" id="admSetPhone" value="' + esc(cfg.supportPhone) + '" dir="ltr" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">إعلان هام في الصفحة الرئيسية (اختياري)<textarea class="textarea" id="admSetAnnouncement" placeholder="اتركه فارغاً لإخفاء شريط الإعلان...">' + esc(cfg.homeAnnouncementAr || '') + '</textarea></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">رابط تحميل التطبيق المباشر (APK)<input class="input" id="admSetApk" value="' + esc(cfg.apkDownloadUrl) + '" dir="ltr" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">رابط API الأدوية المصرية (اختياري)<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 الرقم السري للدخول السري (Admin PIN - 4 أرقام فأكثر)<input class="input" id="admSetPin" type="password" value="' + esc(cfg.adminPin || '202600') + '" dir="ltr" /></label>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
+                '<button class="btn btn-outline" id="btnAdmResetCfg">استعادة الافتراضي</button>' +
+                '<button class="btn btn-primary" id="btnAdmSaveCfg">💾 حفظ كافة الإعدادات</button>' +
+              '</div>' +
+            '</section>';
+        }
 
         return '<section class="hero-card">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
               '<div>' +
-                '<span class="hero-pill">🛡️ لوحة تحكم الإدارة العليا</span>' +
+                '<span class="hero-pill">🛡️ الإدارة العليا السرية • محمية بالـ PIN</span>' +
                 '<h2 style="font-size:1.35rem;margin-top:6px;">أهلاً بك، ' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + '</h2>' +
-                '<div style="opacity:0.92;font-size:0.9rem;">إدارة شاملة للأطباء والعيادات وحسابات الدخول والخرائط مع تحديث فوري في المنصة.</div>' +
+                '<div style="opacity:0.92;font-size:0.9rem;">تحكم كامل في الأطباء، المستشفى، الحجوزات، الحظر، وإعدادات المنصة والرقم السري.</div>' +
               '</div>' +
-              '<div style="display:flex;gap:8px;">' +
-                '<button class="btn" id="btnAdminOpenSettings" style="background:rgba(255,255,255,0.2);color:#fff;min-height:40px;">⚙️ إعدادات الإدارة</button>' +
-                '<button class="btn" id="btnAdminLogout" style="background:#fff;color:var(--teal);min-height:40px;">🚪 خروج</button>' +
-              '</div>' +
+              '<button class="btn" id="btnAdminLogout" style="background:#fff;color:var(--teal);min-height:40px;">🚪 خروج وتأمين</button>' +
             '</div>' +
           '</section>' +
 
           '<section class="stats-row">' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--teal);">' + db.doctors.length + '</div><div style="font-size:0.84rem;">إجمالي الأطباء</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:#0F5E8C;">' + privateCount + ' / ' + hospitalCount + '</div><div style="font-size:0.84rem;">خاصة / مستشفى</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--avail-text);">' + bookedTotal + '</div><div style="font-size:0.84rem;">حجوزات اليوم</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">عيادات / مستشفى</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">حجوزات نشطة</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">أرقام محظورة</div></div>' +
           '</section>' +
 
-          '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
-            '<button class="btn btn-primary" id="btnAdminAddDoctor" style="flex:1;min-width:220px;">➕ إضافة دكتور أو عيادة جديدة</button>' +
-            '<input class="input" id="adminDoctorSearch" placeholder="ابحث عن دكتور أو عيادة أو اسم مستخدم..." value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
-          '</section>' +
+          '<div class="chips-row">' +
+            '<button class="chip ' + (ui.adminTab === 'CLINICS' ? 'active' : '') + '" data-admin-tab="CLINICS">🩺 الأطباء والعيادات</button>' +
+            '<button class="chip ' + (ui.adminTab === 'HOSPITAL' ? 'active' : '') + '" data-admin-tab="HOSPITAL">🏥 المستشفى والأقسام</button>' +
+            '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" data-admin-tab="BOOKINGS">📋 الحجوزات والحظر</button>' +
+            '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" data-admin-tab="SETTINGS">⚙️ إعدادات المنصة والـ PIN</button>' +
+          '</div>' +
 
-          '<section style="display:flex;flex-direction:column;gap:12px;">' +
-            '<h3>قائمة الأطباء والعيادات المسجلين (' + filteredDocs.length + ')</h3>' +
-            (filteredDocs.length === 0
-              ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد نتائج مطابقة.</div>'
-              : filteredDocs.map((doc) => {
-                  const typeLabel = doc.clinicType === 'HOSPITAL' ? '🏥 المستشفى التخصصي' : '🩺 عيادة خاصة';
-                  return '<div class="card">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
-                      '<div>' +
-                        '<div style="font-weight:800;font-size:1.08rem;">' + esc(doc.doctorName) + '</div>' +
-                        '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
-                      '</div>' +
-                      '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + typeLabel + '</span>' +
-                    '</div>' +
-                    (doc.bio ? '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' + esc(doc.bio) + '</div>' : '') +
-                    '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' +
-                      '📍 ' + esc(doc.locationLabel) + ' • 💰 الكشف: ' + doc.feeEgp + ' ج.م • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (كل ' + doc.slotDurationMinutes + ' د)' +
-                    '</div>' +
-                    '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:0.84rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
-                      '<span>🔐 دخول الدكتور: <strong dir="ltr">' + esc(doc.username || doc.id) + '</strong></span>' +
-                      '<span>🔑 كلمة المرور: <strong dir="ltr">' + esc(doc.password || '1234') + '</strong></span>' +
-                    '</div>' +
-                    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
-                      '<button class="btn btn-outline" data-admin-edit-doc="' + esc(doc.id) + '" style="flex:1;min-height:42px;">✏️ تعديل البيانات والمواعيد</button>' +
-                      '<button class="btn btn-danger-outline" data-admin-delete-doc="' + esc(doc.id) + '" style="min-height:42px;">🗑️ حذف نهائي</button>' +
-                    '</div>' +
-                  '</div>';
-                }).join('')) +
-          '</section>';
+          tabBodyHtml;
       }
 
       function renderFooterArea() {
@@ -1766,16 +1949,9 @@
         footerEl.innerHTML = renderSiteFooter();
         const apkBtn = document.getElementById('btnApkDirectDownload');
         if (apkBtn) {
-          apkBtn.onclick = function () {
+          apkBtn.onclick = function (e) {
+            e.preventDefault();
             startBackgroundApkDownload(apkBtn.getAttribute('data-apk-url') || db.config.apkDownloadUrl);
-          };
-        }
-        const footerAdmBtn = document.getElementById('footerAdminBtn');
-        if (footerAdmBtn) {
-          footerAdmBtn.onclick = function () {
-            ui.roleMode = 'ADMIN';
-            renderApp();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
           };
         }
         footerEl.querySelectorAll('[data-footer-tab]').forEach((btn) => {
@@ -1795,14 +1971,13 @@
         const root = document.getElementById('appRoot');
         if (ui.roleMode === 'ADMIN') {
           if (!ui.isAdminLoggedIn) {
-            root.innerHTML = renderAdminLoginGate();
-            bindAdminLoginEvents();
+            ui.roleMode = 'PATIENT';
           } else {
             root.innerHTML = renderSuperAdminDashboard();
             bindSuperAdminEvents();
+            renderFooterArea();
+            return;
           }
-          renderFooterArea();
-          return;
         }
 
         if (ui.roleMode === 'DOCTOR') {
@@ -1844,11 +2019,20 @@
       // ================================================================
       // 6. النوافذ المنبثقة (Modals) والروشتة الذكية
       // ================================================================
+      let modalIntervalTimer = null;
       function closeModal() {
+        if (modalIntervalTimer) {
+          clearInterval(modalIntervalTimer);
+          modalIntervalTimer = null;
+        }
         document.getElementById('modalRoot').innerHTML = '';
       }
 
       function openModal(title, bodyHtml, onMount) {
+        if (modalIntervalTimer) {
+          clearInterval(modalIntervalTimer);
+          modalIntervalTimer = null;
+        }
         const root = document.getElementById('modalRoot');
         root.innerHTML =
           '<div class="modal-backdrop" id="modalBackdrop">' +
@@ -1868,6 +2052,21 @@
         if (onMount) onMount();
       }
 
+      function sendOtpForActiveAccount() {
+        if (!db.account) return { ok: false, error: 'لا يوجد حساب نشط' };
+        if (isPhoneBlocked(db.account.phone)) {
+          return { ok: false, error: 'عذراً، هذا الرقم محظور من استخدام المنصة' };
+        }
+        const res = FirebaseReadyOtpProvider.sendVerificationCode(db.account.phone);
+        if (res.ok) {
+          ui.otpChallenge = res.challenge;
+          showToast('رمز التحقق التجريبي (Test OTP): ' + res.challenge.testOtpCode, 6500);
+        } else {
+          showToast(res.error);
+        }
+        return res;
+      }
+
       function openBookConfirmModal(slotId) {
         const slot = db.slots.find((s) => s.id === slotId);
         if (!slot || slot.status !== 'AVAILABLE') {
@@ -1875,8 +2074,18 @@
           renderApp();
           return;
         }
-        const doc = db.doctors.find((d) => d.id === slot.doctorId);
         const member = getActiveMember();
+        if (isPhoneBlocked(db.account && db.account.phone) || isPhoneBlocked(member && member.phone)) {
+          showToast('عذراً، هذا الرقم محظور من الحجز عبر المنصة');
+          return;
+        }
+        if (db.account && db.account.isPhoneVerified === false) {
+          showToast('يرجى تأكيد رقم هاتفك برمز التحقق (OTP) المكون من 6 أرقام أولاً');
+          if (!ui.otpChallenge) sendOtpForActiveAccount();
+          openAccountModal();
+          return;
+        }
+        const doc = db.doctors.find((d) => d.id === slot.doctorId);
         openModal('تأكيد حجز الموعد',
           '<div><strong>الطبيب:</strong> ' + esc(doc.doctorName) + '</div>' +
           '<div><strong>العيادة:</strong> ' + esc(doc.clinicName) + '</div>' +
@@ -1886,6 +2095,11 @@
           '<button class="btn btn-green btn-block" id="btnConfirmBook">✓ تأكيد الحجز الآن</button>',
           function () {
             document.getElementById('btnConfirmBook').onclick = function () {
+              if (isPhoneBlocked(db.account && db.account.phone) || isPhoneBlocked(member.phone)) {
+                closeModal();
+                showToast('عذراً، هذا الرقم محظور من الحجز عبر المنصة');
+                return;
+              }
               slot.status = 'BOOKED';
               slot.patientName = member.fullName;
               slot.patientPhone = member.phone;
@@ -1900,44 +2114,326 @@
         );
       }
 
-      function openAccountModal() {
-        const mHtml = db.familyMembers.map((m) =>
-          '<div class="card" style="padding:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;' +
-            (m.id === db.activeMemberId ? 'border-color:var(--teal);background:var(--teal-soft);' : '') +
-            '" data-pick-mem="' + esc(m.id) + '">' +
-            '<div><strong>' + esc(m.fullName) + '</strong><div style="font-size:0.82rem;color:var(--text-muted);">' + esc(m.relation) + ' • ' + m.age + ' سنة</div></div>' +
-            (m.id === db.activeMemberId ? '<strong style="color:var(--teal);">نشط ✓</strong>' : '') +
-          '</div>'
-        ).join('');
+      function openAdminPinModal() {
+        function renderPinBody() {
+          const now = Date.now();
+          const sec = db.adminSecurity || { failedAttempts: 0, lockoutUntilMillis: 0 };
+          const isLocked = sec.lockoutUntilMillis > now;
+          const remSecs = isLocked ? Math.ceil((sec.lockoutUntilMillis - now) / 1000) : 0;
+          const mins = Math.floor(remSecs / 60);
+          const secs = remSecs % 60;
+          const countdownLabel = (mins < 10 ? '0' + mins : mins) + ':' + (secs < 10 ? '0' + secs : secs);
 
-        openModal('الحساب وأفراد العائلة',
-          '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;">' +
-            '<div><strong>الحساب النشط:</strong> ' + esc(db.account.fullName) + '</div>' +
-            '<div style="font-size:0.84rem;">الهاتف: ' + esc(db.account.phone) + ' • القومي: ' + esc(db.account.nationalId) + '</div>' +
-          '</div>' +
-          '<h4>أفراد العائلة المسجلون</h4>' + mHtml +
-          '<h4 style="margin-top:6px;">إضافة فرد جديد من العائلة</h4>' +
-          '<input class="input" id="newMemName" placeholder="الاسم الكامل" />' +
-          '<div style="display:grid;grid-template-columns:1.3fr 0.7fr;gap:8px;">' +
-            '<input class="input" id="newMemRel" value="الابن" placeholder="صلة القرابة" />' +
-            '<input class="input" id="newMemAge" type="number" placeholder="العمر" />' +
-          '</div>' +
-          '<input class="input" id="newMemPhone" value="' + esc(db.account.phone) + '" placeholder="رقم الهاتف" />' +
-          '<button class="btn btn-primary btn-block" id="btnSubmitFamily">+ إضافة إلى العائلة</button>',
-          function () {
-            document.querySelectorAll('[data-pick-mem]').forEach((el) => {
-              el.onclick = function () {
-                db.activeMemberId = el.getAttribute('data-pick-mem');
-                saveState(db);
-                closeModal();
-                renderApp();
+          return (
+            '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;">' +
+              '<div style="font-weight:800;color:var(--teal-text);">🛡️ بوابة الإدارة العليا المحمية</div>' +
+              '<div style="font-size:0.84rem;color:var(--teal-text);">' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + ' • حماية مزدوجة برقم سري (PIN)</div>' +
+            '</div>' +
+            (isLocked
+              ? '<div class="alert-banner" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);">' +
+                  '🔒 تم قفل الدخول لمدة 15 دقيقة بعد 3 محاولات خاطئة. الوقت المتبقي: <strong id="pinLockCountdown" dir="ltr">' + countdownLabel + '</strong>' +
+                '</div>'
+              : '<input class="input" id="adminPinInput" type="password" inputmode="numeric" placeholder="أدخل الرقم السري للإدارة (Admin PIN)" dir="ltr" />' +
+                (sec.failedAttempts > 0
+                  ? '<div style="color:var(--booked-border);font-size:0.84rem;font-weight:700;">تنبيه: المحاولات المتبقية قبل القفل (15 دقيقة): ' + Math.max(0, MAX_ADMIN_PIN_ATTEMPTS - sec.failedAttempts) + '</div>'
+                  : '') +
+                '<button class="btn btn-primary btn-block" id="btnVerifyAdminPin">🔓 فتح لوحة التحكم</button>')
+          );
+        }
+
+        function mountPinHandlers() {
+          const now = Date.now();
+          const sec = db.adminSecurity || { failedAttempts: 0, lockoutUntilMillis: 0 };
+          if (sec.lockoutUntilMillis > now) {
+            modalIntervalTimer = setInterval(function () {
+              const rem = Math.ceil((db.adminSecurity.lockoutUntilMillis - Date.now()) / 1000);
+              const el = document.getElementById('pinLockCountdown');
+              if (rem <= 0) {
+                clearInterval(modalIntervalTimer);
+                modalIntervalTimer = null;
+                const body = document.getElementById('modalBody');
+                if (body) {
+                  body.innerHTML = renderPinBody();
+                  mountPinHandlers();
+                }
+              } else if (el) {
+                const m = Math.floor(rem / 60);
+                const s = rem % 60;
+                el.textContent = (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+              }
+            }, 1000);
+            return;
+          }
+
+          const inp = document.getElementById('adminPinInput');
+          const btn = document.getElementById('btnVerifyAdminPin');
+          function submitPin() {
+            const res = verifyAdminPinAttempt(inp ? inp.value : '');
+            if (res.ok) {
+              ui.isAdminLoggedIn = true;
+              ui.roleMode = 'ADMIN';
+              closeModal();
+              showToast('تم فتح لوحة تحكم الإدارة العليا بنجاح');
+              renderApp();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              showToast(res.error);
+              const body = document.getElementById('modalBody');
+              if (body) {
+                body.innerHTML = renderPinBody();
+                mountPinHandlers();
+              }
+            }
+          }
+          if (btn) btn.onclick = submitPin;
+          if (inp) {
+            inp.focus();
+            inp.onkeydown = function (e) { if (e.key === 'Enter') submitPin(); };
+          }
+        }
+
+        openModal('التحقق الأمني للإدارة العليا (PIN)', renderPinBody(), mountPinHandlers);
+      }
+
+      function openAccountModal(initialAuthTab) {
+        ui.versionTapCount = 0;
+        let authMode = initialAuthTab || 'NONE'; // NONE | REGISTER | LOGIN
+
+        function renderAccountBody() {
+          const isVerified = !db.account || db.account.isPhoneVerified !== false;
+          const mHtml = db.familyMembers.map((m) =>
+            '<div class="card" style="padding:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;' +
+              (m.id === db.activeMemberId ? 'border-color:var(--teal);background:var(--teal-soft);' : '') +
+              '" data-pick-mem="' + esc(m.id) + '">' +
+              '<div><strong>' + esc(m.fullName) + '</strong><div style="font-size:0.82rem;color:var(--text-muted);">' + esc(m.relation) + ' • ' + m.age + ' سنة</div></div>' +
+              (m.id === db.activeMemberId ? '<strong style="color:var(--teal);">نشط ✓</strong>' : '') +
+            '</div>'
+          ).join('');
+
+          const otpCardHtml = !isVerified
+            ? '<div class="card" style="background:var(--warn-bg);border:1.5px solid var(--warn-border);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
+                '<div style="font-weight:800;color:var(--warn-text);">🔐 تأكيد رقم الهاتف (OTP) مطلوب لتفعيل الحجز</div>' +
+                '<div style="font-size:0.83rem;color:var(--warn-text);">الهاتف: <strong dir="ltr">' + esc(db.account.phone) + '</strong> • جاهز لـ Firebase Phone Auth (وضع الاختبار الفوري Test OTP مفعّل)</div>' +
+                (ui.otpChallenge
+                  ? '<div style="background:#fff;border:1.5px dashed var(--teal);border-radius:10px;padding:8px 10px;font-weight:800;color:var(--teal);text-align:center;">' +
+                      '🧪 إشعار Test OTP: كود التحقق هو <span dir="ltr" style="font-size:1.15rem;letter-spacing:2px;">' + esc(ui.otpChallenge.testOtpCode) + '</span>' +
+                    '</div>'
+                  : '') +
+                '<div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:8px;">' +
+                  '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="أدخل الكود (6 أرقام)" dir="ltr" />' +
+                  '<button class="btn btn-primary" id="btnVerifyOtpSubmit">✓ تأكيد</button>' +
+                '</div>' +
+                '<button class="btn btn-outline btn-block" id="btnResendOtp" style="min-height:38px;">📲 ' + (ui.otpChallenge ? 'إعادة إرسال كود التحقق' : 'إرسال كود التحقق (6 أرقام)') + '</button>' +
+              '</div>'
+            : '';
+
+          const authTabsHtml =
+            '<div style="display:flex;gap:8px;">' +
+              '<button class="chip ' + (authMode === 'REGISTER' ? 'active' : '') + '" id="btnShowRegTab" style="flex:1;">🆕 إنشاء حساب جديد (OTP)</button>' +
+              '<button class="chip ' + (authMode === 'LOGIN' ? 'active' : '') + '" id="btnShowLoginTab" style="flex:1;">🔑 دخول بحساب آخر</button>' +
+            '</div>' +
+            (authMode === 'REGISTER'
+              ? '<div class="card" style="background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
+                  '<div style="font-weight:700;font-size:0.9rem;">تسجيل مريض جديد (يتطلب تفعيل OTP مكون من 6 أرقام)</div>' +
+                  '<input class="input" id="regFullName" placeholder="الاسم الكامل *" />' +
+                  '<input class="input" id="regPhone" type="tel" placeholder="رقم الهاتف (11 رقم) *" dir="ltr" />' +
+                  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+                    '<input class="input" id="regNationalId" placeholder="الرقم القومي (اختياري)" dir="ltr" />' +
+                    '<input class="input" id="regPassword" type="password" placeholder="كلمة المرور *" dir="ltr" />' +
+                  '</div>' +
+                  '<button class="btn btn-primary btn-block" id="btnSubmitRegister">إنشاء الحساب وإرسال كود التحقق</button>' +
+                '</div>'
+              : (authMode === 'LOGIN'
+                  ? '<div class="card" style="background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
+                      '<input class="input" id="loginPhoneInp" type="tel" placeholder="رقم الهاتف أو الرقم القومي" dir="ltr" />' +
+                      '<input class="input" id="loginPassInp" type="password" placeholder="كلمة المرور" dir="ltr" />' +
+                      '<button class="btn btn-primary btn-block" id="btnSubmitLogin">تسجيل الدخول</button>' +
+                    '</div>'
+                  : ''));
+
+          return (
+            '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<div><strong>الحساب النشط:</strong> ' + esc(db.account.fullName) + '</div>' +
+                '<div style="font-size:0.84rem;">الهاتف: <span dir="ltr">' + esc(db.account.phone) + '</span>' + (db.account.nationalId ? ' • القومي: ' + esc(db.account.nationalId) : '') + '</div>' +
+              '</div>' +
+              '<span class="badge ' + (isVerified ? 'badge-avail' : 'badge-booked') + '">' + (isVerified ? '✓ موثق بالـ OTP' : '⚠️ غير موثق') + '</span>' +
+            '</div>' +
+            otpCardHtml +
+            authTabsHtml +
+            '<h4>أفراد العائلة المسجلون</h4>' + mHtml +
+            '<h4 style="margin-top:6px;">إضافة فرد جديد من العائلة</h4>' +
+            '<input class="input" id="newMemName" placeholder="الاسم الكامل" />' +
+            '<div style="display:grid;grid-template-columns:1.3fr 0.7fr;gap:8px;">' +
+              '<input class="input" id="newMemRel" value="الابن" placeholder="صلة القرابة" />' +
+              '<input class="input" id="newMemAge" type="number" placeholder="العمر" />' +
+            '</div>' +
+            '<input class="input" id="newMemPhone" value="' + esc(db.account.phone) + '" placeholder="رقم الهاتف" dir="ltr" />' +
+            '<button class="btn btn-primary btn-block" id="btnSubmitFamily">+ إضافة إلى العائلة</button>' +
+            '<div id="hiddenVersionTrigger" style="text-align:center;color:var(--text-muted);font-size:0.82rem;padding:8px 4px 2px;cursor:pointer;user-select:none;">' +
+              'إصدار التطبيق: ' + esc(db.config.appVersionLabel || 'v1.0.0') +
+            '</div>'
+          );
+        }
+
+        function refreshAccountModal() {
+          const body = document.getElementById('modalBody');
+          if (!body) return;
+          body.innerHTML = renderAccountBody();
+          mountAccountHandlers();
+        }
+
+        function mountAccountHandlers() {
+          document.querySelectorAll('[data-pick-mem]').forEach((el) => {
+            el.onclick = function () {
+              db.activeMemberId = el.getAttribute('data-pick-mem');
+              saveState(db);
+              closeModal();
+              renderApp();
+            };
+          });
+
+          const resendBtn = document.getElementById('btnResendOtp');
+          if (resendBtn) {
+            resendBtn.onclick = function () {
+              sendOtpForActiveAccount();
+              refreshAccountModal();
+            };
+          }
+
+          const verifyBtn = document.getElementById('btnVerifyOtpSubmit');
+          if (verifyBtn) {
+            verifyBtn.onclick = function () {
+              const code = (document.getElementById('otpCodeInput').value || '').trim();
+              const check = FirebaseReadyOtpProvider.verifyCode(ui.otpChallenge, code);
+              if (!check.ok) {
+                showToast(check.error);
+                return;
+              }
+              db.account.isPhoneVerified = true;
+              const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id);
+              if (idx >= 0) db.accounts[idx].isPhoneVerified = true;
+              ui.otpChallenge = null;
+              saveState(db);
+              showToast('تم تفعيل الحساب بنجاح! يمكنك الآن حجز المواعيد فوراً.');
+              refreshAccountModal();
+              renderApp();
+            };
+          }
+
+          const regTabBtn = document.getElementById('btnShowRegTab');
+          if (regTabBtn) {
+            regTabBtn.onclick = function () {
+              authMode = authMode === 'REGISTER' ? 'NONE' : 'REGISTER';
+              refreshAccountModal();
+            };
+          }
+
+          const loginTabBtn = document.getElementById('btnShowLoginTab');
+          if (loginTabBtn) {
+            loginTabBtn.onclick = function () {
+              authMode = authMode === 'LOGIN' ? 'NONE' : 'LOGIN';
+              refreshAccountModal();
+            };
+          }
+
+          const submitRegBtn = document.getElementById('btnSubmitRegister');
+          if (submitRegBtn) {
+            submitRegBtn.onclick = function () {
+              const fullName = document.getElementById('regFullName').value.trim();
+              const phone = document.getElementById('regPhone').value.trim();
+              const nationalId = document.getElementById('regNationalId').value.trim();
+              const password = document.getElementById('regPassword').value.trim() || '1234';
+              if (!fullName || normalizePhoneDigits(phone).length < 10) {
+                showToast('يرجى إدخال الاسم ورقم هاتف صحيح (11 رقم)');
+                return;
+              }
+              if (isPhoneBlocked(phone)) {
+                showToast('عذراً، هذا الرقم محظور من التسجيل في المنصة');
+                return;
+              }
+              const duplicate = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === normalizePhoneDigits(phone));
+              if (duplicate) {
+                showToast('رقم الهاتف مسجل بالفعل، يمكنك تسجيل الدخول');
+                return;
+              }
+              const newAccId = 'acc_' + Date.now();
+              const newAcc = {
+                id: newAccId,
+                fullName: fullName,
+                phone: phone,
+                nationalId: nationalId,
+                password: password,
+                isPhoneVerified: false
               };
-            });
-            document.getElementById('btnSubmitFamily').onclick = function () {
+              const newSelfMem = {
+                id: 'mem_' + Date.now(),
+                accountId: newAccId,
+                fullName: fullName,
+                relation: 'نفسي (صاحب الحساب)',
+                age: 30,
+                phone: phone
+              };
+              db.accounts = (db.accounts || []).concat([newAcc]);
+              db.account = newAcc;
+              db.familyMembers.push(newSelfMem);
+              db.activeMemberId = newSelfMem.id;
+              saveState(db);
+              authMode = 'NONE';
+              sendOtpForActiveAccount();
+              refreshAccountModal();
+              renderApp();
+            };
+          }
+
+          const submitLoginBtn = document.getElementById('btnSubmitLogin');
+          if (submitLoginBtn) {
+            submitLoginBtn.onclick = function () {
+              const ident = document.getElementById('loginPhoneInp').value.trim();
+              const pass = document.getElementById('loginPassInp').value.trim();
+              if (isPhoneBlocked(ident)) {
+                showToast('عذراً، هذا الرقم محظور من استخدام المنصة');
+                return;
+              }
+              const found = (db.accounts || []).find((a) =>
+                normalizePhoneDigits(a.phone) === normalizePhoneDigits(ident) ||
+                (a.nationalId && a.nationalId === ident)
+              );
+              if (!found) {
+                showToast('لم يتم العثور على حساب بهذا الرقم');
+                return;
+              }
+              if (isPhoneBlocked(found.phone)) {
+                showToast('عذراً، هذا الرقم محظور من استخدام المنصة');
+                return;
+              }
+              if (found.password && pass && found.password !== pass) {
+                showToast('كلمة المرور غير صحيحة');
+                return;
+              }
+              db.account = found;
+              const ownMember = db.familyMembers.find((m) => m.accountId === found.id || normalizePhoneDigits(m.phone) === normalizePhoneDigits(found.phone));
+              if (ownMember) db.activeMemberId = ownMember.id;
+              saveState(db);
+              authMode = 'NONE';
+              if (found.isPhoneVerified === false) {
+                sendOtpForActiveAccount();
+              } else {
+                showToast('تم تسجيل الدخول: ' + found.fullName);
+              }
+              refreshAccountModal();
+              renderApp();
+            };
+          }
+
+          const addFamSubmit = document.getElementById('btnSubmitFamily');
+          if (addFamSubmit) {
+            addFamSubmit.onclick = function () {
               const name = document.getElementById('newMemName').value.trim();
               if (!name) { showToast('يرجى كتابة اسم فرد العائلة'); return; }
               const mem = {
                 id: 'mem_' + Date.now(),
+                accountId: db.account ? db.account.id : 'acc_ahmed',
                 fullName: name,
                 relation: document.getElementById('newMemRel').value.trim() || 'فرد عائلة',
                 age: parseInt(document.getElementById('newMemAge').value, 10) || 25,
@@ -1951,53 +2447,21 @@
               renderApp();
             };
           }
-        );
-      }
 
-      function openConfigModal() {
-        const cfg = db.config;
-        openModal('إعدادات المنصة الموحدة (Config)',
-          '<div style="font-size:0.85rem;color:var(--text-muted);">تعديل اسم المنصة، المستشفى، رابط تحميل الـ APK، وبيانات الإدارة العليا:</div>' +
-          '<input class="input" id="cfgPlatform" value="' + esc(cfg.platformNameAr) + '" placeholder="اسم المنصة" />' +
-          '<input class="input" id="cfgVillage" value="' + esc(cfg.villageNameAr) + '" placeholder="اسم القرية / المركز" />' +
-          '<input class="input" id="cfgHospital" value="' + esc(cfg.hospitalNameAr) + '" placeholder="اسم المستشفى التخصصي" />' +
-          '<input class="input" id="cfgApk" value="' + esc(cfg.apkDownloadUrl) + '" placeholder="رابط تحميل APK المباشر" dir="ltr" />' +
-          '<input class="input" id="cfgMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" placeholder="رابط API الأدوية المصرية (workers.dev - اختياري)" dir="ltr" />' +
-          '<hr style="border:none;border-top:1px dashed var(--border);margin:4px 0;" />' +
-          '<div style="font-weight:700;font-size:0.88rem;color:var(--teal);">🛡️ بيانات دخول الإدارة العليا</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-            '<input class="input" id="cfgAdminUser" value="' + esc(cfg.adminUsername || 'admin') + '" placeholder="اسم مستخدم الإدارة" dir="ltr" />' +
-            '<input class="input" id="cfgAdminPass" value="' + esc(cfg.adminPassword || 'teb2026') + '" placeholder="كلمة مرور الإدارة" dir="ltr" />' +
-          '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-            '<button class="btn btn-outline" id="btnResetCfg">استعادة الافتراضي</button>' +
-            '<button class="btn btn-primary" id="btnSaveCfg">حفظ وتطبيق</button>' +
-          '</div>',
-          function () {
-            document.getElementById('btnSaveCfg').onclick = async function () {
-              db.config.platformNameAr = document.getElementById('cfgPlatform').value.trim() || DEFAULT_CONFIG.platformNameAr;
-              db.config.villageNameAr = document.getElementById('cfgVillage').value.trim() || DEFAULT_CONFIG.villageNameAr;
-              db.config.hospitalNameAr = document.getElementById('cfgHospital').value.trim() || DEFAULT_CONFIG.hospitalNameAr;
-              db.config.apkDownloadUrl = document.getElementById('cfgApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
-              db.config.medicationsApiUrl = document.getElementById('cfgMedsApi').value.trim();
-              db.config.adminUsername = document.getElementById('cfgAdminUser').value.trim() || DEFAULT_CONFIG.adminUsername;
-              db.config.adminPassword = document.getElementById('cfgAdminPass').value.trim() || DEFAULT_CONFIG.adminPassword;
-              saveState(db);
-              await refreshMedicationsFromApi();
-              closeModal();
-              showToast('تم حفظ إعدادات المنصة الموحدة');
-              renderApp();
-            };
-            document.getElementById('btnResetCfg').onclick = async function () {
-              db.config = Object.assign({}, DEFAULT_CONFIG);
-              saveState(db);
-              await refreshMedicationsFromApi();
-              closeModal();
-              showToast('تم استعادة الإعدادات الافتراضية');
-              renderApp();
+          const versionTrigger = document.getElementById('hiddenVersionTrigger');
+          if (versionTrigger) {
+            versionTrigger.onclick = function () {
+              ui.versionTapCount = (ui.versionTapCount || 0) + 1;
+              if (ui.versionTapCount >= 5) {
+                ui.versionTapCount = 0;
+                closeModal();
+                openAdminPinModal();
+              }
             };
           }
-        );
+        }
+
+        openModal('الحساب وأفراد العائلة', renderAccountBody(), mountAccountHandlers);
       }
 
       function openAdminDoctorFormModal(editDoc) {
@@ -2472,7 +2936,15 @@
         bindSharedRecordActions();
 
         const addFamBtn = document.getElementById('btnAddFamilyQuick');
-        if (addFamBtn) addFamBtn.onclick = openAccountModal;
+        if (addFamBtn) addFamBtn.onclick = function () { openAccountModal(); };
+
+        const otpBannerBtn = document.getElementById('btnHomeOtpWarning');
+        if (otpBannerBtn) {
+          otpBannerBtn.onclick = function () {
+            if (!ui.otpChallenge) sendOtpForActiveAccount();
+            openAccountModal();
+          };
+        }
 
         document.querySelectorAll('[data-goto-tab]').forEach((btn) => {
           btn.onclick = function () {
@@ -2579,55 +3051,36 @@
         }
       }
 
-      function bindAdminLoginEvents() {
-        const submitBtn = document.getElementById('btnAdminLoginSubmit');
-        const userInp = document.getElementById('admLoginUser');
-        const passInp = document.getElementById('admLoginPass');
-        const errEl = document.getElementById('admLoginError');
-        const backBtn = document.getElementById('btnAdminCancelBack');
-
-        function attemptAdminLogin() {
-          const u = (userInp.value || '').trim();
-          const p = (passInp.value || '').trim();
-          const expectedU = db.config.adminUsername || DEFAULT_CONFIG.adminUsername;
-          const expectedP = db.config.adminPassword || DEFAULT_CONFIG.adminPassword;
-          if (u !== expectedU || p !== expectedP) {
-            errEl.textContent = 'اسم المستخدم أو كلمة مرور الإدارة غير صحيحة.';
-            errEl.style.display = 'block';
-            return;
-          }
-          ui.isAdminLoggedIn = true;
-          showToast('تم تسجيل دخول الإدارة العليا بنجاح');
-          renderApp();
-        }
-
-        if (submitBtn) submitBtn.onclick = attemptAdminLogin;
-        if (passInp) {
-          passInp.onkeydown = function (e) {
-            if (e.key === 'Enter') attemptAdminLogin();
-          };
-        }
-        if (backBtn) {
-          backBtn.onclick = function () {
-            ui.roleMode = 'PATIENT';
+      function bindSuperAdminEvents() {
+        document.querySelectorAll('[data-admin-tab]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.adminTab = btn.getAttribute('data-admin-tab');
             renderApp();
           };
+        });
+
+        const addPrivBtn = document.getElementById('btnAdminAddPrivateDoctor');
+        if (addPrivBtn) {
+          addPrivBtn.onclick = function () {
+            openAdminDoctorFormModal(null);
+          };
         }
-      }
 
-      function bindSuperAdminEvents() {
-        const addBtn = document.getElementById('btnAdminAddDoctor');
-        if (addBtn) addBtn.onclick = function () { openAdminDoctorFormModal(null); };
-
-        const settingsBtn = document.getElementById('btnAdminOpenSettings');
-        if (settingsBtn) settingsBtn.onclick = openConfigModal;
+        const addHospBtn = document.getElementById('btnAdminAddHospitalDept');
+        if (addHospBtn) {
+          addHospBtn.onclick = function () {
+            openAdminDoctorFormModal(null);
+            const typeSel = document.getElementById('admDocType');
+            if (typeSel) typeSel.value = 'HOSPITAL';
+          };
+        }
 
         const logoutBtn = document.getElementById('btnAdminLogout');
         if (logoutBtn) {
           logoutBtn.onclick = function () {
             ui.isAdminLoggedIn = false;
             ui.roleMode = 'PATIENT';
-            showToast('تم تسجيل خروج الإدارة');
+            showToast('تم تأمين وإغلاق لوحة الإدارة العليا');
             renderApp();
           };
         }
@@ -2680,6 +3133,108 @@
             );
           };
         });
+
+        function blockPhoneAndCancel(rawPhone, reason) {
+          const digits = normalizePhoneDigits(rawPhone);
+          if (digits.length < 8) {
+            showToast('يرجى إدخال رقم هاتف صحيح للحظر');
+            return;
+          }
+          if (!isPhoneBlocked(rawPhone)) {
+            db.blockedPhones = (db.blockedPhones || []).concat([{
+              phone: rawPhone.trim(),
+              reason: (reason || '').trim() || 'حظر إداري بسبب حجز وهمي',
+              blockedAtMillis: Date.now()
+            }]);
+          }
+          db.slots.forEach((s) => {
+            if (s.status === 'BOOKED' && normalizePhoneDigits(s.patientPhone) === digits) {
+              s.status = 'AVAILABLE';
+              s.patientName = '';
+              s.patientPhone = '';
+              s.familyMemberId = '';
+              s.bookingSource = '';
+            }
+          });
+          saveState(db);
+          showToast('تم حظر الرقم ' + rawPhone.trim() + ' وإلغاء حجوزاته النشطة');
+          renderApp();
+        }
+
+        const blockSubmitBtn = document.getElementById('btnAdminBlockPhoneSubmit');
+        if (blockSubmitBtn) {
+          blockSubmitBtn.onclick = function () {
+            const p = document.getElementById('adminBlockPhoneInp').value;
+            const r = document.getElementById('adminBlockReasonInp').value;
+            blockPhoneAndCancel(p, r);
+          };
+        }
+
+        document.querySelectorAll('[data-admin-quick-block]').forEach((btn) => {
+          btn.onclick = function () {
+            blockPhoneAndCancel(btn.getAttribute('data-admin-quick-block'), 'حجز وهمي / مخالفة مواعيد');
+          };
+        });
+
+        document.querySelectorAll('[data-admin-unblock-phone]').forEach((btn) => {
+          btn.onclick = function () {
+            const target = normalizePhoneDigits(btn.getAttribute('data-admin-unblock-phone'));
+            db.blockedPhones = (db.blockedPhones || []).filter((b) => normalizePhoneDigits(b.phone) !== target);
+            saveState(db);
+            showToast('تم رفع الحظر عن الرقم بنجاح');
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-admin-cancel-slot]').forEach((btn) => {
+          btn.onclick = function () {
+            const slot = db.slots.find((s) => s.id === btn.getAttribute('data-admin-cancel-slot'));
+            if (slot && slot.status === 'BOOKED') {
+              slot.status = 'AVAILABLE';
+              slot.patientName = '';
+              slot.patientPhone = '';
+              slot.familyMemberId = '';
+              slot.bookingSource = '';
+              saveState(db);
+              showToast('تم إلغاء الحجز وإعادة الموعد متاحاً');
+              renderApp();
+            }
+          };
+        });
+
+        const saveAdmCfgBtn = document.getElementById('btnAdmSaveCfg');
+        if (saveAdmCfgBtn) {
+          saveAdmCfgBtn.onclick = async function () {
+            const newPin = document.getElementById('admSetPin').value.trim();
+            if (newPin && newPin.length < 4) {
+              showToast('الرقم السري (PIN) يجب أن يكون 4 أرقام على الأقل');
+              return;
+            }
+            db.config.platformNameAr = document.getElementById('admSetPlatform').value.trim() || DEFAULT_CONFIG.platformNameAr;
+            db.config.villageNameAr = document.getElementById('admSetVillage').value.trim() || DEFAULT_CONFIG.villageNameAr;
+            db.config.hospitalNameAr = document.getElementById('admSetHospital').value.trim() || DEFAULT_CONFIG.hospitalNameAr;
+            db.config.supportPhone = document.getElementById('admSetPhone').value.trim() || DEFAULT_CONFIG.supportPhone;
+            db.config.homeAnnouncementAr = document.getElementById('admSetAnnouncement').value.trim();
+            db.config.apkDownloadUrl = document.getElementById('admSetApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
+            db.config.medicationsApiUrl = document.getElementById('admSetMedsApi').value.trim();
+            if (newPin.length >= 4) db.config.adminPin = newPin;
+            saveState(db);
+            await refreshMedicationsFromApi();
+            showToast('تم حفظ جميع إعدادات المنصة والـ PIN بنجاح');
+            renderApp();
+          };
+        }
+
+        const resetAdmCfgBtn = document.getElementById('btnAdmResetCfg');
+        if (resetAdmCfgBtn) {
+          resetAdmCfgBtn.onclick = async function () {
+            db.config = Object.assign({}, DEFAULT_CONFIG);
+            saveState(db);
+            await refreshMedicationsFromApi();
+            showToast('تمت استعادة الإعدادات الافتراضية للمنصة');
+            renderApp();
+          };
+        }
       }
 
       function bindDoctorDashboardEvents() {
@@ -2750,13 +3305,7 @@
         renderApp();
       };
       document.getElementById('btnNotifications').onclick = openNotificationsModal;
-      document.getElementById('btnAccount').onclick = openAccountModal;
-      document.getElementById('btnSuperAdmin').onclick = function () {
-        ui.roleMode = 'ADMIN';
-        renderApp();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      };
-      document.getElementById('btnConfig').onclick = openConfigModal;
+      document.getElementById('btnAccount').onclick = function () { openAccountModal(); };
 
       document.getElementById('bottomNav').querySelectorAll('.nav-item').forEach((btn) => {
         btn.onclick = function () {

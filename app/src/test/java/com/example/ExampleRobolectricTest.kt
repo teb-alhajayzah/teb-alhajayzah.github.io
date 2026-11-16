@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.config.AppConfig
 import com.example.data.local.BookingSource
 import com.example.data.local.ClinicType
+import com.example.auth.FirebaseReadyTestOtpProvider
 import com.example.data.local.SlotStatus
 import com.example.data.local.TebDatabase
 import com.example.data.medications.MedicationCatalog
@@ -207,5 +208,78 @@ class ExampleRobolectricTest {
         repository.updateAdminCredentials("eng_mohamed", "admin2026")
         assertEquals("eng_mohamed", repository.adminUsernameFlow.first())
         assertEquals("admin2026", repository.adminPasswordFlow.first())
+    }
+
+    @Test
+    fun phoneOtpVerificationAndAdminPinLockoutAndPhoneBlockingWork() = runBlocking {
+        repository.ensureSeeded()
+
+        val otpProvider = FirebaseReadyTestOtpProvider()
+        assertEquals("+201012345678", otpProvider.formatEgyptianE164("01012345678"))
+
+        val regRes = repository.registerPatientAccount(
+            fullName = "محمود حسن علي",
+            phone = "01099887766",
+            nationalId = "29501011200123",
+            password = "pass123",
+        )
+        assertTrue(regRes.isSuccess)
+        val createdAcc = regRes.getOrThrow()
+        assertFalse(createdAcc.isPhoneVerified)
+
+        val challengeRes = otpProvider.sendVerificationCode(createdAcc.phone)
+        assertTrue(challengeRes.isSuccess)
+        val challenge = challengeRes.getOrThrow()
+        assertEquals(6, challenge.testOtpCode?.length)
+        assertTrue(otpProvider.verifyCode(challenge, "000000").isFailure || challenge.testOtpCode == "000000")
+        assertTrue(otpProvider.verifyCode(challenge, challenge.testOtpCode!!).isSuccess)
+
+        repository.markAccountPhoneVerified(createdAcc.id)
+        val updatedAccount = repository.allAccountsFlow.first().first { it.id == createdAcc.id }
+        assertTrue(updatedAccount.isPhoneVerified)
+
+        // Admin PIN lockout after 3 wrong attempts -> 15 min lockout
+        val t0 = 1_000_000L
+        assertTrue(repository.verifyAdminPin("111111", t0).isFailure)
+        assertTrue(repository.verifyAdminPin("222222", t0 + 1000).isFailure)
+        assertTrue(repository.verifyAdminPin("333333", t0 + 2000).isFailure)
+
+        // Even correct PIN is rejected while locked out during the 15-minute window
+        val duringLockout = repository.verifyAdminPin("202600", t0 + 5 * 60_000L)
+        assertTrue(duringLockout.isFailure)
+
+        // After 15 minutes pass, valid PIN unlocks and resets attempts
+        val afterLockout = repository.verifyAdminPin("202600", t0 + 16 * 60_000L)
+        assertTrue(afterLockout.isSuccess)
+
+        // Full platform config + PIN update + announcement banner
+        repository.updateFullPlatformConfig(
+            platformNameAr = "طب الحجايزة المطور",
+            villageNameAr = "الحجايزة والقرى",
+            hospitalNameAr = "مستشفى الحجايزة التخصصي",
+            supportPhone = "01125002428",
+            homeAnnouncementAr = "إعلان تجريبي هام",
+            apkUrl = AppConfig.defaultBrand.apkDownloadUrl,
+            medsApiUrl = "",
+            adminPin = "998877",
+        )
+        val updatedConfig = repository.brandConfigFlow.first()
+        assertEquals("إعلان تجريبي هام", updatedConfig.homeAnnouncementAr)
+        assertEquals("998877", updatedConfig.adminPin)
+        assertTrue(repository.verifyAdminPin("998877", t0 + 17 * 60_000L).isSuccess)
+
+        // Phone blocking cancels existing booking and blocks new bookings
+        val availSlot = repository.observeSlotsForDoctor("doc_batna_1").first().first { it.status == SlotStatus.AVAILABLE }
+        assertTrue(repository.bookSlot(availSlot.id, "مريض مخالف", "01055443322", "", BookingSource.APP).isSuccess)
+
+        assertTrue(repository.blockPhone("01055443322", "حجز وهمي").isSuccess)
+        val releasedSlot = repository.observeSlotsForDoctor("doc_batna_1").first().first { it.id == availSlot.id }
+        assertEquals(SlotStatus.AVAILABLE, releasedSlot.status)
+
+        val blockedBook = repository.bookSlot(availSlot.id, "مريض مخالف", "01055443322", "", BookingSource.APP)
+        assertTrue(blockedBook.isFailure)
+
+        repository.unblockPhone("01055443322")
+        assertTrue(repository.bookSlot(availSlot.id, "مريض مخالف", "01055443322", "", BookingSource.APP).isSuccess)
     }
 }

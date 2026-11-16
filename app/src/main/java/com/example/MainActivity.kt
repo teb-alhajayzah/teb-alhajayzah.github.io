@@ -53,12 +53,11 @@ import com.example.data.repository.TebRepository
 import com.example.ui.AppRoleMode
 import com.example.ui.PatientTab
 import com.example.ui.TebViewModel
-import com.example.ui.admin.AdminLoginGateScreen
 import com.example.ui.admin.SuperAdminDashboardScreen
 import com.example.ui.components.AccountAndFamilyDialog
+import com.example.ui.components.AdminPinLockDialog
 import com.example.ui.components.FullImagePreviewDialog
 import com.example.ui.components.NotificationsDialog
-import com.example.ui.components.PlatformConfigDialog
 import com.example.ui.components.TebTopHeader
 import com.example.ui.doctor.DoctorDashboardScreen
 import com.example.ui.doctor.DoctorLoginGateScreen
@@ -105,7 +104,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
 
     var showAccountDialog by remember { mutableStateOf(false) }
     var showNotificationsDialog by remember { mutableStateOf(false) }
-    var showConfigDialog by remember { mutableStateOf(false) }
+    var showAdminPinDialog by remember { mutableStateOf(false) }
     var previewImage by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val showMessage: (String) -> Unit = { msg ->
@@ -117,6 +116,12 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
     LaunchedEffect(Unit) {
         viewModel.snackbarMessages.collect { msg ->
             snackbarHostState.showSnackbar(msg)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.openAccountForOtpEvents.collect {
+            showAccountDialog = true
         }
     }
 
@@ -150,8 +155,6 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                         showNotificationsDialog = true
                     },
                     onOpenAccount = { showAccountDialog = true },
-                    onOpenSuperAdmin = { viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN) },
-                    onOpenConfig = { showConfigDialog = true },
                 )
             },
             bottomBar = {
@@ -237,7 +240,10 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                                 onOpenAddFamilyDialog = { showAccountDialog = true },
                                                 onOpenDoctorBooking = viewModel::openDoctorBooking,
                                                 onCancelSlot = viewModel::cancelAppointment,
-                                                onOpenSuperAdmin = { viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN) },
+                                                onOpenOtpAccountDialog = {
+                                                    viewModel.sendOrResendOtpForActiveAccount()
+                                                    showAccountDialog = true
+                                                },
                                                 onShowMessage = showMessage,
                                             )
                                         }
@@ -318,21 +324,19 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
 
                             AppRoleMode.SUPER_ADMIN -> {
                                 BackHandler {
-                                    viewModel.switchRoleMode(AppRoleMode.PATIENT)
+                                    viewModel.logoutAdmin()
                                 }
-                                if (!state.isAdminLoggedIn) {
-                                    AdminLoginGateScreen(
-                                        ownerName = state.brandConfig.adminOwnerName,
-                                        onLoginAdmin = viewModel::loginAdmin,
-                                        onBackToPatient = { viewModel.switchRoleMode(AppRoleMode.PATIENT) },
-                                    )
-                                } else {
+                                if (state.isAdminLoggedIn) {
                                     SuperAdminDashboardScreen(
                                         state = state,
                                         onAddDoctor = viewModel::addDoctorByAdmin,
                                         onUpdateDoctor = viewModel::updateDoctorByAdmin,
                                         onDeleteDoctor = viewModel::deleteDoctorByAdmin,
-                                        onOpenSettings = { showConfigDialog = true },
+                                        onCancelBooking = viewModel::cancelAppointment,
+                                        onBlockPhone = viewModel::blockPhoneByAdmin,
+                                        onUnblockPhone = viewModel::unblockPhoneByAdmin,
+                                        onSavePlatformSettings = viewModel::updateBrandConfig,
+                                        onResetPlatformSettings = viewModel::resetBrandConfig,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
                                 }
@@ -350,6 +354,8 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             activeAccount = activeAccount,
             familyMembers = state.familyMembers,
             activeMemberId = state.activeMemberId,
+            activeOtpChallenge = state.activeOtpChallenge,
+            appVersionLabel = state.brandConfig.appVersionLabel,
             onSelectMember = viewModel::selectActiveFamilyMember,
             onAddFamilyMember = { name, relation, age, phone ->
                 if (activeAccount != null) {
@@ -358,7 +364,31 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             },
             onLogin = viewModel::loginPatient,
             onRegister = viewModel::registerPatient,
+            onSendOrResendOtp = viewModel::sendOrResendOtpForActiveAccount,
+            onVerifyOtp = viewModel::verifyActiveAccountOtp,
+            onTriggerHiddenAdmin = {
+                if (state.isAdminLoggedIn) {
+                    viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN)
+                } else {
+                    showAdminPinDialog = true
+                }
+            },
             onDismiss = { showAccountDialog = false },
+        )
+    }
+
+    if (showAdminPinDialog) {
+        AdminPinLockDialog(
+            ownerName = state.brandConfig.adminOwnerName,
+            failedAttempts = state.adminFailedAttempts,
+            lockoutUntilMillis = state.adminLockoutUntilMillis,
+            onSubmitPin = { enteredPin ->
+                viewModel.verifyAdminPinAndUnlock(
+                    enteredPin = enteredPin,
+                    onUnlocked = { showAdminPinDialog = false },
+                )
+            },
+            onDismiss = { showAdminPinDialog = false },
         )
     }
 
@@ -366,15 +396,6 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
         NotificationsDialog(
             notifications = state.notifications,
             onDismiss = { showNotificationsDialog = false },
-        )
-    }
-
-    if (showConfigDialog) {
-        PlatformConfigDialog(
-            currentConfig = state.brandConfig,
-            onSave = viewModel::updateBrandConfig,
-            onReset = viewModel::resetBrandConfig,
-            onDismiss = { showConfigDialog = false },
         )
     }
 

@@ -26,6 +26,9 @@ interface TebDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAccount(account: PatientAccountEntity)
 
+    @Query("UPDATE patient_accounts SET isPhoneVerified = 1 WHERE id = :accountId")
+    suspend fun markAccountPhoneVerified(accountId: String)
+
     @Query("SELECT * FROM family_members WHERE accountId = :accountId ORDER BY id ASC")
     fun observeFamilyMembers(accountId: String): Flow<List<FamilyMemberEntity>>
 
@@ -139,4 +142,16 @@ interface TebDao {
 
     @Query("DELETE FROM doctor_favorite_meds WHERE doctorId = :doctorId AND medicationId = :medicationId")
     suspend fun deleteFavoriteMed(doctorId: String, medicationId: String)
+
+    @Query("SELECT * FROM blocked_phones ORDER BY blockedAtMillis DESC")
+    fun observeBlockedPhones(): Flow<List<BlockedPhoneEntity>>
+
+    @Query("SELECT COUNT(*) FROM blocked_phones WHERE phone = :phone")
+    suspend fun isPhoneBlocked(phone: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBlockedPhone(blocked: BlockedPhoneEntity)
+
+    @Query("DELETE FROM blocked_phones WHERE phone = :phone")
+    suspend fun unblockPhone(phone: String)
 }

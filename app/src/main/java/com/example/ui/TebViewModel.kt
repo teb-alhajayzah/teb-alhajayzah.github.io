@@ -3,9 +3,13 @@ package com.example.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.auth.FirebaseReadyTestOtpProvider
+import com.example.auth.OtpChallenge
+import com.example.auth.PhoneOtpAuthProvider
 import com.example.config.AppConfig
 import com.example.config.PlatformBrandConfig
 import com.example.data.local.AppointmentSlotEntity
+import com.example.data.local.BlockedPhoneEntity
 import com.example.data.local.BookingSource
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
@@ -57,9 +61,13 @@ data class TebUiState(
     val allSlots: List<AppointmentSlotEntity> = emptyList(),
     val medicalRecords: List<MedicalRecordEntity> = emptyList(),
     val notifications: List<DelayNotificationEntity> = emptyList(),
+    val blockedPhones: List<BlockedPhoneEntity> = emptyList(),
     val activeAdminDoctorId: String = "doc_batna_1",
     val loggedInDoctorId: String? = null,
     val isAdminLoggedIn: Boolean = false,
+    val adminFailedAttempts: Int = 0,
+    val adminLockoutUntilMillis: Long = 0L,
+    val activeOtpChallenge: OtpChallenge? = null,
     val adminUsername: String = AppConfig.defaultBrand.adminUsername,
     val adminPassword: String = AppConfig.defaultBrand.adminPassword,
     val medications: List<EgyptianMedication> = MedicationCatalog.builtInMedications,
@@ -90,6 +98,9 @@ data class TebUiState(
     val unreadAlertsCount: Int
         get() = notifications.count { !it.isRead }
 
+    val isAccountVerified: Boolean
+        get() = activeAccount?.isPhoneVerified ?: true
+
     fun favoriteMedicationIdsForDoctor(doctorId: String): Set<String> =
         favoriteMedsByDoctor[doctorId] ?: emptySet()
 
@@ -115,6 +126,7 @@ data class TebUiState(
 
 class TebViewModel(
     private val repository: TebRepository,
+    private val otpProvider: PhoneOtpAuthProvider = FirebaseReadyTestOtpProvider(),
 ) : ViewModel() {
 
     private val _roleMode = MutableStateFlow(AppRoleMode.PATIENT)
@@ -122,21 +134,24 @@ class TebViewModel(
     private val _selectedBookingDoctorId = MutableStateFlow<String?>(null)
     private val _selectedSpecialty = MutableStateFlow<String?>(null)
     private val _searchQuery = MutableStateFlow("")
-    private val _brandConfig = MutableStateFlow(AppConfig.defaultBrand)
     private val _isSeeded = MutableStateFlow(false)
     private val _isAdminLoggedIn = MutableStateFlow(false)
+    private val _activeOtpChallenge = MutableStateFlow<OtpChallenge?>(null)
     private val _medications = MutableStateFlow(MedicationCatalog.builtInMedications)
     private val _isLiveMedicationsApi = MutableStateFlow(false)
 
     private val _snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarMessages = _snackbarMessages.asSharedFlow()
 
+    private val _openAccountForOtpEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+    val openAccountForOtpEvents = _openAccountForOtpEvents.asSharedFlow()
+
     init {
         viewModelScope.launch {
             repository.ensureSeeded()
             _isSeeded.value = true
         }
-        refreshEgyptianMedications(_brandConfig.value.medicationsApiUrl)
+        refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -153,6 +168,7 @@ class TebViewModel(
         val searchQuery: String,
         val brandConfig: PlatformBrandConfig,
         val isAdminLoggedIn: Boolean,
+        val activeOtpChallenge: OtpChallenge?,
     )
 
     private data class AccountDataBundle(
@@ -162,8 +178,16 @@ class TebViewModel(
         val familyMembers: List<FamilyMemberEntity>,
         val activeAdminDoctorId: String,
         val loggedInDoctorId: String?,
-        val adminUsername: String,
-        val adminPassword: String,
+        val adminFailedAttempts: Int,
+        val adminLockoutUntilMillis: Long,
+    )
+
+    private data class ClinicDataBundle(
+        val doctors: List<ClinicDoctorEntity>,
+        val slots: List<AppointmentSlotEntity>,
+        val records: List<MedicalRecordEntity>,
+        val notifications: List<DelayNotificationEntity>,
+        val blockedPhones: List<BlockedPhoneEntity>,
     )
 
     private data class MedicationBundle(
@@ -179,8 +203,9 @@ class TebViewModel(
         _selectedBookingDoctorId,
         _selectedSpecialty,
         _searchQuery,
-        _brandConfig,
+        repository.brandConfigFlow,
         _isAdminLoggedIn,
+        _activeOtpChallenge,
     ) { values ->
         CoreUiSelection(
             isSeeded = values[0] as Boolean,
@@ -191,6 +216,7 @@ class TebViewModel(
             searchQuery = values[5] as String,
             brandConfig = values[6] as PlatformBrandConfig,
             isAdminLoggedIn = values[7] as Boolean,
+            activeOtpChallenge = values[8] as OtpChallenge?,
         )
     }
 
@@ -206,10 +232,9 @@ class TebViewModel(
 
     private val authCredsFlow = combine(
         repository.loggedInDoctorIdFlow,
-        repository.adminUsernameFlow,
-        repository.adminPasswordFlow,
-    ) { loggedDocId, adminUser, adminPass ->
-        Triple(loggedDocId, adminUser, adminPass)
+        repository.adminSecurityFlow,
+    ) { loggedDocId, sec ->
+        Triple(loggedDocId, sec.first, sec.second)
     }
 
     private val accountBundleFlow = combine(accountIdsFlow, authCredsFlow) { ids, creds ->
@@ -221,9 +246,19 @@ class TebViewModel(
             familyMembers = ids[3] as List<FamilyMemberEntity>,
             activeAdminDoctorId = ids[4] as String,
             loggedInDoctorId = creds.first,
-            adminUsername = creds.second,
-            adminPassword = creds.third,
+            adminFailedAttempts = creds.second,
+            adminLockoutUntilMillis = creds.third,
         )
+    }
+
+    private val clinicBundleFlow = combine(
+        repository.doctorsFlow,
+        repository.allSlotsFlow,
+        repository.allMedicalRecordsFlow,
+        repository.notificationsFlow,
+        repository.blockedPhonesFlow,
+    ) { doctors, slots, records, notifications, blocked ->
+        ClinicDataBundle(doctors, slots, records, notifications, blocked)
     }
 
     private val medicationBundleFlow = combine(
@@ -237,24 +272,9 @@ class TebViewModel(
     val uiState: StateFlow<TebUiState> = combine(
         selectionFlow,
         accountBundleFlow,
-        repository.doctorsFlow,
-        repository.allSlotsFlow,
-        repository.allMedicalRecordsFlow,
-        repository.notificationsFlow,
+        clinicBundleFlow,
         medicationBundleFlow,
-    ) { values ->
-        val sel = values[0] as CoreUiSelection
-        val acc = values[1] as AccountDataBundle
-        @Suppress("UNCHECKED_CAST")
-        val doctors = values[2] as List<ClinicDoctorEntity>
-        @Suppress("UNCHECKED_CAST")
-        val slots = values[3] as List<AppointmentSlotEntity>
-        @Suppress("UNCHECKED_CAST")
-        val records = values[4] as List<MedicalRecordEntity>
-        @Suppress("UNCHECKED_CAST")
-        val notifications = values[5] as List<DelayNotificationEntity>
-        val medBundle = values[6] as MedicationBundle
-
+    ) { sel, acc, clinic, medBundle ->
         val favMap = medBundle.favorites
             .groupBy { it.doctorId }
             .mapValues { (_, list) -> list.map { it.medicationId }.toSet() }
@@ -269,22 +289,23 @@ class TebViewModel(
             selectedBookingDoctorId = sel.bookingDoctorId,
             selectedSpecialty = sel.specialty,
             searchQuery = sel.searchQuery,
-            brandConfig = sel.brandConfig.copy(
-                adminUsername = acc.adminUsername,
-                adminPassword = acc.adminPassword,
-            ),
+            brandConfig = sel.brandConfig,
             activeAccount = activeAccount,
             familyMembers = acc.familyMembers,
             activeMemberId = acc.activeMemberId,
-            doctors = doctors,
-            allSlots = slots,
-            medicalRecords = records,
-            notifications = notifications,
+            doctors = clinic.doctors,
+            allSlots = clinic.slots,
+            medicalRecords = clinic.records,
+            notifications = clinic.notifications,
+            blockedPhones = clinic.blockedPhones,
             activeAdminDoctorId = acc.activeAdminDoctorId,
             loggedInDoctorId = acc.loggedInDoctorId,
             isAdminLoggedIn = sel.isAdminLoggedIn,
-            adminUsername = acc.adminUsername,
-            adminPassword = acc.adminPassword,
+            adminFailedAttempts = acc.adminFailedAttempts,
+            adminLockoutUntilMillis = acc.adminLockoutUntilMillis,
+            activeOtpChallenge = sel.activeOtpChallenge,
+            adminUsername = sel.brandConfig.adminUsername,
+            adminPassword = sel.brandConfig.adminPassword,
             medications = medBundle.medications,
             isLiveMedicationsApi = medBundle.isLiveRemote,
             favoriteMedsByDoctor = favMap,
@@ -310,6 +331,9 @@ class TebViewModel(
     }
 
     fun switchRoleMode(mode: AppRoleMode) {
+        if (mode == AppRoleMode.SUPER_ADMIN && !_isAdminLoggedIn.value) {
+            return
+        }
         _roleMode.value = mode
     }
 
@@ -340,45 +364,58 @@ class TebViewModel(
         }
     }
 
-    fun selectAdminDoctorPortal(doctorId: String) {
+    fun verifyAdminPinAndUnlock(enteredPin: String, onUnlocked: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.setActiveDoctorPortal(doctorId)
+            val res = repository.verifyAdminPin(enteredPin)
+            res.onSuccess {
+                _isAdminLoggedIn.value = true
+                _roleMode.value = AppRoleMode.SUPER_ADMIN
+                _snackbarMessages.tryEmit("مرحباً بك في الإدارة العليا، ${uiState.value.brandConfig.adminOwnerName}")
+                onUnlocked()
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "الرقم السري غير صحيح")
+            }
         }
+    }
+
+    fun logoutAdmin() {
+        _isAdminLoggedIn.value = false
+        _roleMode.value = AppRoleMode.PATIENT
+        _snackbarMessages.tryEmit("تم قفل والخروج من لوحة الإدارة")
     }
 
     fun updateBrandConfig(
         platformNameAr: String,
         villageNameAr: String,
         hospitalNameAr: String,
+        supportPhone: String,
+        homeAnnouncementAr: String,
         apkUrl: String,
         medsApiUrl: String,
-        adminUsername: String = uiState.value.adminUsername,
-        adminPassword: String = uiState.value.adminPassword,
+        adminPin: String,
     ) {
-        _brandConfig.value = _brandConfig.value.copy(
-            platformNameAr = platformNameAr.trim().ifEmpty { AppConfig.defaultBrand.platformNameAr },
-            villageNameAr = villageNameAr.trim().ifEmpty { AppConfig.defaultBrand.villageNameAr },
-            hospitalNameAr = hospitalNameAr.trim().ifEmpty { AppConfig.defaultBrand.hospitalNameAr },
-            apkDownloadUrl = apkUrl.trim().ifEmpty { AppConfig.defaultBrand.apkDownloadUrl },
-            medicationsApiUrl = medsApiUrl.trim(),
-        )
         viewModelScope.launch {
-            repository.updateAdminCredentials(adminUsername, adminPassword)
+            repository.updateFullPlatformConfig(
+                platformNameAr = platformNameAr,
+                villageNameAr = villageNameAr,
+                hospitalNameAr = hospitalNameAr,
+                supportPhone = supportPhone,
+                homeAnnouncementAr = homeAnnouncementAr,
+                apkUrl = apkUrl,
+                medsApiUrl = medsApiUrl,
+                adminPin = adminPin,
+            )
+            refreshEgyptianMedications(medsApiUrl)
+            _snackbarMessages.tryEmit("تم تحديث إعدادات المنصة والرقم السري بنجاح")
         }
-        refreshEgyptianMedications(medsApiUrl)
-        _snackbarMessages.tryEmit("تم تحديث إعدادات المنصة والروابط بنجاح")
     }
 
     fun resetBrandConfig() {
-        _brandConfig.value = AppConfig.defaultBrand
         viewModelScope.launch {
-            repository.updateAdminCredentials(
-                AppConfig.defaultBrand.adminUsername,
-                AppConfig.defaultBrand.adminPassword,
-            )
+            repository.resetFullPlatformConfig()
+            refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
+            _snackbarMessages.tryEmit("تم استعادة الإعدادات الافتراضية للمنصة")
         }
-        refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
-        _snackbarMessages.tryEmit("تم استعادة الإعدادات الافتراضية للمنصة")
     }
 
     fun loginDoctor(identifier: String, password: String) {
@@ -397,22 +434,6 @@ class TebViewModel(
             repository.logoutDoctor()
             _snackbarMessages.tryEmit("تم تسجيل خروج الطبيب")
         }
-    }
-
-    fun loginAdmin(username: String, password: String) {
-        val current = uiState.value
-        if (username.trim() == current.adminUsername && password.trim() == current.adminPassword) {
-            _isAdminLoggedIn.value = true
-            _snackbarMessages.tryEmit("مرحباً بك في الإدارة العليا، ${current.brandConfig.adminOwnerName}")
-        } else {
-            _snackbarMessages.tryEmit("اسم المستخدم أو كلمة مرور الإدارة غير صحيحة")
-        }
-    }
-
-    fun logoutAdmin() {
-        _isAdminLoggedIn.value = false
-        _roleMode.value = AppRoleMode.PATIENT
-        _snackbarMessages.tryEmit("تم تسجيل خروج الإدارة")
     }
 
     fun addDoctorByAdmin(
@@ -498,16 +519,71 @@ class TebViewModel(
     fun deleteDoctorByAdmin(doctorId: String) {
         viewModelScope.launch {
             repository.deleteDoctorByAdmin(doctorId)
-            _snackbarMessages.tryEmit("تم حذف الدكتور والعيادة نهائياً من المنصة")
+            _snackbarMessages.tryEmit("تم حذف الدكتور/القسم نهائياً من المنصة")
+        }
+    }
+
+    fun blockPhoneByAdmin(phone: String, reason: String) {
+        viewModelScope.launch {
+            val res = repository.blockPhone(phone, reason)
+            res.onSuccess {
+                _snackbarMessages.tryEmit("تم حظر الرقم $phone وإلغاء أي حجوزات نشطة له")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر حظر الرقم")
+            }
+        }
+    }
+
+    fun unblockPhoneByAdmin(phone: String) {
+        viewModelScope.launch {
+            repository.unblockPhone(phone)
+            _snackbarMessages.tryEmit("تم رفع الحظر عن الرقم $phone")
+        }
+    }
+
+    fun sendOrResendOtpForActiveAccount() {
+        val acc = uiState.value.activeAccount ?: return
+        val res = otpProvider.sendVerificationCode(acc.phone)
+        res.onSuccess { challenge ->
+            _activeOtpChallenge.value = challenge
+            _snackbarMessages.tryEmit("رمز التحقق التجريبي (Test OTP) لـ ${acc.phone}: ${challenge.testOtpCode}")
+        }.onFailure { err ->
+            _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال رمز التحقق")
+        }
+    }
+
+    fun verifyActiveAccountOtp(enteredCode: String) {
+        val acc = uiState.value.activeAccount ?: return
+        val challenge = _activeOtpChallenge.value
+        if (challenge == null) {
+            _snackbarMessages.tryEmit("اضغط على إرسال رمز التحقق أولاً")
+            return
+        }
+        val check = otpProvider.verifyCode(challenge, enteredCode)
+        check.onSuccess {
+            viewModelScope.launch {
+                repository.markAccountPhoneVerified(acc.id)
+                _activeOtpChallenge.value = null
+                _snackbarMessages.tryEmit("تم تأكيد رقم الهاتف وتفعيل الحساب بنجاح! يمكنك الحجز الآن.")
+            }
+        }.onFailure { err ->
+            _snackbarMessages.tryEmit(err.message ?: "رمز التحقق غير صحيح")
         }
     }
 
     fun bookAppointmentAsPatient(slotId: String, member: FamilyMemberEntity) {
+        val account = uiState.value.activeAccount
+        if (account != null && !account.isPhoneVerified) {
+            sendOrResendOtpForActiveAccount()
+            _openAccountForOtpEvents.tryEmit(Unit)
+            _snackbarMessages.tryEmit("الحساب غير مفعّل: يرجى إدخال رمز التحقق (OTP) أولاً لمنع الحجوزات الوهمية")
+            return
+        }
         viewModelScope.launch {
             val result = repository.bookSlot(
                 slotId = slotId,
                 patientName = member.fullName,
-                patientPhone = member.phone,
+                patientPhone = account?.phone?.ifBlank { member.phone } ?: member.phone,
                 familyMemberId = member.id,
                 source = BookingSource.APP,
             )
@@ -636,6 +712,7 @@ class TebViewModel(
         viewModelScope.launch {
             val result = repository.loginPatient(identifier, password)
             result.onSuccess { acc ->
+                _activeOtpChallenge.value = null
                 _snackbarMessages.tryEmit("مرحباً بك، ${acc.fullName}")
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "بيانات الدخول غير صحيحة")
@@ -651,7 +728,14 @@ class TebViewModel(
             }
             val result = repository.registerPatientAccount(fullName, phone, nationalId, password)
             result.onSuccess { acc ->
-                _snackbarMessages.tryEmit("تم إنشاء الحساب وتسجيل الدخول باسم ${acc.fullName}")
+                val challengeRes = otpProvider.sendVerificationCode(acc.phone)
+                challengeRes.onSuccess { challenge ->
+                    _activeOtpChallenge.value = challenge
+                    _openAccountForOtpEvents.tryEmit(Unit)
+                    _snackbarMessages.tryEmit("تم إنشاء الحساب! رمز التحقق التجريبي (Test OTP): ${challenge.testOtpCode}")
+                }.onFailure { otpErr ->
+                    _snackbarMessages.tryEmit(otpErr.message ?: "تم إنشاء الحساب، يرجى التحقق من الرقم")
+                }
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر إنشاء الحساب")
             }

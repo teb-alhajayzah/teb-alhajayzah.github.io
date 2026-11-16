@@ -32,6 +32,7 @@ data class PatientAccountEntity(
     val phone: String,
     val nationalId: String,
     val password: String,
+    val isPhoneVerified: Boolean = true,
 )
 
 @Entity(tableName = "family_members")
@@ -120,4 +121,11 @@ data class DelayNotificationEntity(
 data class DoctorFavoriteMedEntity(
     val doctorId: String,
     val medicationId: String,
+)
+
+@Entity(tableName = "blocked_phones")
+data class BlockedPhoneEntity(
+    @PrimaryKey val phone: String,
+    val reason: String = "حظر إداري بسبب حجز وهمي / مخالفة",
+    val blockedAtMillis: Long = System.currentTimeMillis(),
 )

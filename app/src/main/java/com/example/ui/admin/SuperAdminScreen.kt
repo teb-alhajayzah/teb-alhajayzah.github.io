@@ -25,10 +25,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -43,7 +44,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,7 +62,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
@@ -67,127 +69,12 @@ import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.theme.SlotAvailableBg
 import com.example.ui.theme.SlotAvailableText
+import com.example.ui.theme.SlotBookedBg
 import com.example.ui.theme.SlotBookedBorder
+import com.example.ui.theme.SlotBookedText
 import com.example.ui.theme.TealPrimary
 import com.example.ui.theme.TealPrimaryDark
 import com.example.util.TimeUtils
-
-@Composable
-fun AdminLoginGateScreen(
-    ownerName: String,
-    onLoginAdmin: (username: String, password: String) -> Unit,
-    onBackToPatient: () -> Unit,
-) {
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.35f)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 500.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(14.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AdminPanelSettings,
-                            contentDescription = "إدارة المنصة",
-                            tint = TealPrimary,
-                            modifier = Modifier.size(30.dp),
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = "إدارة المنصة العليا (Super Admin)",
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                        Text(
-                            text = ownerName,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = TealPrimary,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text("اسم مستخدم الإدارة") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("admin_login_username"),
-                )
-
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("كلمة مرور الإدارة") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("admin_login_password"),
-                )
-
-                Button(
-                    onClick = { onLoginAdmin(username, password) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("admin_login_submit"),
-                ) {
-                    Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("دخول الإدارة العليا")
-                }
-
-                OutlinedButton(
-                    onClick = onBackToPatient,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                ) {
-                    Text("العودة لصفحة المرضى")
-                }
-
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "بيانات الدخول الافتراضية: المستخدم admin • كلمة المرور teb2026 (يمكن تعديلها من إعدادات المنصة).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(10.dp),
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun SuperAdminDashboardScreen(
@@ -224,27 +111,57 @@ fun SuperAdminDashboardScreen(
         password: String,
     ) -> Unit,
     onDeleteDoctor: (String) -> Unit,
-    onOpenSettings: () -> Unit,
+    onCancelBooking: (slotId: String) -> Unit,
+    onBlockPhone: (phone: String, reason: String) -> Unit,
+    onUnblockPhone: (phone: String) -> Unit,
+    onSavePlatformSettings: (
+        platformNameAr: String,
+        villageNameAr: String,
+        hospitalNameAr: String,
+        supportPhone: String,
+        homeAnnouncementAr: String,
+        apkUrl: String,
+        medsApiUrl: String,
+        adminPin: String,
+    ) -> Unit,
+    onResetPlatformSettings: () -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
+    var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
+    var defaultFormClinicType by remember { mutableStateOf(ClinicType.PRIVATE) }
     var showAddForm by remember { mutableStateOf(false) }
     var doctorToEdit by remember { mutableStateOf<ClinicDoctorEntity?>(null) }
     var doctorToDelete by remember { mutableStateOf<ClinicDoctorEntity?>(null) }
 
-    val filteredDoctors = remember(state.doctors, searchQuery) {
-        val q = searchQuery.trim()
+    var manualBlockPhone by remember { mutableStateOf("") }
+    var manualBlockReason by remember { mutableStateOf("حجز وهمي / مخالفة") }
+
+    // General platform settings state
+    var cfgPlatformName by remember(state.brandConfig.platformNameAr) { mutableStateOf(state.brandConfig.platformNameAr) }
+    var cfgVillageName by remember(state.brandConfig.villageNameAr) { mutableStateOf(state.brandConfig.villageNameAr) }
+    var cfgHospitalName by remember(state.brandConfig.hospitalNameAr) { mutableStateOf(state.brandConfig.hospitalNameAr) }
+    var cfgSupportPhone by remember(state.brandConfig.supportPhone) { mutableStateOf(state.brandConfig.supportPhone) }
+    var cfgAnnouncement by remember(state.brandConfig.homeAnnouncementAr) { mutableStateOf(state.brandConfig.homeAnnouncementAr) }
+    var cfgApkUrl by remember(state.brandConfig.apkDownloadUrl) { mutableStateOf(state.brandConfig.apkDownloadUrl) }
+    var cfgMedsApi by remember(state.brandConfig.medicationsApiUrl) { mutableStateOf(state.brandConfig.medicationsApiUrl) }
+    var cfgAdminPin by remember(state.brandConfig.adminPin) { mutableStateOf(state.brandConfig.adminPin) }
+
+    val q = searchQuery.trim()
+    val privateDoctors = remember(state.doctors, q) {
         state.doctors.filter { doc ->
-            q.isEmpty() ||
-                doc.doctorName.contains(q, ignoreCase = true) ||
-                doc.specialty.contains(q, ignoreCase = true) ||
-                doc.clinicName.contains(q, ignoreCase = true) ||
-                doc.username.contains(q, ignoreCase = true)
+            doc.clinicType == ClinicType.PRIVATE &&
+                (q.isEmpty() || doc.doctorName.contains(q, true) || doc.specialty.contains(q, true) || doc.clinicName.contains(q, true))
         }
     }
-
-    val bookedToday = remember(state.allSlots) {
-        state.allSlots.count { it.status == SlotStatus.BOOKED }
+    val hospitalDoctors = remember(state.doctors, q) {
+        state.doctors.filter { doc ->
+            doc.clinicType == ClinicType.HOSPITAL &&
+                (q.isEmpty() || doc.doctorName.contains(q, true) || doc.specialty.contains(q, true) || doc.clinicName.contains(q, true))
+        }
+    }
+    val bookedSlots = remember(state.allSlots) {
+        state.allSlots.filter { it.status == SlotStatus.BOOKED }.sortedBy { it.effectiveMinutes }
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -256,10 +173,7 @@ fun SuperAdminDashboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                Card(shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -274,36 +188,25 @@ fun SuperAdminDashboardScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "لوحة تحكم الإدارة العليا",
+                                    text = "لوحة التحكم الشاملة (Super Admin)",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = Color.White,
                                 )
                                 Text(
-                                    text = "أهلاً بك، ${state.brandConfig.adminOwnerName}",
+                                    text = "إدارة كاملة للمنصة — ${state.brandConfig.adminOwnerName}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.92f),
                                 )
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(
-                                    onClick = onOpenSettings,
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                ) {
-                                    Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("الإعدادات")
-                                }
-                                Button(
-                                    onClick = onLogoutAdmin,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = TealPrimary),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("خروج")
-                                }
+                            Button(
+                                onClick = onLogoutAdmin,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = TealPrimary),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("admin_logout_button"),
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("قفل وخروج")
                             }
                         }
                     }
@@ -315,56 +218,358 @@ fun SuperAdminDashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    AdminMetricBox("الأطباء", state.doctors.size.toString(), Modifier.weight(1f))
-                    AdminMetricBox(
-                        "خاصة / مستشفى",
-                        "${state.privateClinics.size} / ${state.hospitalClinics.size}",
-                        Modifier.weight(1f),
+                    AdminMetricBox("العيادات الخاصة", state.privateClinics.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox("أقسام المستشفى", state.hospitalClinics.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox("حجوزات اليوم", bookedSlots.size.toString(), Modifier.weight(1f))
+                }
+            }
+
+            item {
+                ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("الأطباء والعيادات") },
                     )
-                    AdminMetricBox("حجوزات اليوم", bookedToday.toString(), Modifier.weight(1f))
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("المستشفى والأقسام") },
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = { Text("الحجوزات والحظر") },
+                    )
+                    Tab(
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3 },
+                        text = { Text("إعدادات المنصة والـ PIN") },
+                    )
                 }
             }
 
-            item {
-                Button(
-                    onClick = { showAddForm = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("admin_add_doctor_button"),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("إضافة دكتور أو عيادة جديدة")
+            when (selectedTab) {
+                0 -> {
+                    item {
+                        Button(
+                            onClick = {
+                                defaultFormClinicType = ClinicType.PRIVATE
+                                showAddForm = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("admin_add_doctor_button"),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("إضافة دكتور / عيادة خاصة جديدة")
+                        }
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("ابحث بالاسم أو التخصص أو العيادة...") },
+                            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    items(privateDoctors, key = { it.id }) { doc ->
+                        AdminDoctorManageCard(
+                            doctor = doc,
+                            onEdit = { doctorToEdit = doc },
+                            onDelete = { doctorToDelete = doc },
+                        )
+                    }
                 }
-            }
 
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("ابحث بالاسم أو التخصص أو العيادة أو اسم المستخدم...") },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+                1 -> {
+                    item {
+                        Button(
+                            onClick = {
+                                defaultFormClinicType = ClinicType.HOSPITAL
+                                showAddForm = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("admin_add_hospital_dept_button"),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Icon(Icons.Filled.LocalHospital, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("إضافة قسم / طبيب في المستشفى التخصصي")
+                        }
+                    }
+                    items(hospitalDoctors, key = { it.id }) { doc ->
+                        AdminDoctorManageCard(
+                            doctor = doc,
+                            onEdit = { doctorToEdit = doc },
+                            onDelete = { doctorToDelete = doc },
+                        )
+                    }
+                }
 
-            item {
-                Text(
-                    text = "الأطباء والعيادات (${filteredDoctors.size})",
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+                2 -> {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text("حظر رقم هاتف مخالف", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                OutlinedTextField(
+                                    value = manualBlockPhone,
+                                    onValueChange = { manualBlockPhone = it },
+                                    label = { Text("رقم الهاتف المراد حظره") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("admin_block_phone_input"),
+                                )
+                                OutlinedTextField(
+                                    value = manualBlockReason,
+                                    onValueChange = { manualBlockReason = it },
+                                    label = { Text("سبب الحظر") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Button(
+                                    onClick = {
+                                        onBlockPhone(manualBlockPhone, manualBlockReason)
+                                        manualBlockPhone = ""
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SlotBookedBorder),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("admin_block_phone_submit"),
+                                ) {
+                                    Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("حظر الرقم وإلغاء حجوزاته")
+                                }
+                            }
+                        }
+                    }
 
-            items(filteredDoctors, key = { it.id }) { doc ->
-                AdminDoctorManageCard(
-                    doctor = doc,
-                    onEdit = { doctorToEdit = doc },
-                    onDelete = { doctorToDelete = doc },
-                )
+                    if (state.blockedPhones.isNotEmpty()) {
+                        item {
+                            Text("الأرقام المحظورة (${state.blockedPhones.size})", style = MaterialTheme.typography.titleMedium)
+                        }
+                        items(state.blockedPhones, key = { it.phone }) { blocked ->
+                            Surface(
+                                color = SlotBookedBg,
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(blocked.phone, style = MaterialTheme.typography.titleSmall, color = SlotBookedText, fontWeight = FontWeight.Bold)
+                                        Text(blocked.reason, style = MaterialTheme.typography.bodySmall, color = SlotBookedText)
+                                    }
+                                    OutlinedButton(onClick = { onUnblockPhone(blocked.phone) }) {
+                                        Text("رفع الحظر")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Text("جميع الحجوزات النشطة في المنصة (${bookedSlots.size})", style = MaterialTheme.typography.titleMedium)
+                    }
+
+                    if (bookedSlots.isEmpty()) {
+                        item {
+                            Text("لا توجد حجوزات نشطة حالياً.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        items(bookedSlots, key = { it.id }) { slot ->
+                            val doctor = state.doctors.firstOrNull { it.id == slot.doctorId }
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(slot.patientName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                            Text("هاتف: ${slot.patientPhone}", style = MaterialTheme.typography.bodySmall)
+                                            Text(
+                                                text = "${doctor?.doctorName ?: ""} • ${doctor?.clinicName ?: ""}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TealPrimary,
+                                            )
+                                        }
+                                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
+                                            Text(
+                                                text = TimeUtils.formatMinutesAr(slot.effectiveMinutes),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            )
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = { onCancelBooking(slot.id) },
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Icon(Icons.Filled.Cancel, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("إلغاء الحجز")
+                                        }
+                                        if (slot.patientPhone.isNotBlank()) {
+                                            Button(
+                                                onClick = { onBlockPhone(slot.patientPhone, "حجز وهمي متكرر") },
+                                                colors = ButtonDefaults.buttonColors(containerColor = SlotBookedBorder),
+                                                modifier = Modifier.weight(1f),
+                                            ) {
+                                                Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("حظر الرقم")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                3 -> {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Filled.Settings, contentDescription = null, tint = TealPrimary)
+                                    Text("إعدادات المنصة العامة والأمان", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedTextField(
+                                    value = cfgPlatformName,
+                                    onValueChange = { cfgPlatformName = it },
+                                    label = { Text("اسم المنصة") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgVillageName,
+                                    onValueChange = { cfgVillageName = it },
+                                    label = { Text("اسم القرية / المركز") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgHospitalName,
+                                    onValueChange = { cfgHospitalName = it },
+                                    label = { Text("اسم المستشفى الرئيسي") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgSupportPhone,
+                                    onValueChange = { cfgSupportPhone = it },
+                                    label = { Text("رقم التواصل والدعم الفني") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgAnnouncement,
+                                    onValueChange = { cfgAnnouncement = it },
+                                    label = { Text("إعلان التنبيه بالصفحة الرئيسية (اختياري)") },
+                                    minLines = 2,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgApkUrl,
+                                    onValueChange = { cfgApkUrl = it },
+                                    label = { Text("رابط تحميل تطبيق الأندرويد المباشر (APK)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgMedsApi,
+                                    onValueChange = { cfgMedsApi = it },
+                                    label = { Text("رابط API الأدوية (اختياري)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                OutlinedTextField(
+                                    value = cfgAdminPin,
+                                    onValueChange = { cfgAdminPin = it },
+                                    label = { Text("الرقم السري للوحة التحكم (Admin PIN)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("admin_change_pin_input"),
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = onResetPlatformSettings,
+                                        modifier = Modifier.weight(1f).height(48.dp),
+                                    ) {
+                                        Text("استعادة الافتراضي")
+                                    }
+                                    Button(
+                                        onClick = {
+                                            onSavePlatformSettings(
+                                                cfgPlatformName,
+                                                cfgVillageName,
+                                                cfgHospitalName,
+                                                cfgSupportPhone,
+                                                cfgAnnouncement,
+                                                cfgApkUrl,
+                                                cfgMedsApi,
+                                                cfgAdminPin,
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .weight(1.4f)
+                                            .height(48.dp)
+                                            .testTag("admin_save_platform_settings"),
+                                    ) {
+                                        Text("حفظ وتطبيق فوراً")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -372,6 +577,7 @@ fun SuperAdminDashboardScreen(
     if (showAddForm) {
         DoctorFormDialog(
             initialDoctor = null,
+            defaultClinicType = defaultFormClinicType,
             hospitalName = state.brandConfig.hospitalNameAr,
             onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass ->
                 onAddDoctor(name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass)
@@ -385,6 +591,7 @@ fun SuperAdminDashboardScreen(
     if (editingDoc != null) {
         DoctorFormDialog(
             initialDoctor = editingDoc,
+            defaultClinicType = editingDoc.clinicType,
             hospitalName = state.brandConfig.hospitalNameAr,
             onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass ->
                 onUpdateDoctor(editingDoc.id, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass)
@@ -398,9 +605,9 @@ fun SuperAdminDashboardScreen(
     if (deletingDoc != null) {
         AlertDialog(
             onDismissRequest = { doctorToDelete = null },
-            title = { Text("تأكيد حذف الدكتور") },
+            title = { Text("تأكيد الحذف النهائي") },
             text = {
-                Text("هل أنت متأكد من حذف ${deletingDoc.doctorName} (${deletingDoc.clinicName}) نهائياً من المنصة؟ سيتم حذف مواعيده الحالية أيضاً.")
+                Text("هل أنت متأكد من حذف ${deletingDoc.doctorName} (${deletingDoc.clinicName}) نهائياً من المنصة؟")
             },
             confirmButton = {
                 Button(
@@ -476,10 +683,7 @@ private fun AdminDoctorManageCard(
                     Text(doctor.doctorName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("${doctor.specialty} — ${doctor.clinicName}", style = MaterialTheme.typography.bodySmall, color = TealPrimary)
                 }
-                Surface(
-                    color = SlotAvailableBg,
-                    shape = RoundedCornerShape(8.dp),
-                ) {
+                Surface(color = SlotAvailableBg, shape = RoundedCornerShape(8.dp)) {
                     Text(
                         text = if (doctor.clinicType == ClinicType.HOSPITAL) "مستشفى" else "عيادة خاصة",
                         style = MaterialTheme.typography.labelSmall,
@@ -490,11 +694,7 @@ private fun AdminDoctorManageCard(
             }
 
             if (doctor.bio.isNotBlank()) {
-                Text(
-                    text = doctor.bio,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(doctor.bio, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             Text(
@@ -523,9 +723,7 @@ private fun AdminDoctorManageCard(
             ) {
                 OutlinedButton(
                     onClick = onEdit,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
+                    modifier = Modifier.weight(1f).height(46.dp),
                 ) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -549,6 +747,7 @@ private fun AdminDoctorManageCard(
 @Composable
 private fun DoctorFormDialog(
     initialDoctor: ClinicDoctorEntity?,
+    defaultClinicType: String,
     hospitalName: String,
     onSave: (
         doctorName: String,
@@ -571,7 +770,7 @@ private fun DoctorFormDialog(
     var doctorName by remember { mutableStateOf(initialDoctor?.doctorName ?: "") }
     var specialty by remember { mutableStateOf(initialDoctor?.specialty ?: "") }
     var clinicName by remember { mutableStateOf(initialDoctor?.clinicName ?: "") }
-    var clinicType by remember { mutableStateOf(initialDoctor?.clinicType ?: ClinicType.PRIVATE) }
+    var clinicType by remember { mutableStateOf(initialDoctor?.clinicType ?: defaultClinicType) }
     var bio by remember { mutableStateOf(initialDoctor?.bio ?: "") }
     var locationLabel by remember { mutableStateOf(initialDoctor?.locationLabel ?: "") }
     var feeText by remember { mutableStateOf((initialDoctor?.feeEgp ?: 150).toString()) }
@@ -584,7 +783,7 @@ private fun DoctorFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEdit) "تعديل بيانات الدكتور" else "إضافة دكتور أو عيادة جديدة") },
+        title = { Text(if (isEdit) "تعديل البيانات" else "إضافة دكتور أو قسم جديد") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -629,7 +828,7 @@ private fun DoctorFormDialog(
                     onValueChange = { clinicName = it },
                     label = {
                         Text(
-                            if (clinicType == ClinicType.HOSPITAL) "اسم القسم بالمستشفى (اختياري)"
+                            if (clinicType == ClinicType.HOSPITAL) "اسم القسم بالمستشفى"
                             else "اسم العيادة"
                         )
                     },

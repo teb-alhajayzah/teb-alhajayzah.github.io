@@ -16,8 +16,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MedicalRecordEntity::class,
         DelayNotificationEntity::class,
         DoctorFavoriteMedEntity::class,
+        BlockedPhoneEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -50,6 +51,22 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `isPhoneVerified` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `blocked_phones` (
+                        `phone` TEXT NOT NULL,
+                        `reason` TEXT NOT NULL,
+                        `blockedAtMillis` INTEGER NOT NULL,
+                        PRIMARY KEY(`phone`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -57,7 +74,7 @@ abstract class TebDatabase : RoomDatabase() {
                     TebDatabase::class.java,
                     "teb_al_hajayzah.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }

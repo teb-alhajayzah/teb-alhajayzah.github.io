@@ -2,10 +2,14 @@ package com.example.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.config.AppConfig
+import com.example.config.PlatformBrandConfig
 import com.example.data.local.AppointmentSlotEntity
+import com.example.data.local.BlockedPhoneEntity
 import com.example.data.local.BookingSource
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
@@ -41,6 +45,16 @@ class TebRepository(
     private val loggedInDoctorIdKey = stringPreferencesKey("logged_in_doctor_id")
     private val adminUsernameKey = stringPreferencesKey("admin_username")
     private val adminPasswordKey = stringPreferencesKey("admin_password")
+    private val adminPinKey = stringPreferencesKey("admin_pin")
+    private val adminFailedAttemptsKey = intPreferencesKey("admin_failed_attempts")
+    private val adminLockoutUntilKey = longPreferencesKey("admin_lockout_until_millis")
+    private val cfgPlatformNameKey = stringPreferencesKey("cfg_platform_name")
+    private val cfgVillageNameKey = stringPreferencesKey("cfg_village_name")
+    private val cfgHospitalNameKey = stringPreferencesKey("cfg_hospital_name")
+    private val cfgSupportPhoneKey = stringPreferencesKey("cfg_support_phone")
+    private val cfgAnnouncementKey = stringPreferencesKey("cfg_home_announcement")
+    private val cfgApkUrlKey = stringPreferencesKey("cfg_apk_url")
+    private val cfgMedsApiKey = stringPreferencesKey("cfg_meds_api_url")
 
     val activeAccountIdFlow: Flow<String> = appContext.tebDataStore.data
         .map { prefs -> prefs[activeAccountKey] ?: DEFAULT_ACCOUNT_ID }
@@ -60,12 +74,34 @@ class TebRepository(
     val adminPasswordFlow: Flow<String> = appContext.tebDataStore.data
         .map { prefs -> prefs[adminPasswordKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPassword }
 
+    val brandConfigFlow: Flow<PlatformBrandConfig> = appContext.tebDataStore.data
+        .map { prefs ->
+            AppConfig.defaultBrand.copy(
+                platformNameAr = prefs[cfgPlatformNameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.platformNameAr,
+                villageNameAr = prefs[cfgVillageNameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.villageNameAr,
+                hospitalNameAr = prefs[cfgHospitalNameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.hospitalNameAr,
+                supportPhone = prefs[cfgSupportPhoneKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.supportPhone,
+                homeAnnouncementAr = prefs[cfgAnnouncementKey] ?: AppConfig.defaultBrand.homeAnnouncementAr,
+                apkDownloadUrl = prefs[cfgApkUrlKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.apkDownloadUrl,
+                medicationsApiUrl = prefs[cfgMedsApiKey] ?: AppConfig.defaultBrand.medicationsApiUrl,
+                adminUsername = prefs[adminUsernameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminUsername,
+                adminPassword = prefs[adminPasswordKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPassword,
+                adminPin = prefs[adminPinKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPin,
+            )
+        }
+
+    val adminSecurityFlow: Flow<Pair<Int, Long>> = appContext.tebDataStore.data
+        .map { prefs ->
+            (prefs[adminFailedAttemptsKey] ?: 0) to (prefs[adminLockoutUntilKey] ?: 0L)
+        }
+
     val doctorsFlow: Flow<List<ClinicDoctorEntity>> = dao.observeDoctors()
     val allSlotsFlow: Flow<List<AppointmentSlotEntity>> = dao.observeAllSlots()
     val allAccountsFlow: Flow<List<PatientAccountEntity>> = dao.observeAllAccounts()
     val allMedicalRecordsFlow: Flow<List<MedicalRecordEntity>> = dao.observeAllMedicalRecords()
     val notificationsFlow: Flow<List<DelayNotificationEntity>> = dao.observeNotifications()
     val allDoctorFavoritesFlow: Flow<List<DoctorFavoriteMedEntity>> = dao.observeAllDoctorFavorites()
+    val blockedPhonesFlow: Flow<List<BlockedPhoneEntity>> = dao.observeBlockedPhones()
 
     fun observeFamilyMembers(accountId: String): Flow<List<FamilyMemberEntity>> =
         dao.observeFamilyMembers(accountId)
@@ -88,6 +124,118 @@ class TebRepository(
             prefs[adminUsernameKey] = cleanUser
             prefs[adminPasswordKey] = cleanPass
         }
+    }
+
+    suspend fun verifyAdminPin(enteredPin: String, nowMillis: Long = System.currentTimeMillis()): Result<Unit> {
+        val prefs = appContext.tebDataStore.data.first()
+        val lockoutUntil = prefs[adminLockoutUntilKey] ?: 0L
+        if (lockoutUntil > nowMillis) {
+            val remainingMin = ((lockoutUntil - nowMillis) / 60_000L) + 1L
+            return Result.failure(
+                IllegalStateException("تم قفل بوابة الإدارة مؤقتاً بسبب 3 محاولات خاطئة. حاول بعد $remainingMin دقيقة.")
+            )
+        }
+        val expectedPin = prefs[adminPinKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPin
+        if (enteredPin.trim() == expectedPin) {
+            appContext.tebDataStore.edit { editable ->
+                editable[adminFailedAttemptsKey] = 0
+                editable[adminLockoutUntilKey] = 0L
+            }
+            return Result.success(Unit)
+        }
+
+        val currentFails = if (lockoutUntil in 1L..nowMillis) 0 else (prefs[adminFailedAttemptsKey] ?: 0)
+        val nextFails = currentFails + 1
+        return if (nextFails >= MAX_ADMIN_PIN_ATTEMPTS) {
+            val lockedUntil = nowMillis + ADMIN_LOCKOUT_MILLIS
+            appContext.tebDataStore.edit { editable ->
+                editable[adminFailedAttemptsKey] = nextFails
+                editable[adminLockoutUntilKey] = lockedUntil
+            }
+            Result.failure(
+                IllegalStateException("تم إدخال رقم سري خاطئ 3 مرات. تم قفل الإدارة لمدة 15 دقيقة.")
+            )
+        } else {
+            appContext.tebDataStore.edit { editable ->
+                editable[adminFailedAttemptsKey] = nextFails
+                editable[adminLockoutUntilKey] = 0L
+            }
+            val remainingTries = MAX_ADMIN_PIN_ATTEMPTS - nextFails
+            Result.failure(
+                IllegalArgumentException("الرقم السري غير صحيح. المحاولات المتبقية قبل القفل: $remainingTries")
+            )
+        }
+    }
+
+    suspend fun updateFullPlatformConfig(
+        platformNameAr: String,
+        villageNameAr: String,
+        hospitalNameAr: String,
+        supportPhone: String,
+        homeAnnouncementAr: String,
+        apkUrl: String,
+        medsApiUrl: String,
+        adminPin: String,
+    ) {
+        appContext.tebDataStore.edit { prefs ->
+            prefs[cfgPlatformNameKey] = platformNameAr.trim().ifEmpty { AppConfig.defaultBrand.platformNameAr }
+            prefs[cfgVillageNameKey] = villageNameAr.trim().ifEmpty { AppConfig.defaultBrand.villageNameAr }
+            prefs[cfgHospitalNameKey] = hospitalNameAr.trim().ifEmpty { AppConfig.defaultBrand.hospitalNameAr }
+            prefs[cfgSupportPhoneKey] = supportPhone.trim().ifEmpty { AppConfig.defaultBrand.supportPhone }
+            prefs[cfgAnnouncementKey] = homeAnnouncementAr.trim()
+            prefs[cfgApkUrlKey] = apkUrl.trim().ifEmpty { AppConfig.defaultBrand.apkDownloadUrl }
+            prefs[cfgMedsApiKey] = medsApiUrl.trim()
+            val cleanPin = adminPin.trim()
+            if (cleanPin.length >= 4) {
+                prefs[adminPinKey] = cleanPin
+            }
+        }
+    }
+
+    suspend fun resetFullPlatformConfig() {
+        appContext.tebDataStore.edit { prefs ->
+            prefs.remove(cfgPlatformNameKey)
+            prefs.remove(cfgVillageNameKey)
+            prefs.remove(cfgHospitalNameKey)
+            prefs.remove(cfgSupportPhoneKey)
+            prefs.remove(cfgAnnouncementKey)
+            prefs.remove(cfgApkUrlKey)
+            prefs.remove(cfgMedsApiKey)
+            prefs.remove(adminPinKey)
+            prefs.remove(adminUsernameKey)
+            prefs.remove(adminPasswordKey)
+        }
+    }
+
+    suspend fun blockPhone(phone: String, reason: String = "حظر إداري بسبب حجز وهمي / مخالفة"): Result<Unit> {
+        val cleanPhone = phone.trim()
+        if (cleanPhone.length < 8) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال رقم هاتف صحيح للحظر"))
+        }
+        dao.insertBlockedPhone(BlockedPhoneEntity(phone = cleanPhone, reason = reason.trim().ifEmpty { "حظر إداري" }))
+        val activeBooked = dao.observeAllSlots().first()
+            .filter { it.status == SlotStatus.BOOKED && it.patientPhone.trim() == cleanPhone }
+        activeBooked.forEach { slot ->
+            dao.updateSlot(
+                slot.copy(
+                    status = SlotStatus.AVAILABLE,
+                    patientName = "",
+                    patientPhone = "",
+                    familyMemberId = "",
+                    bookingSource = BookingSource.NONE,
+                    bookedAtMillis = 0L,
+                )
+            )
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun unblockPhone(phone: String) {
+        dao.unblockPhone(phone.trim())
+    }
+
+    suspend fun markAccountPhoneVerified(accountId: String) {
+        dao.markAccountPhoneVerified(accountId)
     }
 
     suspend fun loginDoctor(identifier: String, password: String): Result<ClinicDoctorEntity> {
@@ -604,6 +752,10 @@ class TebRepository(
         familyMemberId: String,
         source: String,
     ): Result<Unit> {
+        val cleanPhone = patientPhone.trim()
+        if (cleanPhone.isNotEmpty() && dao.isPhoneBlocked(cleanPhone) > 0) {
+            return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من الحجز عبر المنصة"))
+        }
         val slot = dao.getSlotById(slotId)
             ?: return Result.failure(IllegalStateException("الموعد غير موجود"))
         if (slot.status != SlotStatus.AVAILABLE) {
@@ -613,7 +765,7 @@ class TebRepository(
             slot.copy(
                 status = SlotStatus.BOOKED,
                 patientName = patientName.trim(),
-                patientPhone = patientPhone.trim(),
+                patientPhone = cleanPhone,
                 familyMemberId = familyMemberId,
                 bookingSource = source,
                 bookedAtMillis = System.currentTimeMillis(),
@@ -767,10 +919,16 @@ class TebRepository(
     suspend fun loginPatient(identifier: String, password: String): Result<PatientAccountEntity> {
         val cleanId = identifier.trim()
         val cleanPass = password.trim()
+        if (dao.isPhoneBlocked(cleanId) > 0) {
+            return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من استخدام المنصة"))
+        }
         val byPhone = dao.findAccountByPhone(cleanId)
         val byNationalId = if (byPhone == null) dao.findAccountByNationalId(cleanId) else null
         val account = byPhone ?: byNationalId
             ?: return Result.failure(IllegalArgumentException("لم يتم العثور على حساب بهذا الرقم"))
+        if (dao.isPhoneBlocked(account.phone) > 0) {
+            return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من استخدام المنصة"))
+        }
         if (account.password != cleanPass && cleanPass.isNotEmpty()) {
             return Result.failure(IllegalArgumentException("كلمة المرور غير صحيحة"))
         }
@@ -788,7 +946,11 @@ class TebRepository(
         nationalId: String,
         password: String,
     ): Result<PatientAccountEntity> {
-        val existing = dao.findAccountByPhone(phone.trim())
+        val cleanPhone = phone.trim()
+        if (dao.isPhoneBlocked(cleanPhone) > 0) {
+            return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من التسجيل في المنصة"))
+        }
+        val existing = dao.findAccountByPhone(cleanPhone)
         if (existing != null) {
             return Result.failure(IllegalArgumentException("رقم الهاتف مسجل بالفعل"))
         }
@@ -796,9 +958,10 @@ class TebRepository(
         val account = PatientAccountEntity(
             id = accountId,
             fullName = fullName.trim(),
-            phone = phone.trim(),
+            phone = cleanPhone,
             nationalId = nationalId.trim(),
             password = password.trim().ifEmpty { "1234" },
+            isPhoneVerified = false,
         )
         dao.insertAccount(account)
         val selfMemberId = "mem_${UUID.randomUUID()}"
@@ -826,5 +989,7 @@ class TebRepository(
     companion object {
         const val DEFAULT_ACCOUNT_ID = "acc_ahmed"
         const val DEFAULT_MEMBER_SELF_ID = "mem_self_ahmed"
+        const val MAX_ADMIN_PIN_ATTEMPTS = 3
+        const val ADMIN_LOCKOUT_MILLIS = 15 * 60_000L
     }
 }

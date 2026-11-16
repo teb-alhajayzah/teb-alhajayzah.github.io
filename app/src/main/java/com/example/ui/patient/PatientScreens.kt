@@ -114,7 +114,7 @@ fun PatientHomeScreen(
     onOpenAddFamilyDialog: () -> Unit,
     onOpenDoctorBooking: (String) -> Unit,
     onCancelSlot: (String) -> Unit,
-    onOpenSuperAdmin: () -> Unit,
+    onOpenOtpAccountDialog: () -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -196,6 +196,66 @@ fun PatientHomeScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            if (state.brandConfig.homeAnnouncementAr.isNotBlank()) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.45f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.MedicalInformation,
+                                contentDescription = "إعلان المنصة",
+                                tint = TealPrimary,
+                                modifier = Modifier.size(26.dp),
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = state.brandConfig.homeAnnouncementAr,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (state.activeAccount != null && !state.activeAccount.isPhoneVerified) {
+                item {
+                    Surface(
+                        color = SlotBookedBg,
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.5.dp, SlotBookedBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenOtpAccountDialog),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = "تأكيد OTP مطلوب",
+                                tint = SlotBookedBorder,
+                                modifier = Modifier.size(26.dp),
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "حسابك بانتظار التفعيل برمز التحقق (OTP). اضغط هنا لإدخال الكود وتفعيل الحجز.",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = SlotBookedText,
+                            )
                         }
                     }
                 }
@@ -457,7 +517,6 @@ fun PatientHomeScreen(
                             onShowMessage("رقم التواصل: ${state.brandConfig.supportPhone}")
                         }
                     },
-                    onOpenSuperAdmin = onOpenSuperAdmin,
                 )
             }
         }
@@ -542,7 +601,6 @@ private fun FooterContactAndRightsSection(
     supportPhone: String,
     onWhatsAppClick: () -> Unit,
     onCallClick: () -> Unit,
-    onOpenSuperAdmin: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -596,18 +654,6 @@ private fun FooterContactAndRightsSection(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(supportPhone)
                     }
-                }
-                OutlinedButton(
-                    onClick = onOpenSuperAdmin,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("footer_admin_button"),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Icon(Icons.Filled.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("إدارة المنصة (Admin)")
                 }
             }
         }
