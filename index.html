@@ -637,8 +637,85 @@
       }
     }
 
+    /* Site Footer */
+    .site-footer {
+      background: linear-gradient(180deg, #FFFFFF 0%, #EDF6F6 100%);
+      border-top: 2px solid rgba(13, 115, 119, 0.22);
+      margin-top: 24px;
+      padding: 24px 16px 28px;
+    }
+
+    .footer-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .footer-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    }
+
+    .footer-quick-links {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .footer-link-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      text-align: right;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .footer-link-btn:hover {
+      border-color: var(--teal);
+      background: var(--teal-soft);
+      color: var(--teal-text);
+    }
+
+    .btn-whatsapp {
+      background: #16A34A;
+      color: #fff;
+    }
+
+    .footer-bottom-bar {
+      text-align: center;
+      padding-top: 14px;
+      border-top: 1px dashed var(--border);
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
     @media (min-width: 720px) {
       .sections-grid { grid-template-columns: repeat(4, 1fr); }
+      .footer-grid { grid-template-columns: 1.2fr 1fr 1fr; }
     }
   </style>
 </head>
@@ -673,6 +750,8 @@
 
   <main class="container" id="appRoot"></main>
 
+  <footer class="site-footer" id="siteFooter"></footer>
+
   <nav class="bottom-nav" id="bottomNav">
     <button class="nav-item active" data-tab="HOME"><span class="nav-icon">🏠</span><span>الرئيسية</span></button>
     <button class="nav-item" data-tab="PRIVATE"><span class="nav-icon">🩺</span><span>العيادات</span></button>
@@ -698,9 +777,9 @@
         villageNameAr: 'قرية الحجايزة والقرى المجاورة',
         hospitalNameAr: 'مستشفى الحجايزة التخصصي',
         taglineAr: 'منصتك الطبية لحجز العيادات والملف الصحي الموحد',
-        supportPhone: '0100-555-0199',
+        supportPhone: '01125002428',
         appVersionLabel: 'v1.0.0',
-        apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/app-release.apk',
+        apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
         medicationsApiUrl: ''
       };
 
@@ -1112,20 +1191,57 @@
         '</div>';
       }
 
-      function renderApkDownloadCardHtml() {
+      function renderSiteFooter() {
         const cfg = db.config;
-        return '<section class="apk-card" id="apkDownloadSection">' +
-          '<div style="display:flex;align-items:center;gap:12px;">' +
-            '<div style="width:48px;height:48px;border-radius:14px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0;">📲</div>' +
-            '<div>' +
-              '<h3 style="font-size:1.06rem;color:var(--teal-text);">تحميل وتحديث تطبيق ' + esc(cfg.platformNameAr) + ' (الإصدار ' + esc(cfg.appVersionLabel) + ')</h3>' +
-              '<div style="font-size:0.86rem;color:var(--text-muted);">تحميل مباشر لنسخة الأندرويد الرسمية المحدّثة تلقائياً من GitHub Releases</div>' +
+        const phoneDigits = (cfg.supportPhone || '01125002428').replace(/\D/g, '');
+        const waPhone = phoneDigits.startsWith('2') ? phoneDigits : ('2' + phoneDigits);
+        const waMsg = encodeURIComponent('مرحباً، أود الاستفسار أو تسجيل عيادة جديدة في منصة ' + cfg.platformNameAr);
+
+        return '<div class="footer-inner">' +
+          '<div class="footer-grid">' +
+
+            // 1. بطاقة التحميل والتحديث المباشر
+            '<div class="apk-card" id="apkDownloadSection">' +
+              '<div style="display:flex;align-items:center;gap:12px;">' +
+                '<img src="./icon.svg" alt="' + esc(cfg.platformNameAr) + '" style="width:48px;height:48px;border-radius:14px;flex-shrink:0;" />' +
+                '<div>' +
+                  '<h3 style="font-size:1.05rem;color:var(--teal-text);">' + esc(cfg.platformNameAr) + ' (' + esc(cfg.appVersionLabel) + ')</h3>' +
+                  '<div style="font-size:0.84rem;color:var(--text-muted);">تحميل وتحديث تطبيق الأندرويد الرسمي مباشرة بدون صفحات وسيطة</div>' +
+                '</div>' +
+              '</div>' +
+              '<a class="btn btn-primary btn-block" href="' + esc(cfg.apkDownloadUrl) + '" download="طب الحجايزة.apk" rel="noopener">' +
+                '⬇️ تحميل مباشر للتطبيق (APK)' +
+              '</a>' +
             '</div>' +
+
+            // 2. روابط سريعة
+            '<div class="footer-box">' +
+              '<h3 style="font-size:1.02rem;color:var(--teal);">🔗 روابط سريعة</h3>' +
+              '<div class="footer-quick-links">' +
+                '<button class="footer-link-btn" data-footer-tab="PRIVATE">🩺 العيادات الخاصة</button>' +
+                '<button class="footer-link-btn" data-footer-tab="HOSPITAL">🏥 المستشفى التخصصي</button>' +
+                '<button class="footer-link-btn" data-footer-tab="SPECIALTIES">📋 التخصصات الطبية</button>' +
+                '<button class="footer-link-btn" data-footer-tab="EMR">📁 ملفي الطبي</button>' +
+              '</div>' +
+            '</div>' +
+
+            // 3. التواصل وطلب انضمام عيادة
+            '<div class="footer-box">' +
+              '<h3 style="font-size:1.02rem;color:var(--teal);">📞 التواصل وطلب انضمام عيادة</h3>' +
+              '<div style="font-size:0.86rem;color:var(--text-muted);">لتسجيل العيادات الجديدة أو استفسارات المرضى والأطباء:</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto;">' +
+                '<a class="btn btn-whatsapp" href="https://wa.me/' + esc(waPhone) + '?text=' + waMsg + '" target="_blank" rel="noopener">💬 واتساب مباشر</a>' +
+                '<a class="btn btn-outline" href="tel:' + esc(phoneDigits) + '">📱 ' + esc(cfg.supportPhone) + '</a>' +
+              '</div>' +
+            '</div>' +
+
           '</div>' +
-          '<a class="btn btn-primary btn-block" href="' + esc(cfg.apkDownloadUrl) + '" download="teb-alhajayzah-' + esc(cfg.appVersionLabel) + '.apk" rel="noopener">' +
-            '⬇️ تحميل مباشر للتطبيق (APK)' +
-          '</a>' +
-        '</section>';
+
+          // 4. شريط الحقوق
+          '<div class="footer-bottom-bar">' +
+            'جميع الحقوق محفوظة © 2026 منصة طب الحجايزة - لخدمة أهالي الحجايزة والقرى المجاورة' +
+          '</div>' +
+        '</div>';
       }
 
       function renderMedicalRecordCardHtml(rec) {
@@ -1247,9 +1363,7 @@
           '<section>' +
             '<h3 style="margin-bottom:10px;">أطباء متاحون الآن في ' + esc(db.config.villageNameAr) + '</h3>' +
             '<div class="doctors-grid">' + db.doctors.slice(0, 4).map(renderDoctorCardHtml).join('') + '</div>' +
-          '</section>' +
-
-          renderApkDownloadCardHtml();
+          '</section>';
       }
 
       function renderDirectory(title, clinicTypeFilter, showSpecChips) {
@@ -1447,18 +1561,35 @@
           '</section>';
       }
 
+      function renderFooterArea() {
+        const footerEl = document.getElementById('siteFooter');
+        footerEl.innerHTML = renderSiteFooter();
+        footerEl.querySelectorAll('[data-footer-tab]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.roleMode = 'PATIENT';
+            ui.bookingDoctorId = null;
+            ui.patientTab = btn.getAttribute('data-footer-tab');
+            if (ui.patientTab === 'SPECIALTIES') ui.selectedSpecialty = null;
+            renderApp();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+        });
+      }
+
       function renderApp() {
         updateHeader();
         const root = document.getElementById('appRoot');
         if (ui.roleMode === 'DOCTOR') {
           root.innerHTML = renderDoctorDashboard();
           bindDoctorDashboardEvents();
+          renderFooterArea();
           return;
         }
 
         if (ui.bookingDoctorId) {
           root.innerHTML = renderDoctorBooking();
           bindPatientBookingEvents();
+          renderFooterArea();
           return;
         }
 
@@ -1474,6 +1605,7 @@
           root.innerHTML = renderMedicalFileScreen();
         }
         bindPatientEvents();
+        renderFooterArea();
       }
 
       // ================================================================

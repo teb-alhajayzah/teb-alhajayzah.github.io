@@ -42,6 +42,8 @@ import androidx.compose.material.icons.filled.MedicalInformation
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -426,6 +428,35 @@ fun PatientHomeScreen(
                     },
                 )
             }
+
+            // تذييل التواصل وطلب انضمام عيادة + شريط الحقوق
+            item {
+                FooterContactAndRightsSection(
+                    platformName = state.brandConfig.platformNameAr,
+                    supportPhone = state.brandConfig.supportPhone,
+                    onWhatsAppClick = {
+                        val digits = state.brandConfig.supportPhone.filter { it.isDigit() }
+                        val waDigits = if (digits.startsWith("2")) digits else "2$digits"
+                        try {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waDigits"))
+                            )
+                        } catch (_: Exception) {
+                            onShowMessage("تعذر فتح واتساب على هذا الجهاز")
+                        }
+                    },
+                    onCallClick = {
+                        val digits = state.brandConfig.supportPhone.filter { it.isDigit() }
+                        try {
+                            context.startActivity(
+                                Intent(Intent.ACTION_DIAL, Uri.parse("tel:$digits"))
+                            )
+                        } catch (_: Exception) {
+                            onShowMessage("رقم التواصل: ${state.brandConfig.supportPhone}")
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -499,6 +530,81 @@ private fun ApkDownloadCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun FooterContactAndRightsSection(
+    platformName: String,
+    supportPhone: String,
+    onWhatsAppClick: () -> Unit,
+    onCallClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "التواصل وطلب انضمام عيادة جديدة",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "للدكاترة والمرضى: تواصل مباشرة لتسجيل العيادات أو الاستفسار",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = onWhatsAppClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = SlotAvailableBorder),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("footer_whatsapp_button"),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(Icons.Filled.PhoneInTalk, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("واتساب مباشر")
+                    }
+                    OutlinedButton(
+                        onClick = onCallClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("footer_call_button"),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(Icons.Filled.Phone, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(supportPhone)
+                    }
+                }
+            }
+        }
+
+        Text(
+            text = "جميع الحقوق محفوظة © 2026 منصة $platformName - لخدمة أهالي الحجايزة والقرى المجاورة",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+        )
     }
 }
 

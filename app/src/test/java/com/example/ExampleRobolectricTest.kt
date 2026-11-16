@@ -45,7 +45,8 @@ class ExampleRobolectricTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         assertEquals("طب الحجايزة", context.getString(R.string.app_name))
         assertEquals("v1.0.0", AppConfig.defaultBrand.appVersionLabel)
-        assertTrue(AppConfig.defaultBrand.apkDownloadUrl.endsWith("app-release.apk"))
+        assertTrue(AppConfig.defaultBrand.apkDownloadUrl.endsWith("teb-alhajayzah.apk"))
+        assertEquals("01125002428", AppConfig.defaultBrand.supportPhone)
     }
 
     @Test

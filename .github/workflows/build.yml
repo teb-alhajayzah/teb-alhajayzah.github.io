@@ -63,25 +63,28 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'tebalhajayzah2026' }}
         run: |
           if [ -x "./gradlew" ]; then
-            ./gradlew assembleRelease --no-daemon
+            ./gradlew assembleRelease copyUnifiedReleaseApk --no-daemon
           else
-            gradle assembleRelease --no-daemon
+            gradle assembleRelease copyUnifiedReleaseApk --no-daemon
+          fi
+          if [ ! -f "app/build/outputs/apk/release/teb-alhajayzah.apk" ] && [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            cp -f app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/teb-alhajayzah.apk
           fi
 
       - name: Verify APK output
         run: |
-          ls -lh app/build/outputs/apk/release/app-release.apk
+          ls -lh app/build/outputs/apk/release/teb-alhajayzah.apk
 
       - name: Upload / Replace APK in GitHub Releases (v1.0.0)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_TAG="v1.0.0"
-          APK_FILE="app/build/outputs/apk/release/app-release.apk"
+          APK_FILE="app/build/outputs/apk/release/teb-alhajayzah.apk"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
           else
             gh release create "$RELEASE_TAG" "$APK_FILE" \
               --title "طب الحجايزة - الإصدار v1.0.0" \
-              --notes "تحديث تلقائي لتطبيق طب الحجايزة (Teb Al-Hajayzah) الإصدار v1.0.0"
+              --notes "تحديث تلقائي لتطبيق طب الحجايزة الإصدار v1.0.0"
           fi

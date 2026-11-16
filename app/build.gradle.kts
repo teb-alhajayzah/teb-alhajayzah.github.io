@@ -142,3 +142,10 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)
 }
+
+tasks.register<Copy>("copyUnifiedReleaseApk") {
+  from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
+  into(layout.buildDirectory.dir("outputs/apk/release"))
+  rename { "teb-alhajayzah.apk" }
+}
+

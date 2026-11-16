@@ -14,12 +14,12 @@ data class PlatformBrandConfig(
     val villageNameAr: String = "قرية الحجايزة والقرى المجاورة",
     val hospitalNameAr: String = "مستشفى الحجايزة التخصصي",
     val taglineAr: String = "منصتك الطبية لحجز العيادات والملف الصحي الموحد",
-    val supportPhone: String = "0100-555-0199",
+    val supportPhone: String = "01125002428",
     val currencyLabelAr: String = "ج.م",
     val defaultSlotMinutes: Int = 20,
     val appVersionLabel: String = "v1.0.0",
     // رابط التحميل المباشر لأحدث ملف APK من GitHub Releases
-    val apkDownloadUrl: String = "https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/app-release.apk",
+    val apkDownloadUrl: String = "https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk",
     // رابط واجهة الأدوية المصرية المفتوحة (workers.dev) — وعند تركه فارغاً أو عدم توفر الإنترنت يعمل الكتالوج المدمج تلقائياً
     val medicationsApiUrl: String = "",
     @DrawableRes val logoRes: Int = R.drawable.app_icon_fg,
