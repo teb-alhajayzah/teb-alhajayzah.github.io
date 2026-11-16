@@ -94,34 +94,34 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 8px;
     }
 
     .brand-box {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      flex: 1 1 auto;
       min-width: 0;
     }
 
     .brand-logo {
-      width: 44px;
-      height: 44px;
+      width: 42px;
+      height: 42px;
       border-radius: 12px;
       flex-shrink: 0;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
 
     .brand-title {
-      font-size: 1.2rem;
+      font-size: clamp(0.98rem, 4.1vw, 1.2rem);
       font-weight: 800;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      line-height: 1.2;
     }
 
     .brand-sub {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       opacity: 0.88;
       white-space: nowrap;
       overflow: hidden;
@@ -131,16 +131,16 @@
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       flex-shrink: 0;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: flex-end;
     }
 
     .icon-btn {
-      min-width: 44px;
-      height: 44px;
-      border-radius: 12px;
+      min-width: 40px;
+      height: 40px;
+      border-radius: 11px;
       border: 1px solid rgba(255,255,255,0.24);
       background: rgba(255,255,255,0.14);
       color: #fff;
@@ -148,9 +148,9 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.05rem;
+      font-size: 1rem;
       position: relative;
-      padding: 0 10px;
+      padding: 0 8px;
       transition: background 0.15s, transform 0.1s;
     }
 
@@ -163,9 +163,9 @@
     }
 
     .refresh-btn {
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       font-weight: 800;
-      gap: 5px;
+      gap: 4px;
       white-space: nowrap;
     }
 
@@ -174,25 +174,82 @@
       animation: tebSpin 0.8s linear infinite;
     }
 
-    .lang-toggle-btn {
-      font-size: 0.84rem;
+    .lang-dropdown-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .lang-compact-btn {
+      min-width: 42px;
+      height: 40px;
+      padding: 0 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
       font-weight: 800;
-      gap: 4px;
-      padding: 0 10px;
+      gap: 3px;
       letter-spacing: 0.3px;
+      background: rgba(255,255,255,0.2);
     }
 
-    .lang-pill-active {
+    .lang-dropdown-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      min-width: 148px;
       background: #fff;
-      color: var(--teal-dark);
-      padding: 2px 6px;
-      border-radius: 7px;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+      padding: 6px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 120;
+    }
+
+    [dir="ltr"] .lang-dropdown-menu {
+      left: auto;
+      right: 0;
+    }
+
+    .lang-dropdown-menu.open {
+      display: flex;
+    }
+
+    .lang-menu-item {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      padding: 9px 10px;
+      border-radius: 10px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      text-align: start;
+    }
+
+    .lang-menu-item:hover {
+      background: var(--bg);
+    }
+
+    .lang-menu-item.active {
+      background: var(--teal-soft);
+      color: var(--teal-text);
+    }
+
+    .lang-menu-item .lang-check {
+      opacity: 0;
       font-weight: 800;
     }
 
-    .lang-pill-dim {
-      opacity: 0.82;
-      padding: 2px 4px;
+    .lang-menu-item.active .lang-check {
+      opacity: 1;
     }
 
     .badge-dot {
@@ -899,11 +956,16 @@
       font-weight: 600;
     }
 
-    @media (max-width: 460px) {
+    @media (max-width: 500px) {
+      .top-header { padding: 10px 12px; }
       .header-row { gap: 6px; }
-      .brand-title { font-size: 1.05rem; }
-      .brand-sub { font-size: 0.72rem; }
-      .icon-btn { min-width: 38px; height: 38px; padding: 0 8px; font-size: 0.95rem; }
+      .brand-box { gap: 7px; }
+      .brand-logo { width: 36px; height: 36px; border-radius: 10px; }
+      .brand-title { font-size: clamp(0.95rem, 4vw, 1.08rem); }
+      .brand-sub { font-size: 0.7rem; }
+      .header-actions { gap: 4px; }
+      .icon-btn { min-width: 36px; width: 36px; height: 36px; padding: 0; font-size: 0.94rem; border-radius: 10px; }
+      .lang-compact-btn { width: auto; min-width: 40px; height: 36px; padding: 0 8px; border-radius: 999px; font-size: 0.75rem; }
       .refresh-btn .refresh-lbl { display: none; }
       .footer-quick-links { grid-template-columns: 1fr; }
     }
@@ -931,9 +993,21 @@
           <button class="icon-btn refresh-btn" id="btnSmartRefresh" type="button" title="تحديث المواعيد وتنظيف الذاكرة المؤقتة / Smart Refresh" aria-label="تحديث">
             <span class="refresh-ico" aria-hidden="true">🔄</span><span class="refresh-lbl" id="refreshBtnLabel">تحديث</span>
           </button>
-          <button class="icon-btn lang-toggle-btn" id="btnLangToggle" type="button" title="تبديل اللغة / Switch Language" aria-label="تبديل اللغة AR / EN">
-            🌐 <span class="lang-pill-active" id="langArBadge">AR</span><span style="opacity:0.6;">/</span><span class="lang-pill-dim" id="langEnBadge">EN</span>
-          </button>
+          <div class="lang-dropdown-wrap" id="langDropdownWrap">
+            <button class="icon-btn lang-compact-btn" id="btnLangToggle" type="button" title="اختيار اللغة / Select Language" aria-label="اختيار اللغة" aria-haspopup="true" aria-expanded="false">
+              <span id="langActiveCode">AR</span><span style="font-size:0.65rem;opacity:0.9;" aria-hidden="true">▾</span>
+            </button>
+            <div class="lang-dropdown-menu" id="langDropdownMenu" role="menu" aria-label="Language Selector">
+              <button class="lang-menu-item active" id="langOptAr" data-set-lang="ar" type="button" role="menuitemradio" aria-checked="true">
+                <span>العربية (AR)</span>
+                <span class="lang-check" aria-hidden="true">✓</span>
+              </button>
+              <button class="lang-menu-item" id="langOptEn" data-set-lang="en" type="button" role="menuitemradio" aria-checked="false">
+                <span>English (EN)</span>
+                <span class="lang-check" aria-hidden="true">✓</span>
+              </button>
+            </div>
+          </div>
           <button class="icon-btn" id="btnNotifications" type="button" title="التنبيهات">
             🔔<span class="badge-dot" id="alertBadge" style="display:none">0</span>
           </button>
@@ -997,7 +1071,8 @@
         adminPin: '202600',
         smsGateServerUrl: 'https://sms-gate.app',
         smsGateUsername: '',
-        smsGatePassword: ''
+        smsGatePassword: '',
+        smsGateProxyUrl: ''
       };
 
       const LEGACY_STORAGE_KEY = 'teb_alhajayzah_web_state_v1';
@@ -1260,11 +1335,29 @@
         PER_ATTEMPT_TIMEOUT_MS: 7500,
         CORS_PROXIES: [
           function (targetUrl) { return 'https://api.cors.lol/?url=' + encodeURIComponent(targetUrl); },
+          function (targetUrl) { return 'https://proxy.corsfix.com/?' + targetUrl; },
           function (targetUrl) { return 'https://corsproxy.io/?url=' + encodeURIComponent(targetUrl); },
-          function (targetUrl) { return 'https://corsproxy.io/?' + encodeURIComponent(targetUrl); },
-          function (targetUrl) { return 'https://cors.eu.org/' + targetUrl; },
-          function (targetUrl) { return 'https://thingproxy.freeboard.io/fetch/' + targetUrl; }
+          function (targetUrl) { return 'https://cors.eu.org/' + targetUrl; }
         ],
+        CLOUDFLARE_WORKER_SNIPPET:
+          "export default {\n" +
+          "  async fetch(req) {\n" +
+          "    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' } });\n" +
+          "    const target = new URL(req.url).searchParams.get('url') || 'https://api.sms-gate.app/3rdparty/v1/messages';\n" +
+          "    const res = await fetch(target, { method: req.method, headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization') || '' }, body: req.method === 'POST' ? await req.text() : undefined });\n" +
+          "    const out = new Response(res.body, res);\n" +
+          "    out.headers.set('Access-Control-Allow-Origin', '*');\n" +
+          "    return out;\n" +
+          "  }\n" +
+          "};",
+        resolveCustomProxyUrl: function (proxyUrl, targetUrl) {
+          const clean = String(proxyUrl || '').trim();
+          if (!clean) return '';
+          if (clean.indexOf('{url}') !== -1) return clean.replace('{url}', encodeURIComponent(targetUrl));
+          if (clean.endsWith('?') || clean.endsWith('=')) return clean + encodeURIComponent(targetUrl);
+          if (clean.indexOf('?') !== -1) return clean + '&url=' + encodeURIComponent(targetUrl);
+          return clean.replace(/\/+$/, '') + '/?url=' + encodeURIComponent(targetUrl);
+        },
         resolveEndpoint: function (serverUrl) {
           let clean = String(serverUrl || '').trim().replace(/\/+$/, '');
           if (!clean) clean = DEFAULT_CONFIG.smsGateServerUrl;
@@ -1296,11 +1389,12 @@
         sendSms: async function (opts) {
           const cfg = opts || {};
           const serverUrl = String(cfg.serverUrl || '').trim() || DEFAULT_CONFIG.smsGateServerUrl;
+          const customProxyUrl = String(cfg.proxyUrl || '').trim();
           const username = String(cfg.username || '').trim();
           const password = String(cfg.password || '').trim();
           const rawPhone = String(cfg.phone || '').trim();
           const messageText = String(cfg.messageText || '').trim();
-          const timeoutMs = Number(cfg.timeoutMs) > 0 ? Number(cfg.timeoutMs) : this.SMS_TIMEOUT_MS;
+          const timeoutMs = Number(cfg.timeoutMs) > 0 ? Number(cfg.timeoutMs) : SmsGateService.SMS_TIMEOUT_MS;
 
           if (!username || !password) {
             return {
@@ -1318,9 +1412,9 @@
             };
           }
 
-          const endpoint = this.resolveEndpoint(serverUrl);
-          const payloadJson = JSON.stringify(this.buildPayload(messageText, e164Phone));
-          const authHeader = 'Basic ' + this.toUtf8Base64(username + ':' + password);
+          const endpoint = SmsGateService.resolveEndpoint(serverUrl);
+          const payloadJson = JSON.stringify(SmsGateService.buildPayload(messageText, e164Phone));
+          const authHeader = 'Basic ' + SmsGateService.toUtf8Base64(username + ':' + password);
 
           const startMs = Date.now();
           const masterController = new AbortController();
@@ -1339,13 +1433,17 @@
             cfg.externalSignal.addEventListener('abort', onExternalAbort, { once: true });
           }
 
-          const attempts = [{ url: endpoint, viaProxy: false }].concat(
-            this.CORS_PROXIES.map(function (buildProxyUrl) {
-              return { url: buildProxyUrl(endpoint), viaProxy: true };
-            })
-          );
+          const attempts = [];
+          if (customProxyUrl) {
+            attempts.push({ url: SmsGateService.resolveCustomProxyUrl(customProxyUrl, endpoint), viaProxy: true, isCustom: true });
+          }
+          attempts.push({ url: endpoint, viaProxy: false, isCustom: false });
+          SmsGateService.CORS_PROXIES.forEach(function (buildProxyUrl) {
+            attempts.push({ url: buildProxyUrl(endpoint), viaProxy: true, isCustom: false });
+          });
 
-          let lastError = '';
+          let lastHttpError = '';
+          let networkBlockedCount = 0;
           try {
             for (let i = 0; i < attempts.length; i++) {
               if (timedOut || (cfg.externalSignal && cfg.externalSignal.aborted)) break;
@@ -1391,10 +1489,13 @@
 
                 let detail = '';
                 try { detail = await resp.text(); } catch (e) {}
-                lastError = bi(
-                  'فشل الإرسال من خادم SMSGate (رمز ' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : ''),
-                  'SMSGate server error (' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : '')
-                );
+                const isCorsfixUnregistered = detail.indexOf('corsfix_error') !== -1;
+                if (!isCorsfixUnregistered) {
+                  lastHttpError = bi(
+                    'فشل الإرسال من خادم SMSGate (رمز ' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : ''),
+                    'SMSGate server error (' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : '')
+                  );
+                }
 
                 // If SMSGate itself responded with 400/401/422, fail immediately;
                 // otherwise (403/404/429/5xx from proxy or edge), continue to next fallback proxy.
@@ -1402,7 +1503,7 @@
                   resp.status === 400 || resp.status === 401 || resp.status === 422;
                 if (isDirectOrProxiedAppError) {
                   clearTimeout(timeoutId);
-                  return { ok: false, timedOut: false, status: resp.status, error: lastError };
+                  return { ok: false, timedOut: false, status: resp.status, error: lastHttpError };
                 }
               } catch (err) {
                 clearTimeout(attemptTimer);
@@ -1412,10 +1513,7 @@
                   clearTimeout(timeoutId);
                   return { ok: false, timedOut: false, aborted: true, error: bi('تم إلغاء الطلب', 'Request cancelled') };
                 }
-                lastError = bi(
-                  'تعذر الاتصال بخادم SMSGate: ' + (err && err.message ? err.message : 'CORS / شبكة'),
-                  'Failed to reach SMSGate server: ' + (err && err.message ? err.message : 'CORS / Network error')
-                );
+                networkBlockedCount += 1;
               }
             }
 
@@ -1433,7 +1531,10 @@
             return {
               ok: false,
               timedOut: false,
-              error: lastError || bi('تعذر إرسال الرسالة عبر SMSGate', 'Failed to send SMS via SMSGate')
+              error: lastHttpError || bi(
+                'خادم SMSGate يرفض طلبات المتصفح المباشرة (CORS) والبروكسيات المجانية مقيّدة حالياً (' + networkBlockedCount + ' محاولات). أضف رابط Cloudflare Worker في خانة البروكسي المخصص أعلاه أو أرسل من تطبيق الأندرويد مباشرة.',
+                'SMSGate blocks direct browser CORS and public proxies are currently rate-limited. Add a custom Cloudflare Worker URL above or send directly from the Android APK.'
+              )
             };
           } finally {
             if (cfg.externalSignal) {
@@ -1882,11 +1983,15 @@
           ? (db.config.villageNameEn || DEFAULT_CONFIG.villageNameEn)
           : db.config.villageNameAr;
 
-        const arBadge = document.getElementById('langArBadge');
-        const enBadge = document.getElementById('langEnBadge');
-        if (arBadge && enBadge) {
-          arBadge.className = isEn ? 'lang-pill-dim' : 'lang-pill-active';
-          enBadge.className = isEn ? 'lang-pill-active' : 'lang-pill-dim';
+        const activeCode = document.getElementById('langActiveCode');
+        if (activeCode) activeCode.textContent = isEn ? 'EN' : 'AR';
+        const optAr = document.getElementById('langOptAr');
+        const optEn = document.getElementById('langOptEn');
+        if (optAr && optEn) {
+          optAr.classList.toggle('active', !isEn);
+          optAr.setAttribute('aria-checked', String(!isEn));
+          optEn.classList.toggle('active', isEn);
+          optEn.setAttribute('aria-checked', String(isEn));
         }
         const refreshLbl = document.getElementById('refreshBtnLabel');
         if (refreshLbl) {
@@ -2550,7 +2655,18 @@
               '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('كلمة المرور (Password)', 'Password')) +
                 renderPasswordFieldHtml('smsGatePassword', cfg.smsGatePassword || '', bi('أدخل كلمة مرور SMSGate', 'Enter SMSGate Password')) +
               '</label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط بروكسي CORS مخصص (اختياري للمتصفح)', 'Custom CORS Proxy URL (Optional for Web)')) +
+                '<input class="input" id="smsGateProxyUrl" value="' + esc(cfg.smsGateProxyUrl || '') + '" placeholder="https://sms-proxy.yourname.workers.dev" dir="ltr" />' +
+              '</label>' +
               '<button class="btn btn-primary btn-block" id="btnSaveSmsGate" type="button">💾 ' + esc(bi('حفظ الإعدادات', 'Save Settings')) + '</button>' +
+              '<details style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px;font-size:0.82rem;">' +
+                '<summary style="cursor:pointer;font-weight:800;color:var(--teal-text);">🛠️ ' + esc(bi('حل حظر المتصفح (CORS) نهائياً لموقع github.io', 'Permanent CORS fix for github.io browser requests')) + '</summary>' +
+                '<div style="margin-top:8px;color:var(--text-muted);line-height:1.55;">' +
+                  esc(bi('خادم api.sms-gate.app لا يرسل ترويسة CORS للمتصفحات مباشرة، وتطبيق الأندرويد (APK) يعمل عليه فوراً بدون وسيط. للتشغيل الموثوق من المتصفح مجاناً: أنشئ Cloudflare Worker بالكود التالي وضع رابطه في خانة البروكسي أعلاه:', 'api.sms-gate.app blocks direct browser CORS (the Android APK connects directly). For reliable web SMS, deploy this free Cloudflare Worker and paste its URL above:')) +
+                '</div>' +
+                '<pre dir="ltr" style="margin:8px 0;padding:8px;background:#0F172A;color:#E2E8F0;border-radius:8px;overflow:auto;font-size:0.72rem;">' + esc(SmsGateService.CLOUDFLARE_WORKER_SNIPPET) + '</pre>' +
+                '<button class="btn btn-outline btn-sm" id="btnCopyCfWorker" type="button">📋 ' + esc(bi('نسخ كود Cloudflare Worker', 'Copy Cloudflare Worker Code')) + '</button>' +
+              '</details>' +
             '</section>' +
             '<section class="card" style="display:flex;flex-direction:column;gap:10px;border-color:rgba(13,115,119,0.35);">' +
               '<h3>📤 ' + esc(bi('اختبار الإرسال (Test SMS)', 'Test SMS Delivery')) + '</h3>' +
@@ -3102,6 +3218,7 @@
           const smsBody = 'منصة ' + (cfg.platformNameAr || 'طب الحجايزة') + ': كود تفعيل حسابك هو: ' + gen.challenge.testOtpCode;
           const sendRes = await SmsGateService.sendSms({
             serverUrl: cfg.smsGateServerUrl || DEFAULT_CONFIG.smsGateServerUrl,
+            proxyUrl: cfg.smsGateProxyUrl || '',
             username: cfg.smsGateUsername || '',
             password: cfg.smsGatePassword || '',
             phone: account.phone,
@@ -4126,9 +4243,11 @@
             const urlVal = (document.getElementById('smsGateServerUrl').value || '').trim() || DEFAULT_CONFIG.smsGateServerUrl;
             const userVal = (document.getElementById('smsGateUsername').value || '').trim();
             const passVal = (document.getElementById('smsGatePassword').value || '').trim();
+            const proxyVal = (document.getElementById('smsGateProxyUrl').value || '').trim();
             db.config.smsGateServerUrl = urlVal;
             db.config.smsGateUsername = userVal;
             db.config.smsGatePassword = passVal;
+            db.config.smsGateProxyUrl = proxyVal;
             saveState(db);
             ui.smsTestStatus = {
               busy: false,
@@ -4137,6 +4256,18 @@
             };
             showToast(bi('تم حفظ إعدادات بوابة الرسائل (SMSGate) بنجاح', 'SMSGate settings saved'));
             renderApp();
+          };
+        }
+
+        const copyCfBtn = document.getElementById('btnCopyCfWorker');
+        if (copyCfBtn) {
+          copyCfBtn.onclick = async function () {
+            try {
+              await navigator.clipboard.writeText(SmsGateService.CLOUDFLARE_WORKER_SNIPPET);
+              showToast(bi('✓ تم نسخ كود Cloudflare Worker بنجاح', '✓ Cloudflare Worker snippet copied'));
+            } catch (e) {
+              showToast(bi('انسخ الكود يدوياً من الصندوق أعلاه', 'Please copy the snippet manually'));
+            }
           };
         }
 
@@ -4153,12 +4284,14 @@
             const urlVal = (document.getElementById('smsGateServerUrl').value || '').trim() || DEFAULT_CONFIG.smsGateServerUrl;
             const userVal = (document.getElementById('smsGateUsername').value || '').trim();
             const passVal = (document.getElementById('smsGatePassword').value || '').trim();
+            const proxyVal = (document.getElementById('smsGateProxyUrl').value || '').trim();
             const phoneVal = (document.getElementById('smsGateTestPhone').value || '').trim();
 
             ui.smsTestPhone = phoneVal;
             db.config.smsGateServerUrl = urlVal;
             db.config.smsGateUsername = userVal;
             db.config.smsGatePassword = passVal;
+            db.config.smsGateProxyUrl = proxyVal;
             saveState(db);
 
             if (!phoneVal || normalizePhoneDigits(phoneVal).length < 10) {
@@ -4176,6 +4309,7 @@
 
             const res = await SmsGateService.sendSms({
               serverUrl: urlVal,
+              proxyUrl: proxyVal,
               username: userVal,
               password: passVal,
               phone: phoneVal,
@@ -4277,12 +4411,33 @@
       }
 
       // Top Header & Nav Global Listeners
+      const langDropdownWrap = document.getElementById('langDropdownWrap');
+      const langDropdownMenu = document.getElementById('langDropdownMenu');
+      const langToggleBtn = document.getElementById('btnLangToggle');
+      function closeLangDropdown() {
+        if (langDropdownMenu) langDropdownMenu.classList.remove('open');
+        if (langToggleBtn) langToggleBtn.setAttribute('aria-expanded', 'false');
+      }
       document.getElementById('btnSmartRefresh').onclick = performSmartHardRefresh;
-      document.getElementById('btnLangToggle').onclick = function () {
-        ui.lang = ui.lang === 'ar' ? 'en' : 'ar';
-        try { localStorage.setItem(LANG_KEY, ui.lang); } catch (e) {}
-        renderApp();
+      langToggleBtn.onclick = function (e) {
+        e.stopPropagation();
+        const isOpen = langDropdownMenu.classList.toggle('open');
+        langToggleBtn.setAttribute('aria-expanded', String(isOpen));
       };
+      document.querySelectorAll('[data-set-lang]').forEach(function (item) {
+        item.onclick = function (e) {
+          e.stopPropagation();
+          ui.lang = item.getAttribute('data-set-lang') === 'en' ? 'en' : 'ar';
+          try { localStorage.setItem(LANG_KEY, ui.lang); } catch (err) {}
+          closeLangDropdown();
+          renderApp();
+        };
+      });
+      document.addEventListener('click', function (e) {
+        if (langDropdownWrap && !langDropdownWrap.contains(e.target)) {
+          closeLangDropdown();
+        }
+      });
       document.getElementById('rolePatientBtn').onclick = function () {
         ui.roleMode = 'PATIENT';
         renderApp();
@@ -4304,9 +4459,10 @@
         };
       });
 
-      // Smooth Escape Key Modal Closing
+      // Smooth Escape Key Modal & Dropdown Closing
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
+          closeLangDropdown();
           const modalRoot = document.getElementById('modalRoot');
           if (modalRoot && modalRoot.innerHTML.trim() !== '') {
             closeModal();

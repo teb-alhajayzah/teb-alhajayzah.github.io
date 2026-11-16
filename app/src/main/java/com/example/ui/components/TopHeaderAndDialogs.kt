@@ -131,7 +131,7 @@ fun TebTopHeader(
                     )
                 )
                 .statusBarsPadding()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
@@ -147,18 +147,18 @@ fun TebTopHeader(
                         painter = painterResource(id = brandConfig.logoRes),
                         contentDescription = brandConfig.platformNameAr,
                         modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp)),
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp)),
                         contentScale = ContentScale.Crop,
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
                             text = brandConfig.platformNameAr,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 2,
                         )
                         Text(
                             text = brandConfig.villageNameAr,

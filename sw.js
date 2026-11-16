@@ -1,4 +1,4 @@
-const CACHE_NAME = 'teb-alhajayzah-v1.0.5-prod';
+const CACHE_NAME = 'teb-alhajayzah-v1.0.6-prod';
 const CORE_ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -28,7 +28,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isHtmlNav) {
     event.respondWith(
-      fetch(event.request)
+      fetch(new Request(event.request, { cache: 'no-cache' }))
         .then((response) => {
           if (response && response.ok) {
             const copy = response.clone();
