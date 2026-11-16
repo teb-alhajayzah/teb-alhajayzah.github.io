@@ -1257,7 +1257,9 @@
 
       const SmsGateService = {
         SMS_TIMEOUT_MS: 25000,
+        PER_ATTEMPT_TIMEOUT_MS: 7500,
         CORS_PROXIES: [
+          function (targetUrl) { return 'https://api.cors.lol/?url=' + encodeURIComponent(targetUrl); },
           function (targetUrl) { return 'https://corsproxy.io/?url=' + encodeURIComponent(targetUrl); },
           function (targetUrl) { return 'https://corsproxy.io/?' + encodeURIComponent(targetUrl); },
           function (targetUrl) { return 'https://cors.eu.org/' + targetUrl; },
@@ -1268,12 +1270,14 @@
           if (!clean) clean = DEFAULT_CONFIG.smsGateServerUrl;
           if (!/^https?:\/\//i.test(clean)) clean = 'https://' + clean;
           const lower = clean.toLowerCase();
-          if (lower.endsWith('/messages')) return clean;
+          if (lower.endsWith('/3rdparty/v1/message')) return clean + 's';
+          if (lower.endsWith('/messages') || lower.endsWith('/message')) return clean;
           if (lower === 'https://sms-gate.app' || lower === 'http://sms-gate.app' ||
-              lower === 'https://www.sms-gate.app' || lower === 'http://www.sms-gate.app') {
+              lower === 'https://www.sms-gate.app' || lower === 'http://www.sms-gate.app' ||
+              lower === 'https://api.sms-gate.app' || lower === 'http://api.sms-gate.app') {
             return 'https://api.sms-gate.app/3rdparty/v1/messages';
           }
-          if (lower.includes('/3rdparty/v1')) return clean + '/messages';
+          if (lower.endsWith('/3rdparty/v1')) return clean + '/messages';
           return clean + '/3rdparty/v1/messages';
         },
         toUtf8Base64: function (str) {
@@ -1318,14 +1322,15 @@
           const payloadJson = JSON.stringify(this.buildPayload(messageText, e164Phone));
           const authHeader = 'Basic ' + this.toUtf8Base64(username + ':' + password);
 
-          const controller = new AbortController();
+          const startMs = Date.now();
+          const masterController = new AbortController();
           let timedOut = false;
           const timeoutId = setTimeout(function () {
             timedOut = true;
-            controller.abort();
+            masterController.abort();
           }, timeoutMs);
 
-          const onExternalAbort = function () { controller.abort(); };
+          const onExternalAbort = function () { masterController.abort(); };
           if (cfg.externalSignal) {
             if (cfg.externalSignal.aborted) {
               clearTimeout(timeoutId);
@@ -1344,7 +1349,19 @@
           try {
             for (let i = 0; i < attempts.length; i++) {
               if (timedOut || (cfg.externalSignal && cfg.externalSignal.aborted)) break;
+              const remainingMs = timeoutMs - (Date.now() - startMs);
+              if (remainingMs <= 200) {
+                timedOut = true;
+                break;
+              }
               const attempt = attempts[i];
+              const attemptController = new AbortController();
+              const onMasterAbort = function () { attemptController.abort(); };
+              masterController.signal.addEventListener('abort', onMasterAbort, { once: true });
+              const attemptTimer = setTimeout(function () {
+                attemptController.abort();
+              }, Math.min(SmsGateService.PER_ATTEMPT_TIMEOUT_MS, remainingMs));
+
               try {
                 const resp = await fetch(attempt.url, {
                   method: 'POST',
@@ -1353,8 +1370,11 @@
                     'Authorization': authHeader
                   },
                   body: payloadJson,
-                  signal: controller.signal
+                  signal: attemptController.signal
                 });
+
+                clearTimeout(attemptTimer);
+                masterController.signal.removeEventListener('abort', onMasterAbort);
 
                 if (resp.ok) {
                   clearTimeout(timeoutId);
@@ -1376,7 +1396,7 @@
                   'SMSGate server error (' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : '')
                 );
 
-                // If SMSGate itself responded with 400/401/422 (directly or via proxy), fail immediately;
+                // If SMSGate itself responded with 400/401/422, fail immediately;
                 // otherwise (403/404/429/5xx from proxy or edge), continue to next fallback proxy.
                 const isDirectOrProxiedAppError =
                   resp.status === 400 || resp.status === 401 || resp.status === 422;
@@ -1385,6 +1405,8 @@
                   return { ok: false, timedOut: false, status: resp.status, error: lastError };
                 }
               } catch (err) {
+                clearTimeout(attemptTimer);
+                masterController.signal.removeEventListener('abort', onMasterAbort);
                 if (timedOut) break;
                 if (cfg.externalSignal && cfg.externalSignal.aborted) {
                   clearTimeout(timeoutId);

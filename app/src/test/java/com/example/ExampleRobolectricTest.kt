@@ -342,6 +342,10 @@ class ExampleRobolectricTest {
             SmsGateService.resolveMessagesEndpoint("https://sms-gate.app"),
         )
         assertEquals(
+            "https://api.sms-gate.app/3rdparty/v1/messages",
+            SmsGateService.resolveMessagesEndpoint("https://api.sms-gate.app/3rdparty/v1/message"),
+        )
+        assertEquals(
             "http://192.168.1.50:8080/3rdparty/v1/messages",
             SmsGateService.resolveMessagesEndpoint("http://192.168.1.50:8080/"),
         )

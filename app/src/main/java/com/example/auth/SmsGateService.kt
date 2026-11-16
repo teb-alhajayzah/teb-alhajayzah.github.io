@@ -35,15 +35,18 @@ object SmsGateService {
             clean = "https://$clean"
         }
         val lower = clean.lowercase()
-        if (lower.endsWith("/messages")) return clean
+        if (lower.endsWith("/3rdparty/v1/message")) return "${clean}s"
+        if (lower.endsWith("/messages") || lower.endsWith("/message")) return clean
         if (lower == "https://sms-gate.app" ||
             lower == "http://sms-gate.app" ||
             lower == "https://www.sms-gate.app" ||
-            lower == "http://www.sms-gate.app"
+            lower == "http://www.sms-gate.app" ||
+            lower == "https://api.sms-gate.app" ||
+            lower == "http://api.sms-gate.app"
         ) {
             return DEFAULT_CLOUD_MESSAGES_ENDPOINT
         }
-        if (lower.contains("/3rdparty/v1")) {
+        if (lower.endsWith("/3rdparty/v1")) {
             return "$clean/messages"
         }
         return "$clean/3rdparty/v1/messages"
