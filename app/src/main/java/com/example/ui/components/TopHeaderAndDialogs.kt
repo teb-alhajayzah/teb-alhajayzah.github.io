@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocalHospital
@@ -92,6 +93,7 @@ fun TebTopHeader(
     onSwitchRole: (AppRoleMode) -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenSuperAdmin: () -> Unit,
     onOpenConfig: () -> Unit,
 ) {
     Surface(
@@ -183,6 +185,19 @@ fun TebTopHeader(
                             imageVector = Icons.Filled.Person,
                             contentDescription = activeAccount?.fullName ?: "حسابي والعائلة",
                             tint = Color.White,
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onOpenSuperAdmin,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("super_admin_button"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AdminPanelSettings,
+                            contentDescription = "إدارة المنصة (Admin)",
+                            tint = if (roleMode == AppRoleMode.SUPER_ADMIN) Color(0xFFFDE047) else Color.White,
                         )
                     }
 
@@ -597,6 +612,8 @@ fun PlatformConfigDialog(
         hospitalName: String,
         apkDownloadUrl: String,
         medsApiUrl: String,
+        adminUsername: String,
+        adminPassword: String,
     ) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
@@ -606,6 +623,8 @@ fun PlatformConfigDialog(
     var hospitalName by remember { mutableStateOf(currentConfig.hospitalNameAr) }
     var apkUrl by remember { mutableStateOf(currentConfig.apkDownloadUrl) }
     var medsApiUrl by remember { mutableStateOf(currentConfig.medicationsApiUrl) }
+    var adminUser by remember { mutableStateOf(currentConfig.adminUsername) }
+    var adminPass by remember { mutableStateOf(currentConfig.adminPassword) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -616,7 +635,7 @@ fun PlatformConfigDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "يتم سحب اسم المنصة، المستشفى، رابط تحميل الـ APK، وواجهة الأدوية المصرية من AppConfig لتسهيل التوسع:",
+                    text = "يتم سحب اسم المنصة، المستشفى، رابط تحميل الـ APK، وبيانات الإدارة العليا من الإعدادات الموحدة:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -655,12 +674,31 @@ fun PlatformConfigDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Text(
+                    text = "بيانات دخول الإدارة العليا (${currentConfig.adminOwnerName}):",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TealPrimary,
+                )
+                OutlinedTextField(
+                    value = adminUser,
+                    onValueChange = { adminUser = it },
+                    label = { Text("اسم مستخدم الإدارة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = adminPass,
+                    onValueChange = { adminPass = it },
+                    label = { Text("كلمة مرور الإدارة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(platformName, villageName, hospitalName, apkUrl, medsApiUrl)
+                    onSave(platformName, villageName, hospitalName, apkUrl, medsApiUrl, adminUser, adminPass)
                     onDismiss()
                 }
             ) {

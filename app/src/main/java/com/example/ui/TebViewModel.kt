@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 enum class AppRoleMode(val labelAr: String) {
     PATIENT("واجهة المريض"),
     DOCTOR_ADMIN("لوحة الدكتور والسكرتيرة"),
+    SUPER_ADMIN("إدارة المنصة"),
 }
 
 enum class PatientTab(val labelAr: String) {
@@ -57,6 +58,10 @@ data class TebUiState(
     val medicalRecords: List<MedicalRecordEntity> = emptyList(),
     val notifications: List<DelayNotificationEntity> = emptyList(),
     val activeAdminDoctorId: String = "doc_batna_1",
+    val loggedInDoctorId: String? = null,
+    val isAdminLoggedIn: Boolean = false,
+    val adminUsername: String = AppConfig.defaultBrand.adminUsername,
+    val adminPassword: String = AppConfig.defaultBrand.adminPassword,
     val medications: List<EgyptianMedication> = MedicationCatalog.builtInMedications,
     val isLiveMedicationsApi: Boolean = false,
     val favoriteMedsByDoctor: Map<String, Set<String>> = emptyMap(),
@@ -78,6 +83,9 @@ data class TebUiState(
 
     val activeAdminDoctor: ClinicDoctorEntity?
         get() = doctors.firstOrNull { it.id == activeAdminDoctorId } ?: doctors.firstOrNull()
+
+    val loggedInDoctor: ClinicDoctorEntity?
+        get() = doctors.firstOrNull { it.id == loggedInDoctorId }
 
     val unreadAlertsCount: Int
         get() = notifications.count { !it.isRead }
@@ -116,6 +124,7 @@ class TebViewModel(
     private val _searchQuery = MutableStateFlow("")
     private val _brandConfig = MutableStateFlow(AppConfig.defaultBrand)
     private val _isSeeded = MutableStateFlow(false)
+    private val _isAdminLoggedIn = MutableStateFlow(false)
     private val _medications = MutableStateFlow(MedicationCatalog.builtInMedications)
     private val _isLiveMedicationsApi = MutableStateFlow(false)
 
@@ -143,6 +152,7 @@ class TebViewModel(
         val specialty: String?,
         val searchQuery: String,
         val brandConfig: PlatformBrandConfig,
+        val isAdminLoggedIn: Boolean,
     )
 
     private data class AccountDataBundle(
@@ -151,6 +161,9 @@ class TebViewModel(
         val accounts: List<PatientAccountEntity>,
         val familyMembers: List<FamilyMemberEntity>,
         val activeAdminDoctorId: String,
+        val loggedInDoctorId: String?,
+        val adminUsername: String,
+        val adminPassword: String,
     )
 
     private data class MedicationBundle(
@@ -167,6 +180,7 @@ class TebViewModel(
         _selectedSpecialty,
         _searchQuery,
         _brandConfig,
+        _isAdminLoggedIn,
     ) { values ->
         CoreUiSelection(
             isSeeded = values[0] as Boolean,
@@ -176,22 +190,39 @@ class TebViewModel(
             specialty = values[4] as String?,
             searchQuery = values[5] as String,
             brandConfig = values[6] as PlatformBrandConfig,
+            isAdminLoggedIn = values[7] as Boolean,
         )
     }
 
-    private val accountBundleFlow = combine(
+    private val accountIdsFlow = combine(
         repository.activeAccountIdFlow,
         repository.activeMemberIdFlow,
         repository.allAccountsFlow,
         activeFamilyFlow,
         repository.activeDoctorPortalIdFlow,
     ) { activeAccountId, activeMemberId, accounts, familyMembers, adminDoctorId ->
+        listOf(activeAccountId, activeMemberId, accounts, familyMembers, adminDoctorId)
+    }
+
+    private val authCredsFlow = combine(
+        repository.loggedInDoctorIdFlow,
+        repository.adminUsernameFlow,
+        repository.adminPasswordFlow,
+    ) { loggedDocId, adminUser, adminPass ->
+        Triple(loggedDocId, adminUser, adminPass)
+    }
+
+    private val accountBundleFlow = combine(accountIdsFlow, authCredsFlow) { ids, creds ->
+        @Suppress("UNCHECKED_CAST")
         AccountDataBundle(
-            activeAccountId = activeAccountId,
-            activeMemberId = activeMemberId,
-            accounts = accounts,
-            familyMembers = familyMembers,
-            activeAdminDoctorId = adminDoctorId,
+            activeAccountId = ids[0] as String,
+            activeMemberId = ids[1] as String,
+            accounts = ids[2] as List<PatientAccountEntity>,
+            familyMembers = ids[3] as List<FamilyMemberEntity>,
+            activeAdminDoctorId = ids[4] as String,
+            loggedInDoctorId = creds.first,
+            adminUsername = creds.second,
+            adminPassword = creds.third,
         )
     }
 
@@ -238,7 +269,10 @@ class TebViewModel(
             selectedBookingDoctorId = sel.bookingDoctorId,
             selectedSpecialty = sel.specialty,
             searchQuery = sel.searchQuery,
-            brandConfig = sel.brandConfig,
+            brandConfig = sel.brandConfig.copy(
+                adminUsername = acc.adminUsername,
+                adminPassword = acc.adminPassword,
+            ),
             activeAccount = activeAccount,
             familyMembers = acc.familyMembers,
             activeMemberId = acc.activeMemberId,
@@ -247,6 +281,10 @@ class TebViewModel(
             medicalRecords = records,
             notifications = notifications,
             activeAdminDoctorId = acc.activeAdminDoctorId,
+            loggedInDoctorId = acc.loggedInDoctorId,
+            isAdminLoggedIn = sel.isAdminLoggedIn,
+            adminUsername = acc.adminUsername,
+            adminPassword = acc.adminPassword,
             medications = medBundle.medications,
             isLiveMedicationsApi = medBundle.isLiveRemote,
             favoriteMedsByDoctor = favMap,
@@ -314,6 +352,8 @@ class TebViewModel(
         hospitalNameAr: String,
         apkUrl: String,
         medsApiUrl: String,
+        adminUsername: String = uiState.value.adminUsername,
+        adminPassword: String = uiState.value.adminPassword,
     ) {
         _brandConfig.value = _brandConfig.value.copy(
             platformNameAr = platformNameAr.trim().ifEmpty { AppConfig.defaultBrand.platformNameAr },
@@ -322,14 +362,144 @@ class TebViewModel(
             apkDownloadUrl = apkUrl.trim().ifEmpty { AppConfig.defaultBrand.apkDownloadUrl },
             medicationsApiUrl = medsApiUrl.trim(),
         )
+        viewModelScope.launch {
+            repository.updateAdminCredentials(adminUsername, adminPassword)
+        }
         refreshEgyptianMedications(medsApiUrl)
         _snackbarMessages.tryEmit("تم تحديث إعدادات المنصة والروابط بنجاح")
     }
 
     fun resetBrandConfig() {
         _brandConfig.value = AppConfig.defaultBrand
+        viewModelScope.launch {
+            repository.updateAdminCredentials(
+                AppConfig.defaultBrand.adminUsername,
+                AppConfig.defaultBrand.adminPassword,
+            )
+        }
         refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
         _snackbarMessages.tryEmit("تم استعادة الإعدادات الافتراضية للمنصة")
+    }
+
+    fun loginDoctor(identifier: String, password: String) {
+        viewModelScope.launch {
+            val result = repository.loginDoctor(identifier, password)
+            result.onSuccess { doc ->
+                _snackbarMessages.tryEmit("أهلاً بك، ${doc.doctorName}")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "بيانات الدخول غير صحيحة")
+            }
+        }
+    }
+
+    fun logoutDoctor() {
+        viewModelScope.launch {
+            repository.logoutDoctor()
+            _snackbarMessages.tryEmit("تم تسجيل خروج الطبيب")
+        }
+    }
+
+    fun loginAdmin(username: String, password: String) {
+        val current = uiState.value
+        if (username.trim() == current.adminUsername && password.trim() == current.adminPassword) {
+            _isAdminLoggedIn.value = true
+            _snackbarMessages.tryEmit("مرحباً بك في الإدارة العليا، ${current.brandConfig.adminOwnerName}")
+        } else {
+            _snackbarMessages.tryEmit("اسم المستخدم أو كلمة مرور الإدارة غير صحيحة")
+        }
+    }
+
+    fun logoutAdmin() {
+        _isAdminLoggedIn.value = false
+        _roleMode.value = AppRoleMode.PATIENT
+        _snackbarMessages.tryEmit("تم تسجيل خروج الإدارة")
+    }
+
+    fun addDoctorByAdmin(
+        doctorName: String,
+        specialty: String,
+        clinicName: String,
+        clinicType: String,
+        locationLabel: String,
+        bio: String,
+        mapsUrl: String,
+        feeEgp: Int,
+        workStartMinutes: Int,
+        workEndMinutes: Int,
+        slotDurationMinutes: Int,
+        username: String,
+        password: String,
+    ) {
+        viewModelScope.launch {
+            val res = repository.addDoctorByAdmin(
+                doctorName = doctorName,
+                specialty = specialty,
+                clinicName = clinicName,
+                clinicType = clinicType,
+                locationLabel = locationLabel,
+                bio = bio,
+                mapsUrl = mapsUrl,
+                feeEgp = feeEgp,
+                workStartMinutes = workStartMinutes,
+                workEndMinutes = workEndMinutes,
+                slotDurationMinutes = slotDurationMinutes,
+                username = username,
+                password = password,
+            )
+            res.onSuccess { doc ->
+                _snackbarMessages.tryEmit("تمت إضافة ${doc.doctorName} ونشر عيادته في المنصة فوراً")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر إضافة الدكتور")
+            }
+        }
+    }
+
+    fun updateDoctorByAdmin(
+        doctorId: String,
+        doctorName: String,
+        specialty: String,
+        clinicName: String,
+        clinicType: String,
+        locationLabel: String,
+        bio: String,
+        mapsUrl: String,
+        feeEgp: Int,
+        workStartMinutes: Int,
+        workEndMinutes: Int,
+        slotDurationMinutes: Int,
+        username: String,
+        password: String,
+    ) {
+        viewModelScope.launch {
+            val res = repository.updateDoctorByAdmin(
+                doctorId = doctorId,
+                doctorName = doctorName,
+                specialty = specialty,
+                clinicName = clinicName,
+                clinicType = clinicType,
+                locationLabel = locationLabel,
+                bio = bio,
+                mapsUrl = mapsUrl,
+                feeEgp = feeEgp,
+                workStartMinutes = workStartMinutes,
+                workEndMinutes = workEndMinutes,
+                slotDurationMinutes = slotDurationMinutes,
+                username = username,
+                password = password,
+            )
+            res.onSuccess { doc ->
+                _snackbarMessages.tryEmit("تم تحديث بيانات ${doc.doctorName} فوراً")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر تعديل البيانات")
+            }
+        }
+    }
+
+    fun deleteDoctorByAdmin(doctorId: String) {
+        viewModelScope.launch {
+            repository.deleteDoctorByAdmin(doctorId)
+            _snackbarMessages.tryEmit("تم حذف الدكتور والعيادة نهائياً من المنصة")
+        }
     }
 
     fun bookAppointmentAsPatient(slotId: String, member: FamilyMemberEntity) {

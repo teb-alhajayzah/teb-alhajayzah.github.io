@@ -59,6 +59,10 @@ data class ClinicDoctorEntity(
     val currentDelayMinutes: Int = 0,
     val rating: Float = 4.8f,
     val experienceYears: Int = 12,
+    val bio: String = "",
+    val mapsUrl: String = "",
+    val username: String = "",
+    val password: String = "1234",
 )
 
 @Entity(tableName = "appointment_slots")

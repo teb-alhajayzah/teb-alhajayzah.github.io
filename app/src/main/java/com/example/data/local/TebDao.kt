@@ -41,8 +41,23 @@ interface TebDao {
     @Query("SELECT * FROM clinic_doctors WHERE id = :doctorId LIMIT 1")
     suspend fun getDoctorById(doctorId: String): ClinicDoctorEntity?
 
+    @Query("SELECT * FROM clinic_doctors WHERE username = :username LIMIT 1")
+    suspend fun findDoctorByUsername(username: String): ClinicDoctorEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDoctor(doctor: ClinicDoctorEntity)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDoctors(doctors: List<ClinicDoctorEntity>)
+
+    @Update
+    suspend fun updateDoctor(doctor: ClinicDoctorEntity)
+
+    @Query("DELETE FROM clinic_doctors WHERE id = :doctorId")
+    suspend fun deleteDoctorById(doctorId: String)
+
+    @Query("DELETE FROM doctor_favorite_meds WHERE doctorId = :doctorId")
+    suspend fun deleteFavoritesForDoctor(doctorId: String)
 
     @Query("UPDATE clinic_doctors SET currentDelayMinutes = currentDelayMinutes + :additionalDelay WHERE id = :doctorId")
     suspend fun addDoctorDelay(doctorId: String, additionalDelay: Int)
@@ -86,6 +101,13 @@ interface TebDao {
         updateDoctorScheduleConfig(doctorId, startMin, endMin, durationMin)
         deleteSlotsForDoctor(doctorId)
         insertSlots(newSlots)
+    }
+
+    @Transaction
+    suspend fun deleteDoctorCascade(doctorId: String) {
+        deleteSlotsForDoctor(doctorId)
+        deleteFavoritesForDoctor(doctorId)
+        deleteDoctorById(doctorId)
     }
 
     @Query("SELECT * FROM medical_records ORDER BY createdAtMillis DESC")

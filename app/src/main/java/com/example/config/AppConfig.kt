@@ -22,6 +22,9 @@ data class PlatformBrandConfig(
     val apkDownloadUrl: String = "https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk",
     // رابط واجهة الأدوية المصرية المفتوحة (workers.dev) — وعند تركه فارغاً أو عدم توفر الإنترنت يعمل الكتالوج المدمج تلقائياً
     val medicationsApiUrl: String = "",
+    val adminOwnerName: String = "المهندس محمد يوسف",
+    val adminUsername: String = "admin",
+    val adminPassword: String = "teb2026",
     @DrawableRes val logoRes: Int = R.drawable.app_icon_fg,
     @DrawableRes val heroBannerRes: Int = R.drawable.img_hospital_banner,
     @DrawableRes val medicalRecordIllustRes: Int = R.drawable.img_medical_record,

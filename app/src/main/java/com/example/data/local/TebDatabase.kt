@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DelayNotificationEntity::class,
         DoctorFavoriteMedEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -41,6 +41,15 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `bio` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `mapsUrl` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `username` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `password` TEXT NOT NULL DEFAULT '1234'")
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -48,7 +57,7 @@ abstract class TebDatabase : RoomDatabase() {
                     TebDatabase::class.java,
                     "teb_al_hajayzah.db",
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

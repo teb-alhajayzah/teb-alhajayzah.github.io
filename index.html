@@ -496,6 +496,38 @@
       gap: 12px;
     }
 
+    .apk-download-notice {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--teal);
+      color: #fff;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      line-height: 1.45;
+      box-shadow: 0 6px 16px rgba(13, 115, 119, 0.24);
+      animation: apkNoticeSlideIn 0.25s ease-out;
+    }
+
+    .apk-notice-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.2);
+      flex-shrink: 0;
+      font-size: 0.95rem;
+    }
+
+    @keyframes apkNoticeSlideIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* Timeline & Prescriptions */
     .med-box {
       background: var(--bg);
@@ -737,6 +769,7 @@
             🔔<span class="badge-dot" id="alertBadge" style="display:none">0</span>
           </button>
           <button class="icon-btn" id="btnAccount" title="الحساب وأفراد العائلة">👤</button>
+          <button class="icon-btn" id="btnSuperAdmin" title="إدارة المنصة (Admin)">🛡️</button>
           <button class="icon-btn" id="btnConfig" title="إعدادات المنصة">⚙️</button>
         </div>
       </div>
@@ -761,7 +794,8 @@
   </nav>
 
   <div id="modalRoot"></div>
-  <div id="toast" class="toast" style="display:none"></div>
+  <div id="toast" class="toast" style="display:none" role="status" aria-live="polite"></div>
+  <iframe id="apkDownloadFrame" title="تحميل تطبيق طب الحجايزة" aria-hidden="true" tabindex="-1" style="display:none;width:0;height:0;border:0;position:absolute;left:-9999px;"></iframe>
   <div id="printSheet"></div>
 
   <script>
@@ -780,7 +814,10 @@
         supportPhone: '01125002428',
         appVersionLabel: 'v1.0.0',
         apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
-        medicationsApiUrl: ''
+        medicationsApiUrl: '',
+        adminOwnerName: 'المهندس محمد يوسف',
+        adminUsername: 'admin',
+        adminPassword: 'teb2026'
       };
 
       const STORAGE_KEY = 'teb_alhajayzah_web_state_v1';
@@ -876,16 +913,17 @@
       }
 
       function createSeedState() {
+        const defaultMaps = 'https://maps.google.com/?q=الحجايزة+السنبلاوين+الدقهلية';
         const doctors = [
-          { id: 'doc_batna_1', doctorName: 'د. محمد عبد الرحمن', specialty: 'باطنة وجهاز هضمي', clinicName: 'عيادة الشفاء التخصصية', clinicType: 'PRIVATE', locationLabel: 'شارع المستشفى، الحجايزة', feeEgp: 150, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_kids_1', doctorName: 'د. سارة محمود النجار', specialty: 'أطفال وحديثي الولادة', clinicName: 'عيادة براعم الحجايزة', clinicType: 'PRIVATE', locationLabel: 'بجوار المسجد الكبير، الحجايزة', feeEgp: 130, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_ortho_1', doctorName: 'د. طارق حسن الشافعي', specialty: 'عظام ومفاصل', clinicName: 'مستشفى الحجايزة التخصصي - قسم العظام', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', feeEgp: 100, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
-          { id: 'doc_obgyn_1', doctorName: 'د. نادية إبراهيم زكي', specialty: 'نساء وتوليد', clinicName: 'مستشفى الحجايزة التخصصي - قسم النساء', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الثاني', feeEgp: 120, workStartMinutes: 18 * 60, workEndMinutes: 21 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_dental_1', doctorName: 'د. كريم طارق المنصوري', specialty: 'أسنان', clinicName: 'عيادة الابتسامة للأسنان', clinicType: 'PRIVATE', locationLabel: 'أمام الوحدة المحلية، الحجايزة', feeEgp: 150, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_cardio_1', doctorName: 'د. خالد مصطفى العطار', specialty: 'قلب وأوعية دموية', clinicName: 'مستشفى الحجايزة التخصصي - وحدة القلب', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأرضي', feeEgp: 160, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
-          { id: 'doc_eye_1', doctorName: 'د. هالة فؤاد سلامة', specialty: 'رمد وجراحة عيون', clinicName: 'مركز النور للعيون', clinicType: 'PRIVATE', locationLabel: 'ميدان الحجايزة الرئيسي', feeEgp: 140, workStartMinutes: 17 * 60 + 20, workEndMinutes: 20 * 60 + 40, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
-          { id: 'doc_ent_1', doctorName: 'د. عمرو يحيى البنا', specialty: 'أنف وأذن وحنجرة', clinicName: 'مستشفى الحجايزة التخصصي - عيادة 4', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', feeEgp: 100, workStartMinutes: 16 * 60, workEndMinutes: 19 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
-          { id: 'doc_derm_1', doctorName: 'د. ريم عادل الدسوقي', specialty: 'جلدية وتجميل', clinicName: 'عيادة الندى للجلدية', clinicType: 'PRIVATE', locationLabel: 'طريق المركز، الحجايزة', feeEgp: 120, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 }
+          { id: 'doc_batna_1', doctorName: 'د. محمد عبد الرحمن', specialty: 'باطنة وجهاز هضمي', clinicName: 'عيادة الشفاء التخصصية', clinicType: 'PRIVATE', locationLabel: 'شارع المستشفى، الحجايزة', bio: 'أخصائي أمراض الباطنة والجهاز الهضمي والكبد — خبرة 15 عاماً.', mapsUrl: defaultMaps, username: '01001001001', password: '1234', feeEgp: 150, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_kids_1', doctorName: 'د. سارة محمود النجار', specialty: 'أطفال وحديثي الولادة', clinicName: 'عيادة براعم الحجايزة', clinicType: 'PRIVATE', locationLabel: 'بجوار المسجد الكبير، الحجايزة', bio: 'أخصائي طب الأطفال وحديثي الولادة ومتابعة النمو والتغذية.', mapsUrl: defaultMaps, username: '01001001002', password: '1234', feeEgp: 130, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_ortho_1', doctorName: 'د. طارق حسن الشافعي', specialty: 'عظام ومفاصل', clinicName: 'مستشفى الحجايزة التخصصي - قسم العظام', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', bio: 'استشاري جراحة العظام والكسور والمفاصل وإصابات الملاعب.', mapsUrl: defaultMaps, username: '01001001003', password: '1234', feeEgp: 100, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
+          { id: 'doc_obgyn_1', doctorName: 'د. نادية إبراهيم زكي', specialty: 'نساء وتوليد', clinicName: 'مستشفى الحجايزة التخصصي - قسم النساء', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الثاني', bio: 'أخصائي أمراض النساء والتوليد ومتابعة الحمل بالسونار.', mapsUrl: defaultMaps, username: '01001001004', password: '1234', feeEgp: 120, workStartMinutes: 18 * 60, workEndMinutes: 21 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_dental_1', doctorName: 'د. كريم طارق المنصوري', specialty: 'أسنان', clinicName: 'عيادة الابتسامة للأسنان', clinicType: 'PRIVATE', locationLabel: 'أمام الوحدة المحلية، الحجايزة', bio: 'طب وجراحة الفم والأسنان وعلاج الجذور والتركيبات.', mapsUrl: defaultMaps, username: '01001001005', password: '1234', feeEgp: 150, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
+          { id: 'doc_cardio_1', doctorName: 'د. خالد مصطفى العطار', specialty: 'قلب وأوعية دموية', clinicName: 'مستشفى الحجايزة التخصصي - وحدة القلب', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأرضي', bio: 'استشاري أمراض القلب والأوعية الدموية ورسم القلب والإيكو.', mapsUrl: defaultMaps, username: '01001001006', password: '1234', feeEgp: 160, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
+          { id: 'doc_eye_1', doctorName: 'د. هالة فؤاد سلامة', specialty: 'رمد وجراحة عيون', clinicName: 'مركز النور للعيون', clinicType: 'PRIVATE', locationLabel: 'ميدان الحجايزة الرئيسي', bio: 'أخصائي طب وجراحة العيون وفحص قاع العين والنظارات.', mapsUrl: defaultMaps, username: '01001001007', password: '1234', feeEgp: 140, workStartMinutes: 17 * 60 + 20, workEndMinutes: 20 * 60 + 40, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
+          { id: 'doc_ent_1', doctorName: 'د. عمرو يحيى البنا', specialty: 'أنف وأذن وحنجرة', clinicName: 'مستشفى الحجايزة التخصصي - عيادة 4', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', bio: 'أخصائي جراحة الأنف والأذن والحنجرة وعلاج الجيوب الأنفية.', mapsUrl: defaultMaps, username: '01001001008', password: '1234', feeEgp: 100, workStartMinutes: 16 * 60, workEndMinutes: 19 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
+          { id: 'doc_derm_1', doctorName: 'د. ريم عادل الدسوقي', specialty: 'جلدية وتجميل', clinicName: 'عيادة الندى للجلدية', clinicType: 'PRIVATE', locationLabel: 'طريق المركز، الحجايزة', bio: 'أخصائي الأمراض الجلدية والتناسلية والعناية بالبشرة والشعر.', mapsUrl: defaultMaps, username: '01001001009', password: '1234', feeEgp: 120, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 }
         ];
 
         const preBookMap = {
@@ -985,6 +1023,13 @@
           if (raw) {
             const parsed = JSON.parse(raw);
             if (parsed && Array.isArray(parsed.doctors) && Array.isArray(parsed.slots)) {
+              parsed.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
+              parsed.doctors = parsed.doctors.map((d, idx) => Object.assign({
+                bio: '',
+                mapsUrl: 'https://maps.google.com/?q=الحجايزة+السنبلاوين+الدقهلية',
+                username: '0100100100' + (idx + 1),
+                password: '1234'
+              }, d));
               return parsed;
             }
           }
@@ -1006,12 +1051,14 @@
 
       // Ephemeral UI State
       const ui = {
-        roleMode: 'PATIENT', // PATIENT | DOCTOR
+        roleMode: 'PATIENT', // PATIENT | DOCTOR | ADMIN
         patientTab: 'HOME', // HOME | PRIVATE | HOSPITAL | SPECIALTIES | EMR
         bookingDoctorId: null,
         selectedSpecialty: null,
         searchQuery: '',
-        activeAdminDoctorId: db.doctors[0].id,
+        loggedInDoctorId: null,
+        isAdminLoggedIn: false,
+        adminSearchQuery: '',
         medications: BUILTIN_MEDICATIONS.slice(),
         isLiveMedsApi: false
       };
@@ -1046,12 +1093,46 @@
       }
 
       let toastTimer = null;
-      function showToast(msg) {
+      function showToast(msg, durationMs) {
         const el = document.getElementById('toast');
         el.textContent = msg;
         el.style.display = 'block';
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3200);
+        toastTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs || 3200);
+      }
+
+      let apkNoticeTimer = null;
+      function startBackgroundApkDownload(customUrl) {
+        const downloadUrl = (customUrl && String(customUrl).trim()) || DEFAULT_CONFIG.apkDownloadUrl;
+        const noticeText = 'جاري تحميل تطبيق طب الحجايزة... تابع شريط الإشعارات في الأعلى';
+
+        const noticeEl = document.getElementById('apkDownloadNotice');
+        if (noticeEl) {
+          noticeEl.innerHTML =
+            '<span class="apk-notice-icon" aria-hidden="true">⬇️</span>' +
+            '<span>' + esc(noticeText) + '</span>';
+          noticeEl.style.display = 'flex';
+          clearTimeout(apkNoticeTimer);
+          apkNoticeTimer = setTimeout(function () {
+            const activeNotice = document.getElementById('apkDownloadNotice');
+            if (activeNotice) activeNotice.style.display = 'none';
+          }, 6500);
+        }
+
+        showToast(noticeText, 5000);
+
+        const oldFrame = document.getElementById('apkDownloadFrame');
+        if (oldFrame && oldFrame.parentNode) {
+          oldFrame.parentNode.removeChild(oldFrame);
+        }
+        const frame = document.createElement('iframe');
+        frame.id = 'apkDownloadFrame';
+        frame.title = 'تحميل تطبيق طب الحجايزة';
+        frame.setAttribute('aria-hidden', 'true');
+        frame.tabIndex = -1;
+        frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute;left:-9999px;';
+        frame.src = downloadUrl;
+        document.body.appendChild(frame);
       }
 
       function getActiveMember() {
@@ -1152,6 +1233,11 @@
 
         document.getElementById('rolePatientBtn').classList.toggle('active', ui.roleMode === 'PATIENT');
         document.getElementById('roleDoctorBtn').classList.toggle('active', ui.roleMode === 'DOCTOR');
+        const adminBtn = document.getElementById('btnSuperAdmin');
+        if (adminBtn) {
+          adminBtn.style.background = ui.roleMode === 'ADMIN' ? '#fff' : 'rgba(255,255,255,0.14)';
+          adminBtn.style.color = ui.roleMode === 'ADMIN' ? 'var(--teal)' : '#fff';
+        }
 
         const showNav = ui.roleMode === 'PATIENT' && !ui.bookingDoctorId;
         const nav = document.getElementById('bottomNav');
@@ -1174,10 +1260,14 @@
             '</div>' +
             '<span class="badge badge-rating">⭐ ' + esc(doc.rating) + '</span>' +
           '</div>' +
-          '<div style="display:flex;justify-content:space-between;font-size:0.86rem;color:var(--text-muted);">' +
+          (doc.bio ? '<div style="font-size:0.84rem;color:var(--text-muted);line-height:1.45;">' + esc(doc.bio) + '</div>' : '') +
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.86rem;color:var(--text-muted);gap:8px;">' +
             '<span>📍 ' + esc(doc.locationLabel) + '</span>' +
-            '<strong style="color:var(--teal);">الكشف: ' + esc(doc.feeEgp) + ' ج.م</strong>' +
+            '<strong style="color:var(--teal);white-space:nowrap;">الكشف: ' + esc(doc.feeEgp) + ' ج.م</strong>' +
           '</div>' +
+          (doc.mapsUrl
+            ? '<div><a class="chip" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:32px;padding:4px 10px;font-size:0.8rem;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">🗺️ موقع العيادة على خرائط جوجل</a></div>'
+            : '') +
           (doc.currentDelayMinutes > 0
             ? '<div class="alert-banner" style="padding:8px 10px;font-size:0.84rem;">⚠️ تأخير حالي: +' + doc.currentDelayMinutes + ' دقيقة</div>'
             : '') +
@@ -1209,12 +1299,13 @@
                   '<div style="font-size:0.84rem;color:var(--text-muted);">تحميل وتحديث تطبيق الأندرويد الرسمي مباشرة بدون صفحات وسيطة</div>' +
                 '</div>' +
               '</div>' +
-              '<a class="btn btn-primary btn-block" href="' + esc(cfg.apkDownloadUrl) + '" download="طب الحجايزة.apk" rel="noopener">' +
+              '<button type="button" class="btn btn-primary btn-block" id="btnApkDirectDownload" data-apk-url="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '">' +
                 '⬇️ تحميل مباشر للتطبيق (APK)' +
-              '</a>' +
+              '</button>' +
+              '<div id="apkDownloadNotice" class="apk-download-notice" role="status" aria-live="polite" style="display:none;"></div>' +
             '</div>' +
 
-            // 2. روابط سريعة
+            // 2. روابط سريعة + بوابة الإدارة
             '<div class="footer-box">' +
               '<h3 style="font-size:1.02rem;color:var(--teal);">🔗 روابط سريعة</h3>' +
               '<div class="footer-quick-links">' +
@@ -1222,6 +1313,7 @@
                 '<button class="footer-link-btn" data-footer-tab="HOSPITAL">🏥 المستشفى التخصصي</button>' +
                 '<button class="footer-link-btn" data-footer-tab="SPECIALTIES">📋 التخصصات الطبية</button>' +
                 '<button class="footer-link-btn" data-footer-tab="EMR">📁 ملفي الطبي</button>' +
+                '<button class="footer-link-btn" id="footerAdminBtn" style="grid-column:1 / -1;border-color:rgba(13,115,119,0.45);color:var(--teal-text);background:var(--teal-soft);">🛡️ إدارة المنصة (Admin)</button>' +
               '</div>' +
             '</div>' +
 
@@ -1410,8 +1502,12 @@
           '<section class="card">' +
             '<h3 style="font-size:1.2rem;">' + esc(doc.doctorName) + '</h3>' +
             '<div style="color:var(--teal);font-weight:700;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
+            (doc.bio ? '<div style="font-size:0.9rem;color:var(--text-muted);margin-top:4px;">' + esc(doc.bio) + '</div>' : '') +
             '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:4px;">📍 ' + esc(doc.locationLabel) + ' • سعر الكشف: ' + doc.feeEgp + ' ج.م</div>' +
             '<div style="font-size:0.88rem;margin-top:4px;">🕒 مواعيد العمل: ' + formatMinutesAr(doc.workStartMinutes) + ' إلى ' + formatMinutesAr(doc.workEndMinutes) + ' (كل ' + doc.slotDurationMinutes + ' دقيقة)</div>' +
+            (doc.mapsUrl
+              ? '<div style="margin-top:8px;"><a class="btn btn-outline" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:40px;padding:6px 14px;display:inline-flex;">🗺️ فتح موقع العيادة على خرائط جوجل</a></div>'
+              : '') +
             (doc.currentDelayMinutes > 0
               ? '<div class="alert-banner" style="margin-top:8px;">تحديث: العيادة متأخرة ' + doc.currentDelayMinutes + ' دقيقة والأوقات الظاهرة معدّلة تلقائياً.</div>'
               : '') +
@@ -1486,31 +1582,46 @@
             : '<div style="display:flex;flex-direction:column;gap:12px;">' + records.map(renderMedicalRecordCardHtml).join('') + '</div>');
       }
 
+      function renderDoctorLoginGate() {
+        return '<section class="card" style="max-width:480px;margin:12px auto;padding:22px;display:flex;flex-direction:column;gap:14px;">' +
+            '<div style="display:flex;align-items:center;gap:12px;">' +
+              '<div class="tile-icon" style="background:var(--teal-soft);color:var(--teal);">🩺</div>' +
+              '<div>' +
+                '<h2 style="font-size:1.25rem;">تسجيل دخول الأطباء والعيادات</h2>' +
+                '<div style="font-size:0.86rem;color:var(--text-muted);">أدخل اسم المستخدم (أو رقم الهاتف) وكلمة المرور الخاصة بعيادتك</div>' +
+              '</div>' +
+            '</div>' +
+            '<input class="input" id="docLoginIdentifier" placeholder="اسم المستخدم أو رقم الهاتف (مثال: 01001001001)" dir="ltr" />' +
+            '<input class="input" id="docLoginPassword" type="password" placeholder="كلمة المرور" dir="ltr" />' +
+            '<div id="docLoginError" style="display:none;color:var(--booked-border);font-weight:700;font-size:0.88rem;"></div>' +
+            '<button class="btn btn-primary btn-block" id="btnDocLoginSubmit">🔐 دخول إلى لوحة العيادة</button>' +
+            '<div style="background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">' +
+              'تُنشأ حسابات الأطباء وتُعدل من <strong>لوحة الإدارة العليا (' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + ')</strong>. (للتجربة السريعة: <code>01001001001</code> / <code>1234</code>)' +
+            '</div>' +
+          '</section>';
+      }
+
       function renderDoctorDashboard() {
-        const doc = db.doctors.find((d) => d.id === ui.activeAdminDoctorId) || db.doctors[0];
+        const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
+        if (!doc) return renderDoctorLoginGate();
         const slots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
         const bookedCount = slots.filter((s) => s.status === 'BOOKED').length;
         const availCount = slots.filter((s) => s.status === 'AVAILABLE').length;
         const doneCount = slots.filter((s) => s.status === 'COMPLETED').length;
 
-        return '<section>' +
-            '<h2>لوحة تحكم الدكتور والسكرتيرة</h2>' +
-            '<div style="color:var(--text-muted);font-size:0.9rem;">إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، والروشتة الإلكترونية الذكية.</div>' +
+        return '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+            '<div>' +
+              '<h2>لوحة تحكم عيادة ' + esc(doc.doctorName) + '</h2>' +
+              '<div style="color:var(--text-muted);font-size:0.9rem;">إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، والروشتة الإلكترونية الذكية.</div>' +
+            '</div>' +
+            '<button class="btn btn-danger-outline" id="btnDoctorLogout" style="min-height:40px;padding:6px 14px;">🚪 تسجيل خروج</button>' +
           '</section>' +
-
-          '<div class="chips-row">' +
-            db.doctors.map((d) =>
-              '<button class="chip ' + (d.id === doc.id ? 'active' : '') + '" data-admin-doc="' + esc(d.id) + '">' +
-                esc(d.doctorName) + ' (' + esc(d.specialty) + ')' +
-              '</button>'
-            ).join('') +
-          '</div>' +
 
           '<section class="card">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
               '<div>' +
-                '<h3 style="font-size:1.15rem;">' + esc(doc.doctorName) + '</h3>' +
-                '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(doc.clinicName) + ' • ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + '</div>' +
+                '<h3 style="font-size:1.15rem;">' + esc(doc.clinicName) + ' (' + esc(doc.specialty) + ')</h3>' +
+                '<div style="font-size:0.86rem;color:var(--text-muted);">📍 ' + esc(doc.locationLabel) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' • الكشف: ' + doc.feeEgp + ' ج.م</div>' +
               '</div>' +
               (doc.currentDelayMinutes > 0
                 ? '<span class="badge" style="background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);">تأخير: +' + doc.currentDelayMinutes + ' د</span>'
@@ -1561,9 +1672,112 @@
           '</section>';
       }
 
+      function renderAdminLoginGate() {
+        return '<section class="card" style="max-width:480px;margin:12px auto;padding:22px;display:flex;flex-direction:column;gap:14px;">' +
+            '<div style="display:flex;align-items:center;gap:12px;">' +
+              '<div class="tile-icon" style="background:var(--teal-soft);color:var(--teal);">🛡️</div>' +
+              '<div>' +
+                '<h2 style="font-size:1.25rem;">إدارة المنصة العليا (Super Admin)</h2>' +
+                '<div style="font-size:0.86rem;color:var(--teal);font-weight:700;">' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + '</div>' +
+              '</div>' +
+            '</div>' +
+            '<input class="input" id="admLoginUser" placeholder="اسم مستخدم الإدارة" dir="ltr" />' +
+            '<input class="input" id="admLoginPass" type="password" placeholder="كلمة مرور الإدارة" dir="ltr" />' +
+            '<div id="admLoginError" style="display:none;color:var(--booked-border);font-weight:700;font-size:0.88rem;"></div>' +
+            '<button class="btn btn-primary btn-block" id="btnAdminLoginSubmit">🔓 دخول الإدارة العليا</button>' +
+            '<button class="btn btn-outline btn-block" id="btnAdminCancelBack">← العودة لصفحة المرضى</button>' +
+            '<div style="background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">' +
+              'بيانات الدخول الافتراضية: المستخدم <code>admin</code> • كلمة المرور <code>teb2026</code> (يمكن تعديلها من إعدادات المنصة).' +
+            '</div>' +
+          '</section>';
+      }
+
+      function renderSuperAdminDashboard() {
+        const privateCount = db.doctors.filter((d) => d.clinicType === 'PRIVATE').length;
+        const hospitalCount = db.doctors.filter((d) => d.clinicType === 'HOSPITAL').length;
+        const bookedTotal = db.slots.filter((s) => s.status === 'BOOKED').length;
+        const q = (ui.adminSearchQuery || '').trim().toLowerCase();
+        const filteredDocs = db.doctors.filter((d) =>
+          !q ||
+          d.doctorName.toLowerCase().includes(q) ||
+          d.specialty.toLowerCase().includes(q) ||
+          d.clinicName.toLowerCase().includes(q) ||
+          (d.username || '').toLowerCase().includes(q)
+        );
+
+        return '<section class="hero-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<span class="hero-pill">🛡️ لوحة تحكم الإدارة العليا</span>' +
+                '<h2 style="font-size:1.35rem;margin-top:6px;">أهلاً بك، ' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + '</h2>' +
+                '<div style="opacity:0.92;font-size:0.9rem;">إدارة شاملة للأطباء والعيادات وحسابات الدخول والخرائط مع تحديث فوري في المنصة.</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:8px;">' +
+                '<button class="btn" id="btnAdminOpenSettings" style="background:rgba(255,255,255,0.2);color:#fff;min-height:40px;">⚙️ إعدادات الإدارة</button>' +
+                '<button class="btn" id="btnAdminLogout" style="background:#fff;color:var(--teal);min-height:40px;">🚪 خروج</button>' +
+              '</div>' +
+            '</div>' +
+          '</section>' +
+
+          '<section class="stats-row">' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--teal);">' + db.doctors.length + '</div><div style="font-size:0.84rem;">إجمالي الأطباء</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:#0F5E8C;">' + privateCount + ' / ' + hospitalCount + '</div><div style="font-size:0.84rem;">خاصة / مستشفى</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--avail-text);">' + bookedTotal + '</div><div style="font-size:0.84rem;">حجوزات اليوم</div></div>' +
+          '</section>' +
+
+          '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+            '<button class="btn btn-primary" id="btnAdminAddDoctor" style="flex:1;min-width:220px;">➕ إضافة دكتور أو عيادة جديدة</button>' +
+            '<input class="input" id="adminDoctorSearch" placeholder="ابحث عن دكتور أو عيادة أو اسم مستخدم..." value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
+          '</section>' +
+
+          '<section style="display:flex;flex-direction:column;gap:12px;">' +
+            '<h3>قائمة الأطباء والعيادات المسجلين (' + filteredDocs.length + ')</h3>' +
+            (filteredDocs.length === 0
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد نتائج مطابقة.</div>'
+              : filteredDocs.map((doc) => {
+                  const typeLabel = doc.clinicType === 'HOSPITAL' ? '🏥 المستشفى التخصصي' : '🩺 عيادة خاصة';
+                  return '<div class="card">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                      '<div>' +
+                        '<div style="font-weight:800;font-size:1.08rem;">' + esc(doc.doctorName) + '</div>' +
+                        '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
+                      '</div>' +
+                      '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + typeLabel + '</span>' +
+                    '</div>' +
+                    (doc.bio ? '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' + esc(doc.bio) + '</div>' : '') +
+                    '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' +
+                      '📍 ' + esc(doc.locationLabel) + ' • 💰 الكشف: ' + doc.feeEgp + ' ج.م • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (كل ' + doc.slotDurationMinutes + ' د)' +
+                    '</div>' +
+                    '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:0.84rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
+                      '<span>🔐 دخول الدكتور: <strong dir="ltr">' + esc(doc.username || doc.id) + '</strong></span>' +
+                      '<span>🔑 كلمة المرور: <strong dir="ltr">' + esc(doc.password || '1234') + '</strong></span>' +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
+                      '<button class="btn btn-outline" data-admin-edit-doc="' + esc(doc.id) + '" style="flex:1;min-height:42px;">✏️ تعديل البيانات والمواعيد</button>' +
+                      '<button class="btn btn-danger-outline" data-admin-delete-doc="' + esc(doc.id) + '" style="min-height:42px;">🗑️ حذف نهائي</button>' +
+                    '</div>' +
+                  '</div>';
+                }).join('')) +
+          '</section>';
+      }
+
       function renderFooterArea() {
         const footerEl = document.getElementById('siteFooter');
         footerEl.innerHTML = renderSiteFooter();
+        const apkBtn = document.getElementById('btnApkDirectDownload');
+        if (apkBtn) {
+          apkBtn.onclick = function () {
+            startBackgroundApkDownload(apkBtn.getAttribute('data-apk-url') || db.config.apkDownloadUrl);
+          };
+        }
+        const footerAdmBtn = document.getElementById('footerAdminBtn');
+        if (footerAdmBtn) {
+          footerAdmBtn.onclick = function () {
+            ui.roleMode = 'ADMIN';
+            renderApp();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+        }
         footerEl.querySelectorAll('[data-footer-tab]').forEach((btn) => {
           btn.onclick = function () {
             ui.roleMode = 'PATIENT';
@@ -1579,9 +1793,28 @@
       function renderApp() {
         updateHeader();
         const root = document.getElementById('appRoot');
+        if (ui.roleMode === 'ADMIN') {
+          if (!ui.isAdminLoggedIn) {
+            root.innerHTML = renderAdminLoginGate();
+            bindAdminLoginEvents();
+          } else {
+            root.innerHTML = renderSuperAdminDashboard();
+            bindSuperAdminEvents();
+          }
+          renderFooterArea();
+          return;
+        }
+
         if (ui.roleMode === 'DOCTOR') {
-          root.innerHTML = renderDoctorDashboard();
-          bindDoctorDashboardEvents();
+          const loggedDoc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
+          if (!loggedDoc) {
+            ui.loggedInDoctorId = null;
+            root.innerHTML = renderDoctorLoginGate();
+            bindDoctorLoginEvents();
+          } else {
+            root.innerHTML = renderDoctorDashboard();
+            bindDoctorDashboardEvents();
+          }
           renderFooterArea();
           return;
         }
@@ -1724,12 +1957,18 @@
       function openConfigModal() {
         const cfg = db.config;
         openModal('إعدادات المنصة الموحدة (Config)',
-          '<div style="font-size:0.85rem;color:var(--text-muted);">تعديل اسم المنصة، المستشفى، رابط تحميل الـ APK، ورابط قاعدة الأدوية المصرية (workers.dev):</div>' +
+          '<div style="font-size:0.85rem;color:var(--text-muted);">تعديل اسم المنصة، المستشفى، رابط تحميل الـ APK، وبيانات الإدارة العليا:</div>' +
           '<input class="input" id="cfgPlatform" value="' + esc(cfg.platformNameAr) + '" placeholder="اسم المنصة" />' +
           '<input class="input" id="cfgVillage" value="' + esc(cfg.villageNameAr) + '" placeholder="اسم القرية / المركز" />' +
           '<input class="input" id="cfgHospital" value="' + esc(cfg.hospitalNameAr) + '" placeholder="اسم المستشفى التخصصي" />' +
           '<input class="input" id="cfgApk" value="' + esc(cfg.apkDownloadUrl) + '" placeholder="رابط تحميل APK المباشر" dir="ltr" />' +
           '<input class="input" id="cfgMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" placeholder="رابط API الأدوية المصرية (workers.dev - اختياري)" dir="ltr" />' +
+          '<hr style="border:none;border-top:1px dashed var(--border);margin:4px 0;" />' +
+          '<div style="font-weight:700;font-size:0.88rem;color:var(--teal);">🛡️ بيانات دخول الإدارة العليا</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<input class="input" id="cfgAdminUser" value="' + esc(cfg.adminUsername || 'admin') + '" placeholder="اسم مستخدم الإدارة" dir="ltr" />' +
+            '<input class="input" id="cfgAdminPass" value="' + esc(cfg.adminPassword || 'teb2026') + '" placeholder="كلمة مرور الإدارة" dir="ltr" />' +
+          '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
             '<button class="btn btn-outline" id="btnResetCfg">استعادة الافتراضي</button>' +
             '<button class="btn btn-primary" id="btnSaveCfg">حفظ وتطبيق</button>' +
@@ -1741,6 +1980,8 @@
               db.config.hospitalNameAr = document.getElementById('cfgHospital').value.trim() || DEFAULT_CONFIG.hospitalNameAr;
               db.config.apkDownloadUrl = document.getElementById('cfgApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
               db.config.medicationsApiUrl = document.getElementById('cfgMedsApi').value.trim();
+              db.config.adminUsername = document.getElementById('cfgAdminUser').value.trim() || DEFAULT_CONFIG.adminUsername;
+              db.config.adminPassword = document.getElementById('cfgAdminPass').value.trim() || DEFAULT_CONFIG.adminPassword;
               saveState(db);
               await refreshMedicationsFromApi();
               closeModal();
@@ -1754,6 +1995,132 @@
               closeModal();
               showToast('تم استعادة الإعدادات الافتراضية');
               renderApp();
+            };
+          }
+        );
+      }
+
+      function openAdminDoctorFormModal(editDoc) {
+        const isEdit = Boolean(editDoc);
+        const startHr = editDoc ? Math.floor(editDoc.workStartMinutes / 60) : 17;
+        const endHr = editDoc ? Math.floor(editDoc.workEndMinutes / 60) : 21;
+        const dur = editDoc ? editDoc.slotDurationMinutes : 20;
+
+        openModal(
+          isEdit ? 'تعديل بيانات الدكتور / العيادة' : 'إضافة دكتور أو عيادة جديدة',
+          '<input class="input" id="admDocName" value="' + esc(editDoc ? editDoc.doctorName : '') + '" placeholder="اسم الدكتور (مثال: د. أحمد السيد)" />' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<input class="input" id="admDocSpec" value="' + esc(editDoc ? editDoc.specialty : '') + '" placeholder="التخصص (مثال: باطنة)" />' +
+            '<select class="select" id="admDocType">' +
+              '<option value="PRIVATE"' + (!editDoc || editDoc.clinicType === 'PRIVATE' ? ' selected' : '') + '>عيادة خاصة</option>' +
+              '<option value="HOSPITAL"' + (editDoc && editDoc.clinicType === 'HOSPITAL' ? ' selected' : '') + '>المستشفى التخصصي</option>' +
+            '</select>' +
+          '</div>' +
+          '<input class="input" id="admClinicName" value="' + esc(editDoc ? editDoc.clinicName : '') + '" placeholder="اسم العيادة أو القسم" />' +
+          '<textarea class="textarea" id="admDocBio" placeholder="نبذة عن الدكتور والخبرات...">' + esc(editDoc ? (editDoc.bio || '') : '') + '</textarea>' +
+          '<div style="display:grid;grid-template-columns:1.4fr 0.6fr;gap:8px;">' +
+            '<input class="input" id="admDocLoc" value="' + esc(editDoc ? editDoc.locationLabel : '') + '" placeholder="عنوان العيادة بالتفصيل في الحجايزة أو القرى المجاورة" />' +
+            '<input class="input" id="admDocFee" type="number" value="' + esc(editDoc ? editDoc.feeEgp : 150) + '" placeholder="سعر الكشف" />' +
+          '</div>' +
+          '<input class="input" id="admDocMaps" value="' + esc(editDoc ? (editDoc.mapsUrl || '') : '') + '" placeholder="رابط موقع العيادة على خرائط جوجل (Google Maps)" dir="ltr" />' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">' +
+            '<div><label style="font-size:0.78rem;color:var(--text-muted);">بداية (ساعة)</label><input class="input" id="admStartHr" type="number" min="8" max="22" value="' + startHr + '" /></div>' +
+            '<div><label style="font-size:0.78rem;color:var(--text-muted);">نهاية (ساعة)</label><input class="input" id="admEndHr" type="number" min="9" max="23" value="' + endHr + '" /></div>' +
+            '<div><label style="font-size:0.78rem;color:var(--text-muted);">مدة الكشف (د)</label>' +
+              '<select class="select" id="admSlotDur">' +
+                '<option value="15"' + (dur === 15 ? ' selected' : '') + '>15 دقيقة</option>' +
+                '<option value="20"' + (dur === 20 ? ' selected' : '') + '>20 دقيقة</option>' +
+                '<option value="30"' + (dur === 30 ? ' selected' : '') + '>30 دقيقة</option>' +
+              '</select>' +
+            '</div>' +
+          '</div>' +
+          '<hr style="border:none;border-top:1px dashed var(--border);margin:4px 0;" />' +
+          '<div style="font-weight:700;font-size:0.88rem;color:var(--teal);">🔐 حساب تسجيل دخول الدكتور للوحة العيادة</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<input class="input" id="admDocUser" value="' + esc(editDoc ? (editDoc.username || '') : '') + '" placeholder="اسم المستخدم أو رقم الهاتف" dir="ltr" />' +
+            '<input class="input" id="admDocPass" value="' + esc(editDoc ? (editDoc.password || '') : '1234') + '" placeholder="كلمة المرور" dir="ltr" />' +
+          '</div>' +
+          '<button class="btn btn-primary btn-block" id="btnSaveAdminDoctor">' + (isEdit ? '💾 حفظ التعديلات وتحديث المنصة فوراً' : '➕ إضافة الدكتور ونشره فوراً في المنصة') + '</button>',
+          function () {
+            document.getElementById('btnSaveAdminDoctor').onclick = function () {
+              const doctorName = document.getElementById('admDocName').value.trim();
+              const specialty = document.getElementById('admDocSpec').value.trim();
+              const clinicType = document.getElementById('admDocType').value;
+              const clinicName = document.getElementById('admClinicName').value.trim() || (clinicType === 'HOSPITAL' ? db.config.hospitalNameAr + ' - ' + specialty : 'عيادة ' + doctorName);
+              const bio = document.getElementById('admDocBio').value.trim();
+              const locationLabel = document.getElementById('admDocLoc').value.trim() || 'الحجايزة - الشارع الرئيسي';
+              const feeEgp = parseInt(document.getElementById('admDocFee').value, 10) || 150;
+              const mapsUrl = document.getElementById('admDocMaps').value.trim();
+              const sHr = Math.min(22, Math.max(8, parseInt(document.getElementById('admStartHr').value, 10) || 17));
+              const eHr = Math.min(23, Math.max(sHr + 1, parseInt(document.getElementById('admEndHr').value, 10) || 21));
+              const slotDurationMinutes = parseInt(document.getElementById('admSlotDur').value, 10) || 20;
+              const username = document.getElementById('admDocUser').value.trim();
+              const password = document.getElementById('admDocPass').value.trim() || '1234';
+
+              if (!doctorName || !specialty || !username) {
+                showToast('يرجى إدخال اسم الدكتور والتخصص واسم المستخدم/الهاتف');
+                return;
+              }
+
+              const duplicateUser = db.doctors.find((d) => d.username === username && (!isEdit || d.id !== editDoc.id));
+              if (duplicateUser) {
+                showToast('اسم المستخدم أو الهاتف مستخدم بالفعل لدكتور آخر');
+                return;
+              }
+
+              if (isEdit) {
+                const scheduleChanged =
+                  editDoc.workStartMinutes !== sHr * 60 ||
+                  editDoc.workEndMinutes !== eHr * 60 ||
+                  editDoc.slotDurationMinutes !== slotDurationMinutes;
+
+                editDoc.doctorName = doctorName;
+                editDoc.specialty = specialty;
+                editDoc.clinicType = clinicType;
+                editDoc.clinicName = clinicName;
+                editDoc.bio = bio;
+                editDoc.locationLabel = locationLabel;
+                editDoc.feeEgp = feeEgp;
+                editDoc.mapsUrl = mapsUrl;
+                editDoc.workStartMinutes = sHr * 60;
+                editDoc.workEndMinutes = eHr * 60;
+                editDoc.slotDurationMinutes = slotDurationMinutes;
+                editDoc.username = username;
+                editDoc.password = password;
+
+                if (scheduleChanged) {
+                  db.slots = db.slots.filter((s) => s.doctorId !== editDoc.id).concat(buildDoctorSlots(editDoc, {}));
+                }
+                saveState(db);
+                closeModal();
+                showToast('تم تحديث بيانات ' + doctorName + ' في المنصة فوراً');
+                renderApp();
+              } else {
+                const newDoc = {
+                  id: 'doc_' + Date.now(),
+                  doctorName: doctorName,
+                  specialty: specialty,
+                  clinicName: clinicName,
+                  clinicType: clinicType,
+                  locationLabel: locationLabel,
+                  bio: bio,
+                  mapsUrl: mapsUrl,
+                  username: username,
+                  password: password,
+                  feeEgp: feeEgp,
+                  workStartMinutes: sHr * 60,
+                  workEndMinutes: eHr * 60,
+                  slotDurationMinutes: slotDurationMinutes,
+                  currentDelayMinutes: 0,
+                  rating: 4.9
+                };
+                db.doctors.unshift(newDoc);
+                db.slots = db.slots.concat(buildDoctorSlots(newDoc, {}));
+                saveState(db);
+                closeModal();
+                showToast('تمت إضافة ' + doctorName + ' ونشر عيادته في المنصة فوراً');
+                renderApp();
+              }
             };
           }
         );
@@ -2182,15 +2549,151 @@
         });
       }
 
-      function bindDoctorDashboardEvents() {
-        const doc = db.doctors.find((d) => d.id === ui.activeAdminDoctorId) || db.doctors[0];
+      function bindDoctorLoginEvents() {
+        const submitBtn = document.getElementById('btnDocLoginSubmit');
+        const idInp = document.getElementById('docLoginIdentifier');
+        const passInp = document.getElementById('docLoginPassword');
+        const errEl = document.getElementById('docLoginError');
 
-        document.querySelectorAll('[data-admin-doc]').forEach((btn) => {
-          btn.onclick = function () {
-            ui.activeAdminDoctorId = btn.getAttribute('data-admin-doc');
+        function attemptDoctorLogin() {
+          const ident = (idInp.value || '').trim();
+          const pass = (passInp.value || '').trim();
+          const found = db.doctors.find((d) =>
+            (d.username && d.username === ident) && (d.password || '1234') === pass
+          );
+          if (!found) {
+            errEl.textContent = 'بيانات الدخول غير صحيحة. تأكد من اسم المستخدم وكلمة المرور من الإدارة.';
+            errEl.style.display = 'block';
+            return;
+          }
+          ui.loggedInDoctorId = found.id;
+          showToast('مرحباً ' + found.doctorName);
+          renderApp();
+        }
+
+        if (submitBtn) submitBtn.onclick = attemptDoctorLogin;
+        if (passInp) {
+          passInp.onkeydown = function (e) {
+            if (e.key === 'Enter') attemptDoctorLogin();
+          };
+        }
+      }
+
+      function bindAdminLoginEvents() {
+        const submitBtn = document.getElementById('btnAdminLoginSubmit');
+        const userInp = document.getElementById('admLoginUser');
+        const passInp = document.getElementById('admLoginPass');
+        const errEl = document.getElementById('admLoginError');
+        const backBtn = document.getElementById('btnAdminCancelBack');
+
+        function attemptAdminLogin() {
+          const u = (userInp.value || '').trim();
+          const p = (passInp.value || '').trim();
+          const expectedU = db.config.adminUsername || DEFAULT_CONFIG.adminUsername;
+          const expectedP = db.config.adminPassword || DEFAULT_CONFIG.adminPassword;
+          if (u !== expectedU || p !== expectedP) {
+            errEl.textContent = 'اسم المستخدم أو كلمة مرور الإدارة غير صحيحة.';
+            errEl.style.display = 'block';
+            return;
+          }
+          ui.isAdminLoggedIn = true;
+          showToast('تم تسجيل دخول الإدارة العليا بنجاح');
+          renderApp();
+        }
+
+        if (submitBtn) submitBtn.onclick = attemptAdminLogin;
+        if (passInp) {
+          passInp.onkeydown = function (e) {
+            if (e.key === 'Enter') attemptAdminLogin();
+          };
+        }
+        if (backBtn) {
+          backBtn.onclick = function () {
+            ui.roleMode = 'PATIENT';
             renderApp();
           };
+        }
+      }
+
+      function bindSuperAdminEvents() {
+        const addBtn = document.getElementById('btnAdminAddDoctor');
+        if (addBtn) addBtn.onclick = function () { openAdminDoctorFormModal(null); };
+
+        const settingsBtn = document.getElementById('btnAdminOpenSettings');
+        if (settingsBtn) settingsBtn.onclick = openConfigModal;
+
+        const logoutBtn = document.getElementById('btnAdminLogout');
+        if (logoutBtn) {
+          logoutBtn.onclick = function () {
+            ui.isAdminLoggedIn = false;
+            ui.roleMode = 'PATIENT';
+            showToast('تم تسجيل خروج الإدارة');
+            renderApp();
+          };
+        }
+
+        const searchInp = document.getElementById('adminDoctorSearch');
+        if (searchInp) {
+          searchInp.oninput = function (e) {
+            const pos = e.target.selectionStart;
+            ui.adminSearchQuery = e.target.value;
+            renderApp();
+            const again = document.getElementById('adminDoctorSearch');
+            if (again) {
+              again.focus();
+              again.setSelectionRange(pos, pos);
+            }
+          };
+        }
+
+        document.querySelectorAll('[data-admin-edit-doc]').forEach((btn) => {
+          btn.onclick = function () {
+            const doc = db.doctors.find((d) => d.id === btn.getAttribute('data-admin-edit-doc'));
+            if (doc) openAdminDoctorFormModal(doc);
+          };
         });
+
+        document.querySelectorAll('[data-admin-delete-doc]').forEach((btn) => {
+          btn.onclick = function () {
+            const doc = db.doctors.find((d) => d.id === btn.getAttribute('data-admin-delete-doc'));
+            if (!doc) return;
+            openModal('تأكيد حذف الدكتور من المنصة',
+              '<div>هل أنت متأكد من حذف <strong>' + esc(doc.doctorName) + '</strong> (' + esc(doc.clinicName) + ') نهائياً؟ سيتم حذف جميع مواعيده أيضاً.</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">' +
+                '<button class="btn btn-outline" id="btnCancelDeleteDoc">تراجع</button>' +
+                '<button class="btn btn-danger-outline" id="btnConfirmDeleteDoc">🗑️ حذف نهائي</button>' +
+              '</div>',
+              function () {
+                document.getElementById('btnCancelDeleteDoc').onclick = closeModal;
+                document.getElementById('btnConfirmDeleteDoc').onclick = function () {
+                  db.doctors = db.doctors.filter((d) => d.id !== doc.id);
+                  db.slots = db.slots.filter((s) => s.doctorId !== doc.id);
+                  if (db.doctorFavorites) delete db.doctorFavorites[doc.id];
+                  if (ui.loggedInDoctorId === doc.id) ui.loggedInDoctorId = null;
+                  if (ui.bookingDoctorId === doc.id) ui.bookingDoctorId = null;
+                  saveState(db);
+                  closeModal();
+                  showToast('تم حذف ' + doc.doctorName + ' من المنصة نهائياً');
+                  renderApp();
+                };
+              }
+            );
+          };
+        });
+      }
+
+      function bindDoctorDashboardEvents() {
+        const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
+        if (!doc) return;
+
+        const logoutBtn = document.getElementById('btnDoctorLogout');
+        if (logoutBtn) {
+          logoutBtn.onclick = function () {
+            ui.loggedInDoctorId = null;
+            showToast('تم تسجيل خروج الطبيب');
+            renderApp();
+          };
+        }
 
         function applyDelay(mins) {
           doc.currentDelayMinutes += mins;
@@ -2248,6 +2751,11 @@
       };
       document.getElementById('btnNotifications').onclick = openNotificationsModal;
       document.getElementById('btnAccount').onclick = openAccountModal;
+      document.getElementById('btnSuperAdmin').onclick = function () {
+        ui.roleMode = 'ADMIN';
+        renderApp();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
       document.getElementById('btnConfig').onclick = openConfigModal;
 
       document.getElementById('bottomNav').querySelectorAll('.nav-item').forEach((btn) => {

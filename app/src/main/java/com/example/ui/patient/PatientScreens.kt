@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
@@ -113,6 +114,7 @@ fun PatientHomeScreen(
     onOpenAddFamilyDialog: () -> Unit,
     onOpenDoctorBooking: (String) -> Unit,
     onCancelSlot: (String) -> Unit,
+    onOpenSuperAdmin: () -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -455,6 +457,7 @@ fun PatientHomeScreen(
                             onShowMessage("رقم التواصل: ${state.brandConfig.supportPhone}")
                         }
                     },
+                    onOpenSuperAdmin = onOpenSuperAdmin,
                 )
             }
         }
@@ -539,6 +542,7 @@ private fun FooterContactAndRightsSection(
     supportPhone: String,
     onWhatsAppClick: () -> Unit,
     onCallClick: () -> Unit,
+    onOpenSuperAdmin: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -592,6 +596,18 @@ private fun FooterContactAndRightsSection(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(supportPhone)
                     }
+                }
+                OutlinedButton(
+                    onClick = onOpenSuperAdmin,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("footer_admin_button"),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Filled.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("إدارة المنصة (Admin)")
                 }
             }
         }
@@ -875,6 +891,7 @@ fun DoctorDirectoryCard(
     bookedCount: Int,
     onBookClick: () -> Unit,
 ) {
+    val context = LocalContext.current
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -998,6 +1015,43 @@ fun DoctorDirectoryCard(
                 }
             }
 
+            if (doctor.bio.isNotBlank()) {
+                Text(
+                    text = doctor.bio,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            if (doctor.mapsUrl.isNotBlank()) {
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(doctor.mapsUrl))
+                            )
+                        } catch (_: Exception) {
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "موقع العيادة على خرائط جوجل",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+
             if (doctor.currentDelayMinutes > 0) {
                 Surface(
                     color = DelayWarningBg,
@@ -1069,6 +1123,7 @@ fun DoctorBookingScreen(
 ) {
     BackHandler(onBack = onBack)
 
+    val context = LocalContext.current
     var slotPendingConfirm by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     val familyIds = remember(familyMembers) { familyMembers.map { it.id }.toSet() }
     val familyNames = remember(familyMembers) { familyMembers.map { it.fullName }.toSet() }
@@ -1139,6 +1194,33 @@ fun DoctorBookingScreen(
                                 text = "مواعيد العمل: ${TimeUtils.formatMinutesAr(doctor.workStartMinutes)} إلى ${TimeUtils.formatMinutesAr(doctor.workEndMinutes)} (كل ${doctor.slotDurationMinutes} دقيقة)",
                                 style = MaterialTheme.typography.bodySmall,
                             )
+                        }
+                        if (doctor.bio.isNotBlank()) {
+                            Text(
+                                text = doctor.bio,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (doctor.mapsUrl.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = {
+                                    try {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse(doctor.mapsUrl))
+                                        )
+                                    } catch (_: Exception) {
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp),
+                            ) {
+                                Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("موقع العيادة على خرائط جوجل")
+                            }
                         }
                         if (doctor.currentDelayMinutes > 0) {
                             Surface(

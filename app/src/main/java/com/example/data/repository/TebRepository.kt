@@ -38,6 +38,9 @@ class TebRepository(
     private val activeAccountKey = stringPreferencesKey("active_account_id")
     private val activeMemberKey = stringPreferencesKey("active_member_id")
     private val activeDoctorPortalKey = stringPreferencesKey("active_doctor_portal_id")
+    private val loggedInDoctorIdKey = stringPreferencesKey("logged_in_doctor_id")
+    private val adminUsernameKey = stringPreferencesKey("admin_username")
+    private val adminPasswordKey = stringPreferencesKey("admin_password")
 
     val activeAccountIdFlow: Flow<String> = appContext.tebDataStore.data
         .map { prefs -> prefs[activeAccountKey] ?: DEFAULT_ACCOUNT_ID }
@@ -47,6 +50,15 @@ class TebRepository(
 
     val activeDoctorPortalIdFlow: Flow<String> = appContext.tebDataStore.data
         .map { prefs -> prefs[activeDoctorPortalKey] ?: "doc_batna_1" }
+
+    val loggedInDoctorIdFlow: Flow<String?> = appContext.tebDataStore.data
+        .map { prefs -> prefs[loggedInDoctorIdKey]?.takeIf { it.isNotBlank() } }
+
+    val adminUsernameFlow: Flow<String> = appContext.tebDataStore.data
+        .map { prefs -> prefs[adminUsernameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminUsername }
+
+    val adminPasswordFlow: Flow<String> = appContext.tebDataStore.data
+        .map { prefs -> prefs[adminPasswordKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPassword }
 
     val doctorsFlow: Flow<List<ClinicDoctorEntity>> = dao.observeDoctors()
     val allSlotsFlow: Flow<List<AppointmentSlotEntity>> = dao.observeAllSlots()
@@ -67,6 +79,170 @@ class TebRepository(
 
     suspend fun setActiveDoctorPortal(doctorId: String) {
         appContext.tebDataStore.edit { it[activeDoctorPortalKey] = doctorId }
+    }
+
+    suspend fun updateAdminCredentials(username: String, password: String) {
+        val cleanUser = username.trim().ifEmpty { AppConfig.defaultBrand.adminUsername }
+        val cleanPass = password.trim().ifEmpty { AppConfig.defaultBrand.adminPassword }
+        appContext.tebDataStore.edit { prefs ->
+            prefs[adminUsernameKey] = cleanUser
+            prefs[adminPasswordKey] = cleanPass
+        }
+    }
+
+    suspend fun loginDoctor(identifier: String, password: String): Result<ClinicDoctorEntity> {
+        val cleanUser = identifier.trim()
+        val cleanPass = password.trim()
+        if (cleanUser.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال اسم المستخدم أو رقم الهاتف"))
+        }
+        val doc = dao.findDoctorByUsername(cleanUser)
+            ?: return Result.failure(IllegalArgumentException("لم يتم العثور على حساب طبيب بهذا الاسم أو الرقم"))
+        if (doc.password != cleanPass) {
+            return Result.failure(IllegalArgumentException("كلمة المرور غير صحيحة"))
+        }
+        appContext.tebDataStore.edit { prefs ->
+            prefs[loggedInDoctorIdKey] = doc.id
+            prefs[activeDoctorPortalKey] = doc.id
+        }
+        return Result.success(doc)
+    }
+
+    suspend fun logoutDoctor() {
+        appContext.tebDataStore.edit { prefs ->
+            prefs.remove(loggedInDoctorIdKey)
+        }
+    }
+
+    suspend fun addDoctorByAdmin(
+        doctorName: String,
+        specialty: String,
+        clinicName: String,
+        clinicType: String,
+        locationLabel: String,
+        bio: String,
+        mapsUrl: String,
+        feeEgp: Int,
+        workStartMinutes: Int,
+        workEndMinutes: Int,
+        slotDurationMinutes: Int,
+        username: String,
+        password: String,
+    ): Result<ClinicDoctorEntity> {
+        val cleanUser = username.trim()
+        val cleanName = doctorName.trim()
+        val cleanSpec = specialty.trim()
+        if (cleanName.isEmpty() || cleanSpec.isEmpty() || cleanUser.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال اسم الدكتور والتخصص واسم المستخدم/الهاتف"))
+        }
+        if (workEndMinutes <= workStartMinutes) {
+            return Result.failure(IllegalArgumentException("وقت النهاية يجب أن يكون بعد وقت البداية"))
+        }
+        val existing = dao.findDoctorByUsername(cleanUser)
+        if (existing != null) {
+            return Result.failure(IllegalArgumentException("اسم المستخدم أو الهاتف مسجل بالفعل لطبيب آخر"))
+        }
+        val resolvedClinicName = clinicName.trim().ifEmpty {
+            if (clinicType == ClinicType.HOSPITAL) "${AppConfig.defaultBrand.hospitalNameAr} - $cleanSpec"
+            else "عيادة $cleanName"
+        }
+        val doctor = ClinicDoctorEntity(
+            id = "doc_${UUID.randomUUID()}",
+            doctorName = cleanName,
+            specialty = cleanSpec,
+            clinicName = resolvedClinicName,
+            clinicType = clinicType,
+            locationLabel = locationLabel.trim().ifEmpty { "الحجايزة - الشارع الرئيسي" },
+            feeEgp = feeEgp.coerceAtLeast(0),
+            workStartMinutes = workStartMinutes,
+            workEndMinutes = workEndMinutes,
+            slotDurationMinutes = slotDurationMinutes,
+            currentDelayMinutes = 0,
+            rating = 4.9f,
+            experienceYears = 10,
+            bio = bio.trim(),
+            mapsUrl = mapsUrl.trim(),
+            username = cleanUser,
+            password = password.trim().ifEmpty { "1234" },
+        )
+        dao.insertDoctor(doctor)
+        val initialSlots = buildSlotsForDoctor(doctor)
+        dao.insertSlots(initialSlots)
+        return Result.success(doctor)
+    }
+
+    suspend fun updateDoctorByAdmin(
+        doctorId: String,
+        doctorName: String,
+        specialty: String,
+        clinicName: String,
+        clinicType: String,
+        locationLabel: String,
+        bio: String,
+        mapsUrl: String,
+        feeEgp: Int,
+        workStartMinutes: Int,
+        workEndMinutes: Int,
+        slotDurationMinutes: Int,
+        username: String,
+        password: String,
+    ): Result<ClinicDoctorEntity> {
+        val existingDoc = dao.getDoctorById(doctorId)
+            ?: return Result.failure(IllegalStateException("الدكتور غير موجود"))
+        val cleanUser = username.trim()
+        val cleanName = doctorName.trim()
+        val cleanSpec = specialty.trim()
+        if (cleanName.isEmpty() || cleanSpec.isEmpty() || cleanUser.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال اسم الدكتور والتخصص واسم المستخدم/الهاتف"))
+        }
+        if (workEndMinutes <= workStartMinutes) {
+            return Result.failure(IllegalArgumentException("وقت النهاية يجب أن يكون بعد وقت البداية"))
+        }
+        val conflict = dao.findDoctorByUsername(cleanUser)
+        if (conflict != null && conflict.id != doctorId) {
+            return Result.failure(IllegalArgumentException("اسم المستخدم أو الهاتف مسجل بالفعل لطبيب آخر"))
+        }
+        val scheduleChanged = existingDoc.workStartMinutes != workStartMinutes ||
+            existingDoc.workEndMinutes != workEndMinutes ||
+            existingDoc.slotDurationMinutes != slotDurationMinutes
+
+        val updated = existingDoc.copy(
+            doctorName = cleanName,
+            specialty = cleanSpec,
+            clinicName = clinicName.trim().ifEmpty { existingDoc.clinicName },
+            clinicType = clinicType,
+            locationLabel = locationLabel.trim().ifEmpty { existingDoc.locationLabel },
+            bio = bio.trim(),
+            mapsUrl = mapsUrl.trim(),
+            feeEgp = feeEgp.coerceAtLeast(0),
+            workStartMinutes = workStartMinutes,
+            workEndMinutes = workEndMinutes,
+            slotDurationMinutes = slotDurationMinutes,
+            currentDelayMinutes = if (scheduleChanged) 0 else existingDoc.currentDelayMinutes,
+            username = cleanUser,
+            password = password.trim().ifEmpty { existingDoc.password },
+        )
+        dao.updateDoctor(updated)
+        if (scheduleChanged) {
+            val newSlots = buildSlotsForDoctor(updated)
+            dao.replaceDoctorSchedule(
+                doctorId = doctorId,
+                startMin = workStartMinutes,
+                endMin = workEndMinutes,
+                durationMin = slotDurationMinutes,
+                newSlots = newSlots,
+            )
+        }
+        return Result.success(updated)
+    }
+
+    suspend fun deleteDoctorByAdmin(doctorId: String) {
+        dao.deleteDoctorCascade(doctorId)
+        appContext.tebDataStore.edit { prefs ->
+            if (prefs[loggedInDoctorIdKey] == doctorId) {
+                prefs.remove(loggedInDoctorIdKey)
+            }
+        }
     }
 
     suspend fun toggleFavoriteMedication(doctorId: String, medicationId: String) {
@@ -131,6 +307,7 @@ class TebRepository(
             dao.insertFamilyMembers(familyMembers)
 
             val hospitalName = AppConfig.defaultBrand.hospitalNameAr
+            val defaultMapsUrl = "https://maps.google.com/?q=الحجايزة+السنبلاوين+الدقهلية"
             val doctors = listOf(
                 ClinicDoctorEntity(
                     id = "doc_batna_1",
@@ -145,6 +322,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.9f,
                     experienceYears = 15,
+                    bio = "أخصائي أمراض الباطنة والجهاز الهضمي والكبد — خبرة 15 عاماً.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001001",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_kids_1",
@@ -159,6 +340,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.9f,
                     experienceYears = 11,
+                    bio = "أخصائي طب الأطفال وحديثي الولادة ومتابعة النمو والتغذية.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001002",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_ortho_1",
@@ -173,6 +358,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.8f,
                     experienceYears = 14,
+                    bio = "استشاري جراحة العظام والكسور والمفاصل وإصابات الملاعب.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001003",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_obgyn_1",
@@ -187,6 +376,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.9f,
                     experienceYears = 16,
+                    bio = "أخصائي أمراض النساء والتوليد ومتابعة الحمل بالسونار.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001004",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_dental_1",
@@ -201,6 +394,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.9f,
                     experienceYears = 10,
+                    bio = "طب وجراحة الفم والأسنان وعلاج الجذور والتركيبات.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001005",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_cardio_1",
@@ -215,6 +412,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.8f,
                     experienceYears = 18,
+                    bio = "استشاري أمراض القلب والأوعية الدموية ورسم القلب والإيكو.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001006",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_eye_1",
@@ -229,6 +430,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.7f,
                     experienceYears = 10,
+                    bio = "أخصائي طب وجراحة العيون وفحص قاع العين والنظارات.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001007",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_ent_1",
@@ -243,6 +448,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.7f,
                     experienceYears = 9,
+                    bio = "أخصائي جراحة الأنف والأذن والحنجرة وعلاج الجيوب الأنفية.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001008",
+                    password = "1234",
                 ),
                 ClinicDoctorEntity(
                     id = "doc_derm_1",
@@ -257,6 +466,10 @@ class TebRepository(
                     slotDurationMinutes = 20,
                     rating = 4.8f,
                     experienceYears = 8,
+                    bio = "أخصائي الأمراض الجلدية والتناسلية والعناية بالبشرة والشعر.",
+                    mapsUrl = defaultMapsUrl,
+                    username = "01001001009",
+                    password = "1234",
                 ),
             )
             dao.insertDoctors(doctors)

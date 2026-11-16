@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.config.AppConfig
 import com.example.data.local.BookingSource
+import com.example.data.local.ClinicType
 import com.example.data.local.SlotStatus
 import com.example.data.local.TebDatabase
 import com.example.data.medications.MedicationCatalog
@@ -133,5 +134,78 @@ class ExampleRobolectricTest {
         assertEquals("6:00 م", TimeUtils.formatMinutesAr(18 * 60))
         assertEquals("6:20 م", TimeUtils.formatMinutesAr(18 * 60 + 20))
         assertEquals("9:00 ص", TimeUtils.formatMinutesAr(9 * 60))
+    }
+
+    @Test
+    fun superAdminDoctorCrudAndIndependentDoctorLoginWorkEndToEnd() = runBlocking {
+        repository.ensureSeeded()
+
+        val badLogin = repository.loginDoctor("01001001001", "wrongpass")
+        assertTrue(badLogin.isFailure)
+
+        val validSeededLogin = repository.loginDoctor("01001001001", "1234")
+        assertTrue(validSeededLogin.isSuccess)
+        assertEquals("doc_batna_1", repository.loggedInDoctorIdFlow.first())
+
+        repository.logoutDoctor()
+        assertEquals(null, repository.loggedInDoctorIdFlow.first())
+
+        val addedRes = repository.addDoctorByAdmin(
+            doctorName = "د. كريم عادل سليم",
+            specialty = "الأنف والأذن والحنجرة",
+            clinicName = "عيادة الشفاء التخصصية",
+            clinicType = ClinicType.PRIVATE,
+            locationLabel = "الحجايزة - بجوار الوحدة الصحية",
+            bio = "استشاري جراحة الأنف والأذن والحنجرة",
+            mapsUrl = "https://maps.google.com/?q=30.892,31.592",
+            feeEgp = 180,
+            workStartMinutes = 17 * 60,
+            workEndMinutes = 19 * 60,
+            slotDurationMinutes = 20,
+            username = "01055566677",
+            password = "docpass99",
+        )
+        assertTrue(addedRes.isSuccess)
+        val createdDoc = addedRes.getOrThrow()
+
+        val allDocs = repository.doctorsFlow.first()
+        assertTrue(allDocs.any { it.id == createdDoc.id && it.mapsUrl.contains("maps.google.com") })
+        val generatedSlots = repository.observeSlotsForDoctor(createdDoc.id).first()
+        assertEquals(6, generatedSlots.size)
+
+        val newDocLogin = repository.loginDoctor("01055566677", "docpass99")
+        assertTrue(newDocLogin.isSuccess)
+        assertEquals(createdDoc.id, repository.loggedInDoctorIdFlow.first())
+
+        val updateRes = repository.updateDoctorByAdmin(
+            doctorId = createdDoc.id,
+            doctorName = "د. كريم عادل سليم",
+            specialty = "الأنف والأذن والحنجرة",
+            clinicName = "عيادة الشفاء المطورة",
+            clinicType = ClinicType.PRIVATE,
+            locationLabel = "الحجايزة - الطريق الرئيسي",
+            bio = "استشاري أول الأنف والأذن",
+            mapsUrl = "https://maps.google.com/?q=30.893,31.593",
+            feeEgp = 200,
+            workStartMinutes = 18 * 60,
+            workEndMinutes = 20 * 60,
+            slotDurationMinutes = 30,
+            username = "dr_karim",
+            password = "newpass88",
+        )
+        assertTrue(updateRes.isSuccess)
+        assertEquals(4, repository.observeSlotsForDoctor(createdDoc.id).first().size)
+
+        val updatedLogin = repository.loginDoctor("dr_karim", "newpass88")
+        assertTrue(updatedLogin.isSuccess)
+
+        repository.deleteDoctorByAdmin(createdDoc.id)
+        assertFalse(repository.doctorsFlow.first().any { it.id == createdDoc.id })
+        assertTrue(repository.observeSlotsForDoctor(createdDoc.id).first().isEmpty())
+        assertEquals(null, repository.loggedInDoctorIdFlow.first())
+
+        repository.updateAdminCredentials("eng_mohamed", "admin2026")
+        assertEquals("eng_mohamed", repository.adminUsernameFlow.first())
+        assertEquals("admin2026", repository.adminPasswordFlow.first())
     }
 }

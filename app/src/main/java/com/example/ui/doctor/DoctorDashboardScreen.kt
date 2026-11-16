@@ -21,10 +21,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderShared
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Schedule
@@ -53,8 +55,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -81,9 +85,115 @@ import com.example.ui.theme.TealPrimary
 import com.example.util.TimeUtils
 
 @Composable
+fun DoctorLoginGateScreen(
+    adminOwnerName: String,
+    onLoginDoctor: (identifier: String, password: String) -> Unit,
+) {
+    var identifier by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.35f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 500.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(14.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MedicalServices,
+                            contentDescription = "تسجيل دخول الأطباء",
+                            tint = TealPrimary,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "تسجيل دخول الأطباء والعيادات",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Text(
+                            text = "أدخل اسم المستخدم أو رقم الهاتف وكلمة المرور الخاصة بعيادتك",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = identifier,
+                    onValueChange = { identifier = it },
+                    label = { Text("اسم المستخدم أو رقم الهاتف") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("doctor_login_identifier"),
+                )
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("كلمة المرور") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("doctor_login_password"),
+                )
+
+                Button(
+                    onClick = { onLoginDoctor(identifier, password) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("doctor_login_submit"),
+                ) {
+                    Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("دخول إلى لوحة العيادة")
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "تُنشأ حسابات الأطباء وتُدار من لوحة الإدارة العليا ($adminOwnerName). مثال تجريبي: 01001001001 / 1234",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun DoctorDashboardScreen(
     state: TebUiState,
-    onSelectAdminDoctor: (String) -> Unit,
+    onLogoutDoctor: () -> Unit,
     onBookManualPhoneSlot: (slotId: String, name: String, phone: String) -> Unit,
     onCancelSlot: (slotId: String) -> Unit,
     onDelayDoctor: (doctorId: String, delayMinutes: Int) -> Unit,
@@ -93,7 +203,7 @@ fun DoctorDashboardScreen(
     onPreviewImage: (path: String, title: String) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
-    val activeDoctor = state.activeAdminDoctor ?: return
+    val activeDoctor = state.loggedInDoctor ?: return
     val slots = remember(state.allSlots, activeDoctor.id) {
         state.slotsForDoctor(activeDoctor.id)
     }
@@ -116,33 +226,32 @@ fun DoctorDashboardScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "لوحة تحكم الدكتور والسكرتيرة",
-                        style = MaterialTheme.typography.headlineMedium,
-                    )
-                    Text(
-                        text = "إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، والروشتة الإلكترونية الذكية.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            // Switch Active Doctor Clinic
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.doctors, key = { it.id }) { doc ->
-                        val selected = doc.id == activeDoctor.id
-                        FilterChip(
-                            selected = selected,
-                            onClick = { onSelectAdminDoctor(doc.id) },
-                            label = { Text("${doc.doctorName} (${doc.specialty})") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TealPrimary,
-                                selectedLabelColor = Color.White,
-                            ),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "لوحة تحكم عيادة ${activeDoctor.doctorName}",
+                            style = MaterialTheme.typography.headlineSmall,
                         )
+                        Text(
+                            text = "إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، والروشتة الإلكترونية.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onLogoutDoctor,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SlotBookedBorder),
+                        border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.5f)),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("doctor_logout_button"),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("خروج")
                     }
                 }
             }

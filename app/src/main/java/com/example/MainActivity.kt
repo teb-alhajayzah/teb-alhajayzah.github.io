@@ -53,12 +53,15 @@ import com.example.data.repository.TebRepository
 import com.example.ui.AppRoleMode
 import com.example.ui.PatientTab
 import com.example.ui.TebViewModel
+import com.example.ui.admin.AdminLoginGateScreen
+import com.example.ui.admin.SuperAdminDashboardScreen
 import com.example.ui.components.AccountAndFamilyDialog
 import com.example.ui.components.FullImagePreviewDialog
 import com.example.ui.components.NotificationsDialog
 import com.example.ui.components.PlatformConfigDialog
 import com.example.ui.components.TebTopHeader
 import com.example.ui.doctor.DoctorDashboardScreen
+import com.example.ui.doctor.DoctorLoginGateScreen
 import com.example.ui.patient.ClinicsDirectoryScreen
 import com.example.ui.patient.DoctorBookingScreen
 import com.example.ui.patient.MedicalFileScreen
@@ -147,6 +150,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                         showNotificationsDialog = true
                     },
                     onOpenAccount = { showAccountDialog = true },
+                    onOpenSuperAdmin = { viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN) },
                     onOpenConfig = { showConfigDialog = true },
                 )
             },
@@ -233,6 +237,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                                 onOpenAddFamilyDialog = { showAccountDialog = true },
                                                 onOpenDoctorBooking = viewModel::openDoctorBooking,
                                                 onCancelSlot = viewModel::cancelAppointment,
+                                                onOpenSuperAdmin = { viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN) },
                                                 onShowMessage = showMessage,
                                             )
                                         }
@@ -290,18 +295,47 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                 BackHandler {
                                     viewModel.switchRoleMode(AppRoleMode.PATIENT)
                                 }
-                                DoctorDashboardScreen(
-                                    state = state,
-                                    onSelectAdminDoctor = viewModel::selectAdminDoctorPortal,
-                                    onBookManualPhoneSlot = viewModel::bookManualPhoneSlot,
-                                    onCancelSlot = viewModel::cancelAppointment,
-                                    onDelayDoctor = viewModel::delayDoctorAppointments,
-                                    onGenerateSchedule = viewModel::generateSchedule,
-                                    onCompleteVisit = viewModel::completeVisitWithPrescription,
-                                    onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
-                                    onPreviewImage = { path, title -> previewImage = path to title },
-                                    onShowMessage = showMessage,
-                                )
+                                if (state.loggedInDoctor == null) {
+                                    DoctorLoginGateScreen(
+                                        adminOwnerName = state.brandConfig.adminOwnerName,
+                                        onLoginDoctor = viewModel::loginDoctor,
+                                    )
+                                } else {
+                                    DoctorDashboardScreen(
+                                        state = state,
+                                        onLogoutDoctor = viewModel::logoutDoctor,
+                                        onBookManualPhoneSlot = viewModel::bookManualPhoneSlot,
+                                        onCancelSlot = viewModel::cancelAppointment,
+                                        onDelayDoctor = viewModel::delayDoctorAppointments,
+                                        onGenerateSchedule = viewModel::generateSchedule,
+                                        onCompleteVisit = viewModel::completeVisitWithPrescription,
+                                        onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
+                                        onPreviewImage = { path, title -> previewImage = path to title },
+                                        onShowMessage = showMessage,
+                                    )
+                                }
+                            }
+
+                            AppRoleMode.SUPER_ADMIN -> {
+                                BackHandler {
+                                    viewModel.switchRoleMode(AppRoleMode.PATIENT)
+                                }
+                                if (!state.isAdminLoggedIn) {
+                                    AdminLoginGateScreen(
+                                        ownerName = state.brandConfig.adminOwnerName,
+                                        onLoginAdmin = viewModel::loginAdmin,
+                                        onBackToPatient = { viewModel.switchRoleMode(AppRoleMode.PATIENT) },
+                                    )
+                                } else {
+                                    SuperAdminDashboardScreen(
+                                        state = state,
+                                        onAddDoctor = viewModel::addDoctorByAdmin,
+                                        onUpdateDoctor = viewModel::updateDoctorByAdmin,
+                                        onDeleteDoctor = viewModel::deleteDoctorByAdmin,
+                                        onOpenSettings = { showConfigDialog = true },
+                                        onLogoutAdmin = viewModel::logoutAdmin,
+                                    )
+                                }
                             }
                         }
                     }
