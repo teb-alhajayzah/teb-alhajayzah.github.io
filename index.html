@@ -1336,6 +1336,7 @@
         CORS_PROXIES: [
           function (targetUrl) { return 'https://api.cors.lol/?url=' + encodeURIComponent(targetUrl); },
           function (targetUrl) { return 'https://proxy.corsfix.com/?' + targetUrl; },
+          function (targetUrl) { return 'https://cors-anywhere.herokuapp.com/' + targetUrl; },
           function (targetUrl) { return 'https://corsproxy.io/?url=' + encodeURIComponent(targetUrl); },
           function (targetUrl) { return 'https://cors.eu.org/' + targetUrl; }
         ],
@@ -1343,10 +1344,12 @@
           "export default {\n" +
           "  async fetch(req) {\n" +
           "    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' } });\n" +
-          "    const target = new URL(req.url).searchParams.get('url') || 'https://api.sms-gate.app/3rdparty/v1/messages';\n" +
-          "    const res = await fetch(target, { method: req.method, headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization') || '' }, body: req.method === 'POST' ? await req.text() : undefined });\n" +
+          "    const u = new URL(req.url).searchParams.get('url');\n" +
+          "    if (req.method === 'GET' && !u) return new Response('SMSGate CORS Proxy OK', { status: 200 });\n" +
+          "    const res = await fetch(u || 'https://api.sms-gate.app/3rdparty/v1/messages', { method: req.method, headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization') || '' }, body: req.method === 'POST' ? await req.text() : undefined });\n" +
           "    const out = new Response(res.body, res);\n" +
           "    out.headers.set('Access-Control-Allow-Origin', '*');\n" +
+          "    out.headers.set('Access-Control-Allow-Headers', '*');\n" +
           "    return out;\n" +
           "  }\n" +
           "};",
@@ -1489,8 +1492,10 @@
 
                 let detail = '';
                 try { detail = await resp.text(); } catch (e) {}
-                const isCorsfixUnregistered = detail.indexOf('corsfix_error') !== -1;
-                if (!isCorsfixUnregistered) {
+                const isProxyAccessNotice =
+                  detail.indexOf('corsfix_error') !== -1 ||
+                  detail.indexOf('/corsdemo') !== -1;
+                if (!isProxyAccessNotice) {
                   lastHttpError = bi(
                     'فشل الإرسال من خادم SMSGate (رمز ' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : ''),
                     'SMSGate server error (' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : '')
@@ -1531,9 +1536,10 @@
             return {
               ok: false,
               timedOut: false,
+              corsBlocked: !lastHttpError,
               error: lastHttpError || bi(
-                'خادم SMSGate يرفض طلبات المتصفح المباشرة (CORS) والبروكسيات المجانية مقيّدة حالياً (' + networkBlockedCount + ' محاولات). أضف رابط Cloudflare Worker في خانة البروكسي المخصص أعلاه أو أرسل من تطبيق الأندرويد مباشرة.',
-                'SMSGate blocks direct browser CORS and public proxies are currently rate-limited. Add a custom Cloudflare Worker URL above or send directly from the Android APK.'
+                'خادم SMSGate يرفض طلبات المتصفح المباشرة (CORS) والبروكسيات المجانية مقيّدة حالياً (' + networkBlockedCount + ' محاولات). اضغط أحد خيارات التفعيل بالأسفل أو أضف رابط Cloudflare Worker أو استخدم تطبيق الأندرويد.',
+                'SMSGate blocks direct browser CORS and public proxies are rate-limited. Use one of the CORS options below, add a Cloudflare Worker URL, or test from the Android APK.'
               )
             };
           } finally {
@@ -2686,6 +2692,12 @@
                           ? 'background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);'
                           : 'background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);')) +
                     'font-size:0.86rem;">' + esc(testSt.msg) + '</div>'
+                : '') +
+              (testSt.ok === false && testSt.corsBlocked
+                ? '<div style="display:flex;flex-direction:column;gap:8px;padding-top:4px;">' +
+                    '<a class="btn btn-outline btn-sm" href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" rel="noopener noreferrer" style="text-decoration:none;justify-content:center;">🚀 ' + esc(bi('1. تفعيل بروكسي التجربة الفوري (اضغط Request Access ثم ارجع وجرّب)', '1. Enable Instant Test Proxy (Tap Request Access & retry)')) + '</a>' +
+                    '<a class="btn btn-outline btn-sm" href="https://corsfix.com" target="_blank" rel="noopener noreferrer" style="text-decoration:none;justify-content:center;">🌐 ' + esc(bi('2. تفعيل دائم مجاني: سجّل نطاق teb-alhajayzah.github.io في Corsfix', '2. Free Permanent Fix: Register github.io on Corsfix')) + '</a>' +
+                  '</div>'
                 : '') +
             '</section>';
         } else {
@@ -4321,6 +4333,7 @@
               ui.smsTestStatus = {
                 busy: false,
                 ok: true,
+                corsBlocked: false,
                 msg: bi('✓ تم إرسال الرسالة التجريبية (كود التفعيل: 123456) بنجاح إلى ' + res.phone, '✓ Test SMS (OTP 123456) sent successfully to ' + res.phone)
               };
               showToast(bi('تم إرسال الرسالة التجريبية (123456) بنجاح!', 'Test SMS sent!'));
@@ -4328,6 +4341,7 @@
               ui.smsTestStatus = {
                 busy: false,
                 ok: false,
+                corsBlocked: Boolean(res.corsBlocked),
                 msg: res.error || bi('تعذر إرسال الرسالة التجريبية', 'Test SMS failed')
               };
               showToast(ui.smsTestStatus.msg);
