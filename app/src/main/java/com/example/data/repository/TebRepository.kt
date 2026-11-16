@@ -58,6 +58,9 @@ class TebRepository(
     private val cfgAnnouncementKey = stringPreferencesKey("cfg_home_announcement")
     private val cfgApkUrlKey = stringPreferencesKey("cfg_apk_url")
     private val cfgMedsApiKey = stringPreferencesKey("cfg_meds_api_url")
+    private val cfgSmsGateServerUrlKey = stringPreferencesKey("cfg_smsgate_server_url")
+    private val cfgSmsGateUsernameKey = stringPreferencesKey("cfg_smsgate_username")
+    private val cfgSmsGatePasswordKey = stringPreferencesKey("cfg_smsgate_password")
 
     val activeAccountIdFlow: Flow<String> = appContext.tebDataStore.data
         .map { prefs -> prefs[activeAccountKey] ?: DEFAULT_ACCOUNT_ID }
@@ -90,6 +93,9 @@ class TebRepository(
                 adminUsername = prefs[adminUsernameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminUsername,
                 adminPassword = prefs[adminPasswordKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPassword,
                 adminPin = prefs[adminPinKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPin,
+                smsGateServerUrl = prefs[cfgSmsGateServerUrlKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.smsGateServerUrl,
+                smsGateUsername = prefs[cfgSmsGateUsernameKey] ?: AppConfig.defaultBrand.smsGateUsername,
+                smsGatePassword = prefs[cfgSmsGatePasswordKey] ?: AppConfig.defaultBrand.smsGatePassword,
             )
         }
 
@@ -196,6 +202,19 @@ class TebRepository(
         }
     }
 
+    suspend fun updateSmsGateSettings(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ) {
+        val cleanUrl = serverUrl.trim().ifEmpty { AppConfig.defaultBrand.smsGateServerUrl }
+        appContext.tebDataStore.edit { prefs ->
+            prefs[cfgSmsGateServerUrlKey] = cleanUrl
+            prefs[cfgSmsGateUsernameKey] = username.trim()
+            prefs[cfgSmsGatePasswordKey] = password.trim()
+        }
+    }
+
     suspend fun resetFullPlatformConfig() {
         appContext.tebDataStore.edit { prefs ->
             prefs.remove(cfgPlatformNameKey)
@@ -208,6 +227,9 @@ class TebRepository(
             prefs.remove(adminPinKey)
             prefs.remove(adminUsernameKey)
             prefs.remove(adminPasswordKey)
+            prefs.remove(cfgSmsGateServerUrlKey)
+            prefs.remove(cfgSmsGateUsernameKey)
+            prefs.remove(cfgSmsGatePasswordKey)
         }
     }
 

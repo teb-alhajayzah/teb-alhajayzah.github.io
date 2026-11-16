@@ -341,6 +341,8 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         onSavePlatformSettings = viewModel::updateBrandConfig,
                                         onResetPlatformSettings = viewModel::resetBrandConfig,
                                         onGenerateOtpBatch = viewModel::generateActivationCodes,
+                                        onSaveSmsGateSettings = viewModel::saveSmsGateSettings,
+                                        onTestSmsGate = viewModel::sendTestSmsViaSmsGate,
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
@@ -360,6 +362,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             familyMembers = state.familyMembers,
             activeMemberId = state.activeMemberId,
             activeOtpChallenge = state.activeOtpChallenge,
+            smsOtpUiState = state.smsOtpUiState,
             supportPhone = state.brandConfig.supportPhone,
             otpWhatsappPhone = state.brandConfig.otpWhatsappPhone,
             appVersionLabel = state.brandConfig.appVersionLabel,

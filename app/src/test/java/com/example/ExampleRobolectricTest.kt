@@ -6,6 +6,7 @@ import com.example.config.AppConfig
 import com.example.data.local.BookingSource
 import com.example.data.local.ClinicType
 import com.example.auth.FirebaseReadyTestOtpProvider
+import com.example.auth.SmsGateService
 import com.example.data.local.SlotStatus
 import com.example.data.local.TebDatabase
 import com.example.data.medications.MedicationCatalog
@@ -331,5 +332,29 @@ class ExampleRobolectricTest {
 
         repository.unblockPhone("01055443322")
         assertTrue(repository.bookSlot(availSlot.id, "مريض مخالف", "01055443322", "", BookingSource.APP).isSuccess)
+    }
+
+    @Test
+    fun smsGateSettingsPersistenceAndEndpointResolutionWork() = runBlocking {
+        assertEquals("https://sms-gate.app", AppConfig.defaultBrand.smsGateServerUrl)
+        assertEquals(
+            "https://api.sms-gate.app/3rdparty/v1/messages",
+            SmsGateService.resolveMessagesEndpoint("https://sms-gate.app"),
+        )
+        assertEquals(
+            "http://192.168.1.50:8080/3rdparty/v1/messages",
+            SmsGateService.resolveMessagesEndpoint("http://192.168.1.50:8080/"),
+        )
+        assertEquals("+201141271027", SmsGateService.formatEgyptianE164("01141271027"))
+
+        repository.updateSmsGateSettings(
+            serverUrl = "https://sms-gate.app",
+            username = "teb_user",
+            password = "secret_sms_password",
+        )
+        val updated = repository.brandConfigFlow.first()
+        assertEquals("https://sms-gate.app", updated.smsGateServerUrl)
+        assertEquals("teb_user", updated.smsGateUsername)
+        assertEquals("secret_sms_password", updated.smsGatePassword)
     }
 }

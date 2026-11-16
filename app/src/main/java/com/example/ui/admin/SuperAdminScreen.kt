@@ -31,12 +31,15 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -67,10 +70,12 @@ import androidx.compose.ui.unit.dp
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.SlotStatus
+import com.example.ui.SmsOtpUiState
 import com.example.ui.TebUiState
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.theme.SlotAvailableBg
+import com.example.ui.theme.SlotAvailableBorder
 import com.example.ui.theme.SlotAvailableText
 import com.example.ui.theme.SlotBookedBg
 import com.example.ui.theme.SlotBookedBorder
@@ -129,6 +134,8 @@ fun SuperAdminDashboardScreen(
     ) -> Unit,
     onResetPlatformSettings: () -> Unit,
     onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
+    onSaveSmsGateSettings: (serverUrl: String, username: String, password: String) -> Unit,
+    onTestSmsGate: (serverUrl: String, username: String, password: String, testPhone: String) -> Unit,
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -152,6 +159,12 @@ fun SuperAdminDashboardScreen(
     var cfgApkUrl by remember(state.brandConfig.apkDownloadUrl) { mutableStateOf(state.brandConfig.apkDownloadUrl) }
     var cfgMedsApi by remember(state.brandConfig.medicationsApiUrl) { mutableStateOf(state.brandConfig.medicationsApiUrl) }
     var cfgAdminPin by remember(state.brandConfig.adminPin) { mutableStateOf(state.brandConfig.adminPin) }
+
+    // SMSGate settings & test phone state
+    var smsServerUrl by remember(state.brandConfig.smsGateServerUrl) { mutableStateOf(state.brandConfig.smsGateServerUrl) }
+    var smsUsername by remember(state.brandConfig.smsGateUsername) { mutableStateOf(state.brandConfig.smsGateUsername) }
+    var smsPassword by remember(state.brandConfig.smsGatePassword) { mutableStateOf(state.brandConfig.smsGatePassword) }
+    var smsTestPhone by remember { mutableStateOf("") }
 
     val q = searchQuery.trim()
     val privateDoctors = remember(state.doctors, q) {
@@ -257,6 +270,12 @@ fun SuperAdminDashboardScreen(
                         onClick = { selectedTab = 4 },
                         text = { Text("أكواد التفعيل (OTP)") },
                         modifier = Modifier.testTag("admin_otp_codes_tab"),
+                    )
+                    Tab(
+                        selected = selectedTab == 5,
+                        onClick = { selectedTab = 5 },
+                        text = { Text("إعدادات بوابة الرسائل (SMSGate)") },
+                        modifier = Modifier.testTag("admin_smsgate_tab"),
                     )
                 }
             }
@@ -591,6 +610,175 @@ fun SuperAdminDashboardScreen(
                         onGenerateBatch = { count -> onGenerateOtpBatch(count, "ADMIN") },
                         onShowMessage = onShowMessage,
                     )
+                }
+
+                5 -> {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Icon(Icons.Filled.Sms, contentDescription = null, tint = TealPrimary)
+                                    Text(
+                                        text = "إعدادات بوابة الرسائل (SMSGate)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                Text(
+                                    text = "ربط حساب SMSGate لإرسال كود التفعيل (6 أرقام) تلقائياً للمرضى عند التسجيل، مع ظهور زر استلام الكود عبر واتساب تلقائياً إذا تعذر الإرسال خلال 25 ثانية.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                OutlinedTextField(
+                                    value = smsServerUrl,
+                                    onValueChange = { smsServerUrl = it },
+                                    label = { Text("رابط الخادم (Server URL)") },
+                                    placeholder = { Text("https://sms-gate.app") },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("smsgate_server_url_input"),
+                                )
+                                OutlinedTextField(
+                                    value = smsUsername,
+                                    onValueChange = { smsUsername = it },
+                                    label = { Text("اسم المستخدم (Username)") },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("smsgate_username_input"),
+                                )
+                                PasswordOutlinedTextField(
+                                    value = smsPassword,
+                                    onValueChange = { smsPassword = it },
+                                    label = "كلمة المرور (Password)",
+                                    toggleTestTag = "smsgate_password_toggle",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("smsgate_password_input"),
+                                )
+                                Button(
+                                    onClick = { onSaveSmsGateSettings(smsServerUrl, smsUsername, smsPassword) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("smsgate_save_button"),
+                                ) {
+                                    Text("حفظ الإعدادات")
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        val smsUi = state.smsOtpUiState
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text(
+                                    text = "اختبار الإرسال (Test SMS)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TealPrimary,
+                                )
+                                Text(
+                                    text = "أدخل رقم هاتف تجربة لإرسال رسالة فورية بكود التفعيل التجريبي (123456) عبر SMSGate.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                OutlinedTextField(
+                                    value = smsTestPhone,
+                                    onValueChange = { smsTestPhone = it },
+                                    label = { Text("رقم هاتف التجربة") },
+                                    placeholder = { Text("010xxxxxxxx") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("smsgate_test_phone_input"),
+                                )
+                                Button(
+                                    onClick = {
+                                        onTestSmsGate(smsServerUrl, smsUsername, smsPassword, smsTestPhone)
+                                    },
+                                    enabled = !smsUi.isTestingSms,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = SlotAvailableBorder,
+                                        contentColor = Color.White,
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("smsgate_test_button"),
+                                ) {
+                                    if (smsUi.isTestingSms) {
+                                        CircularProgressIndicator(
+                                            color = Color.White,
+                                            strokeWidth = 2.dp,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("جاري إرسال الرسالة التجريبية...")
+                                    } else {
+                                        Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("إرسال رسالة تجريبية")
+                                    }
+                                }
+                                if (smsUi.testFeedbackMessage.isNotBlank()) {
+                                    val isOk = smsUi.testSuccess == true
+                                    val isErr = smsUi.testSuccess == false
+                                    Surface(
+                                        color = when {
+                                            isOk -> SlotAvailableBg
+                                            isErr -> SlotBookedBg
+                                            else -> MaterialTheme.colorScheme.primaryContainer
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            when {
+                                                isOk -> SlotAvailableBorder
+                                                isErr -> SlotBookedBorder
+                                                else -> TealPrimary
+                                            },
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Text(
+                                            text = smsUi.testFeedbackMessage,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = when {
+                                                isOk -> SlotAvailableText
+                                                isErr -> SlotBookedText
+                                                else -> TealPrimary
+                                            },
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(10.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

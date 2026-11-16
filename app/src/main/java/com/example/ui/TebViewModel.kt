@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.auth.FirebaseReadyTestOtpProvider
 import com.example.auth.OtpChallenge
 import com.example.auth.PhoneOtpAuthProvider
+import com.example.auth.SmsGateService
 import com.example.config.AppConfig
 import com.example.config.PlatformBrandConfig
 import com.example.data.local.ActivationOtpCodeEntity
@@ -23,6 +24,7 @@ import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
 import com.example.data.repository.TebRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -48,6 +51,22 @@ enum class PatientTab(val labelAr: String) {
     SPECIALTIES("التخصصات"),
     MEDICAL_FILE("ملفي الطبي"),
 }
+
+enum class SmsDispatchStatus {
+    IDLE,
+    SENDING,
+    SENT,
+    FAILED,
+}
+
+data class SmsOtpUiState(
+    val status: SmsDispatchStatus = SmsDispatchStatus.IDLE,
+    val remainingSeconds: Int = 25,
+    val errorMessage: String = "",
+    val isTestingSms: Boolean = false,
+    val testSuccess: Boolean? = null,
+    val testFeedbackMessage: String = "",
+)
 
 data class TebUiState(
     val isReady: Boolean = false,
@@ -71,6 +90,7 @@ data class TebUiState(
     val adminFailedAttempts: Int = 0,
     val adminLockoutUntilMillis: Long = 0L,
     val activeOtpChallenge: OtpChallenge? = null,
+    val smsOtpUiState: SmsOtpUiState = SmsOtpUiState(),
     val adminUsername: String = AppConfig.defaultBrand.adminUsername,
     val adminPassword: String = AppConfig.defaultBrand.adminPassword,
     val medications: List<EgyptianMedication> = MedicationCatalog.builtInMedications,
@@ -147,6 +167,9 @@ class TebViewModel(
     private val _isLiveMedicationsApi = MutableStateFlow(false)
     private val _isRefreshing = MutableStateFlow(false)
     private val _isBookingSubmitting = MutableStateFlow(false)
+    private val _smsOtpState = MutableStateFlow(SmsOtpUiState())
+    private var otpSendJob: Job? = null
+    private var otpCountdownJob: Job? = null
 
     private val _snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarMessages = _snackbarMessages.asSharedFlow()
@@ -292,13 +315,20 @@ class TebViewModel(
         MedicationBundle(meds, isLive, favs, isRefreshing, isBookingSubmitting)
     }
 
+    private val adminOpsFlow = combine(
+        repository.activationCodesFlow,
+        _smsOtpState,
+    ) { activationCodes, smsOtpUiState ->
+        activationCodes to smsOtpUiState
+    }
+
     val uiState: StateFlow<TebUiState> = combine(
         selectionFlow,
         accountBundleFlow,
         clinicBundleFlow,
         medicationBundleFlow,
-        repository.activationCodesFlow,
-    ) { sel, acc, clinic, medBundle, activationCodes ->
+        adminOpsFlow,
+    ) { sel, acc, clinic, medBundle, adminOps ->
         val favMap = medBundle.favorites
             .groupBy { it.doctorId }
             .mapValues { (_, list) -> list.map { it.medicationId }.toSet() }
@@ -328,12 +358,13 @@ class TebViewModel(
             adminFailedAttempts = acc.adminFailedAttempts,
             adminLockoutUntilMillis = acc.adminLockoutUntilMillis,
             activeOtpChallenge = sel.activeOtpChallenge,
+            smsOtpUiState = adminOps.second,
             adminUsername = sel.brandConfig.adminUsername,
             adminPassword = sel.brandConfig.adminPassword,
             medications = medBundle.medications,
             isLiveMedicationsApi = medBundle.isLiveRemote,
             favoriteMedsByDoctor = favMap,
-            activationCodes = activationCodes,
+            activationCodes = adminOps.first,
             isRefreshing = medBundle.isRefreshing,
             isBookingSubmitting = medBundle.isBookingSubmitting,
         )
@@ -458,6 +489,66 @@ class TebViewModel(
             repository.resetFullPlatformConfig()
             refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
             _snackbarMessages.tryEmit("تم استعادة الإعدادات الافتراضية للمنصة")
+        }
+    }
+
+    fun saveSmsGateSettings(serverUrl: String, username: String, password: String) {
+        viewModelScope.launch {
+            repository.updateSmsGateSettings(serverUrl, username, password)
+            _smsOtpState.update {
+                it.copy(
+                    testSuccess = true,
+                    testFeedbackMessage = "✓ تم حفظ إعدادات بوابة الرسائل (SMSGate) بنجاح في التخزين الدائم.",
+                )
+            }
+            _snackbarMessages.tryEmit("تم حفظ إعدادات بوابة الرسائل (SMSGate) بنجاح")
+        }
+    }
+
+    fun sendTestSmsViaSmsGate(
+        serverUrl: String,
+        username: String,
+        password: String,
+        testPhone: String,
+    ) {
+        viewModelScope.launch {
+            repository.updateSmsGateSettings(serverUrl, username, password)
+            val cleanPhone = testPhone.trim()
+            if (cleanPhone.count { it.isDigit() } < 10) {
+                val msg = "يرجى كتابة رقم هاتف تجربة صحيح (11 رقم) أولاً."
+                _smsOtpState.update { it.copy(isTestingSms = false, testSuccess = false, testFeedbackMessage = msg) }
+                _snackbarMessages.tryEmit(msg)
+                return@launch
+            }
+            _smsOtpState.update {
+                it.copy(
+                    isTestingSms = true,
+                    testSuccess = null,
+                    testFeedbackMessage = "جاري الاتصال بخادم SMSGate وإرسال كود 123456...",
+                )
+            }
+            val platformName = uiState.value.brandConfig.platformNameAr.ifBlank { "طب الحجايزة" }
+            val res = SmsGateService.sendSms(
+                serverUrl = serverUrl,
+                username = username,
+                password = password,
+                rawPhone = cleanPhone,
+                messageText = "منصة $platformName: كود التفعيل الخاص بك هو: 123456",
+                timeoutMillis = SmsGateService.DEFAULT_TIMEOUT_MILLIS,
+            )
+            val feedback = if (res.isSuccess) {
+                "✓ تم إرسال الرسالة التجريبية (كود التفعيل: 123456) بنجاح إلى ${res.formattedPhone}"
+            } else {
+                res.errorMessage.ifBlank { "تعذر إرسال الرسالة التجريبية" }
+            }
+            _smsOtpState.update {
+                it.copy(
+                    isTestingSms = false,
+                    testSuccess = res.isSuccess,
+                    testFeedbackMessage = feedback,
+                )
+            }
+            _snackbarMessages.tryEmit(feedback)
         }
     }
 
@@ -595,19 +686,100 @@ class TebViewModel(
         }
     }
 
+    private fun cancelOtpJobs() {
+        otpSendJob?.cancel()
+        otpSendJob = null
+        otpCountdownJob?.cancel()
+        otpCountdownJob = null
+    }
+
+    private fun dispatchOtpViaSmsGate(account: PatientAccountEntity) {
+        cancelOtpJobs()
+        val res = otpProvider.sendVerificationCode(account.phone)
+        res.onFailure { err ->
+            _activeOtpChallenge.value = null
+            _smsOtpState.update {
+                it.copy(
+                    status = SmsDispatchStatus.FAILED,
+                    remainingSeconds = 0,
+                    errorMessage = err.message ?: "تعذر تجهيز كود التفعيل",
+                )
+            }
+            return
+        }
+
+        val challenge = res.getOrThrow()
+        _activeOtpChallenge.value = challenge
+        _smsOtpState.update {
+            it.copy(
+                status = SmsDispatchStatus.SENDING,
+                remainingSeconds = 25,
+                errorMessage = "",
+            )
+        }
+
+        otpCountdownJob = viewModelScope.launch {
+            for (sec in 24 downTo 0) {
+                delay(1_000L)
+                if (_smsOtpState.value.status != SmsDispatchStatus.SENDING) break
+                _smsOtpState.update { it.copy(remainingSeconds = sec) }
+            }
+        }
+
+        otpSendJob = viewModelScope.launch {
+            val cfg = uiState.value.brandConfig
+            val sendRes = SmsGateService.sendSms(
+                serverUrl = cfg.smsGateServerUrl,
+                username = cfg.smsGateUsername,
+                password = cfg.smsGatePassword,
+                rawPhone = account.phone,
+                messageText = "منصة ${cfg.platformNameAr}: كود تفعيل حسابك هو: ${challenge.testOtpCode}",
+                timeoutMillis = SmsGateService.DEFAULT_TIMEOUT_MILLIS,
+            )
+            otpCountdownJob?.cancel()
+            if (sendRes.isSuccess) {
+                _smsOtpState.update {
+                    it.copy(
+                        status = SmsDispatchStatus.SENT,
+                        remainingSeconds = 0,
+                        errorMessage = "",
+                    )
+                }
+                _snackbarMessages.tryEmit("تم إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر SMS")
+            } else {
+                _smsOtpState.update {
+                    it.copy(
+                        status = SmsDispatchStatus.FAILED,
+                        remainingSeconds = 0,
+                        errorMessage = sendRes.errorMessage.ifBlank {
+                            "تعذر إرسال الرسالة خلال 25 ثانية، اضغط استلم الكود عبر واتساب"
+                        },
+                    )
+                }
+            }
+        }
+    }
+
     fun sendOrResendOtpForActiveAccount() {
         val acc = uiState.value.activeAccount ?: return
-        val res = otpProvider.sendVerificationCode(acc.phone)
-        res.onSuccess { challenge ->
-            _activeOtpChallenge.value = challenge
-        }.onFailure { err ->
-            _snackbarMessages.tryEmit(err.message ?: "تعذر تجهيز طلب التفعيل")
-        }
+        dispatchOtpViaSmsGate(acc)
     }
 
     fun verifyActiveAccountOtp(enteredCode: String) {
         val acc = uiState.value.activeAccount ?: return
         viewModelScope.launch {
+            val currentChallenge = _activeOtpChallenge.value
+            if (currentChallenge != null && otpProvider.verifyCode(currentChallenge, enteredCode).isSuccess) {
+                cancelOtpJobs()
+                repository.markAccountPhoneVerified(acc.id)
+                _activeOtpChallenge.value = null
+                _smsOtpState.update {
+                    it.copy(status = SmsDispatchStatus.IDLE, remainingSeconds = 25, errorMessage = "")
+                }
+                _snackbarMessages.tryEmit("تم تأكيد رقم الهاتف وتفعيل الحساب بنجاح! يمكنك الحجز الآن.")
+                return@launch
+            }
+
             val result = repository.verifyAndBurnActivationCode(
                 accountId = acc.id,
                 accountName = acc.fullName,
@@ -615,7 +787,11 @@ class TebViewModel(
                 enteredCode = enteredCode,
             )
             result.onSuccess {
+                cancelOtpJobs()
                 _activeOtpChallenge.value = null
+                _smsOtpState.update {
+                    it.copy(status = SmsDispatchStatus.IDLE, remainingSeconds = 25, errorMessage = "")
+                }
                 _snackbarMessages.tryEmit("تم تأكيد وتفعيل الحساب بنجاح وحرق الكود نهائياً! يمكنك الحجز الآن.")
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "كود التفعيل غير صحيح")
@@ -784,9 +960,9 @@ class TebViewModel(
                 return@launch
             }
             val result = repository.registerPatientAccount(fullName, phone, nationalId, password)
-            result.onSuccess {
+            result.onSuccess { createdAcc ->
                 _openAccountForOtpEvents.tryEmit(Unit)
-                _snackbarMessages.tryEmit("تم إنشاء الحساب! يرجى طلب وإدخال كود التفعيل (6 أرقام) لتفعيل الحجز.")
+                dispatchOtpViaSmsGate(createdAcc)
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر إنشاء الحساب")
             }

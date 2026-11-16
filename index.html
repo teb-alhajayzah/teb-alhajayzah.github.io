@@ -994,7 +994,10 @@
         apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
         medicationsApiUrl: '',
         adminOwnerName: 'المهندس محمد يوسف',
-        adminPin: '202600'
+        adminPin: '202600',
+        smsGateServerUrl: 'https://sms-gate.app',
+        smsGateUsername: '',
+        smsGatePassword: ''
       };
 
       const LEGACY_STORAGE_KEY = 'teb_alhajayzah_web_state_v1';
@@ -1194,6 +1197,9 @@
         adminTab: 'CLINICS', // CLINICS | HOSPITAL | BOOKINGS | SETTINGS | OTP_CODES
         adminSearchQuery: '',
         otpChallenge: null,
+        otpSmsStatus: { state: 'IDLE', remainingSec: 25, errorMsg: '' },
+        smsTestPhone: '',
+        smsTestStatus: { busy: false, ok: null, msg: '' },
         versionTapCount: 0,
         medications: BUILTIN_MEDICATIONS.slice(),
         isLiveMedsApi: false
@@ -1245,6 +1251,129 @@
           if (Date.now() > challenge.expiresAtMillis) return { ok: false, error: bi('انتهت صلاحية الرمز، اضغط إعادة إرسال', 'OTP code expired, please resend') };
           if (clean !== challenge.testOtpCode) return { ok: false, error: bi('رمز التحقق غير صحيح، تأكد من الأرقام الستة', 'Invalid OTP code, check the 6 digits') };
           return { ok: true };
+        }
+      };
+
+      const SmsGateService = {
+        SMS_TIMEOUT_MS: 25000,
+        resolveEndpoint: function (serverUrl) {
+          let clean = String(serverUrl || '').trim().replace(/\/+$/, '');
+          if (!clean) clean = DEFAULT_CONFIG.smsGateServerUrl;
+          if (!/^https?:\/\//i.test(clean)) clean = 'https://' + clean;
+          const lower = clean.toLowerCase();
+          if (lower.endsWith('/messages')) return clean;
+          if (lower === 'https://sms-gate.app' || lower === 'http://sms-gate.app' ||
+              lower === 'https://www.sms-gate.app' || lower === 'http://www.sms-gate.app') {
+            return 'https://api.sms-gate.app/3rdparty/v1/messages';
+          }
+          if (lower.includes('/3rdparty/v1')) return clean + '/messages';
+          return clean + '/3rdparty/v1/messages';
+        },
+        toUtf8Base64: function (str) {
+          try {
+            return btoa(unescape(encodeURIComponent(str)));
+          } catch (e) {
+            return btoa(str);
+          }
+        },
+        sendSms: async function (opts) {
+          const cfg = opts || {};
+          const serverUrl = String(cfg.serverUrl || '').trim() || DEFAULT_CONFIG.smsGateServerUrl;
+          const username = String(cfg.username || '').trim();
+          const password = String(cfg.password || '').trim();
+          const rawPhone = String(cfg.phone || '').trim();
+          const messageText = String(cfg.messageText || '').trim();
+          const timeoutMs = Number(cfg.timeoutMs) > 0 ? Number(cfg.timeoutMs) : this.SMS_TIMEOUT_MS;
+
+          if (!username || !password) {
+            return {
+              ok: false,
+              timedOut: false,
+              error: bi('بيانات بوابة الرسائل (SMSGate) غير مكتملة في لوحة الإدارة', 'SMSGate credentials are not configured')
+            };
+          }
+          const e164Phone = FirebaseReadyOtpProvider.formatEgyptianE164(rawPhone);
+          if (!e164Phone || normalizePhoneDigits(e164Phone).length < 11) {
+            return {
+              ok: false,
+              timedOut: false,
+              error: bi('رقم الهاتف المستلم غير صحيح', 'Invalid recipient phone number')
+            };
+          }
+
+          const endpoint = this.resolveEndpoint(serverUrl);
+          const controller = new AbortController();
+          let timedOut = false;
+          const timeoutId = setTimeout(function () {
+            timedOut = true;
+            controller.abort();
+          }, timeoutMs);
+
+          const onExternalAbort = function () { controller.abort(); };
+          if (cfg.externalSignal) {
+            if (cfg.externalSignal.aborted) {
+              clearTimeout(timeoutId);
+              return { ok: false, timedOut: false, aborted: true, error: bi('تم إلغاء الطلب', 'Request cancelled') };
+            }
+            cfg.externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+          }
+
+          try {
+            const resp = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Basic ' + this.toUtf8Base64(username + ':' + password)
+              },
+              body: JSON.stringify({
+                textMessage: { text: messageText },
+                phoneNumbers: [e164Phone]
+              }),
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+            if (!resp.ok) {
+              let detail = '';
+              try { detail = await resp.text(); } catch (e) {}
+              return {
+                ok: false,
+                timedOut: false,
+                status: resp.status,
+                error: bi(
+                  'فشل الإرسال من خادم SMSGate (رمز ' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : ''),
+                  'SMSGate server error (' + resp.status + ')' + (detail ? ': ' + detail.slice(0, 120) : '')
+                )
+              };
+            }
+            let data = null;
+            try { data = await resp.json(); } catch (e) {}
+            return { ok: true, endpoint: endpoint, phone: e164Phone, data: data };
+          } catch (err) {
+            clearTimeout(timeoutId);
+            if (timedOut) {
+              return {
+                ok: false,
+                timedOut: true,
+                error: bi('تعذر إرسال الرسالة خلال 25 ثانية', 'SMS delivery timed out after 25 seconds')
+              };
+            }
+            if (cfg.externalSignal && cfg.externalSignal.aborted) {
+              return { ok: false, timedOut: false, aborted: true, error: bi('تم إلغاء الطلب', 'Request cancelled') };
+            }
+            return {
+              ok: false,
+              timedOut: false,
+              error: bi(
+                'تعذر الاتصال بخادم SMSGate: ' + (err && err.message ? err.message : 'خطأ شبكة'),
+                'Failed to reach SMSGate server: ' + (err && err.message ? err.message : 'Network error')
+              )
+            };
+          } finally {
+            if (cfg.externalSignal) {
+              cfg.externalSignal.removeEventListener('abort', onExternalAbort);
+            }
+          }
         }
       };
 
@@ -2337,6 +2466,46 @@
             '</section>';
         } else if (ui.adminTab === 'OTP_CODES') {
           tabBodyHtml = renderOtpGeneratorSectionHtml();
+        } else if (ui.adminTab === 'SMSGATE') {
+          const cfg = db.config;
+          const testSt = ui.smsTestStatus || { busy: false, ok: null, msg: '' };
+          tabBodyHtml =
+            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
+              '<h3>📡 ' + esc(bi('إعدادات بوابة الرسائل (SMSGate)', 'SMSGate Gateway Settings')) + '</h3>' +
+              '<div style="font-size:0.85rem;color:var(--text-muted);line-height:1.5;">' +
+                esc(bi('اربط حساب SMSGate لإرسال أكواد التحقق (OTP) المكونة من 6 أرقام تلقائياً لهواتف المرضى عند التسجيل، مع التحويل التلقائي للواتساب إذا تعذر الإرسال خلال 25 ثانية.', 'Connect SMSGate to automatically send 6-digit OTP codes on patient registration with a 25s WhatsApp fallback.')) +
+              '</div>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط الخادم (Server URL)', 'Server URL')) +
+                '<input class="input" id="smsGateServerUrl" value="' + esc(cfg.smsGateServerUrl || DEFAULT_CONFIG.smsGateServerUrl) + '" placeholder="https://sms-gate.app" dir="ltr" />' +
+              '</label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم المستخدم (Username)', 'Username')) +
+                '<input class="input" id="smsGateUsername" value="' + esc(cfg.smsGateUsername || '') + '" placeholder="' + esc(bi('أدخل اسم المستخدم في SMSGate', 'Enter SMSGate Username')) + '" dir="ltr" />' +
+              '</label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('كلمة المرور (Password)', 'Password')) +
+                renderPasswordFieldHtml('smsGatePassword', cfg.smsGatePassword || '', bi('أدخل كلمة مرور SMSGate', 'Enter SMSGate Password')) +
+              '</label>' +
+              '<button class="btn btn-primary btn-block" id="btnSaveSmsGate" type="button">💾 ' + esc(bi('حفظ الإعدادات', 'Save Settings')) + '</button>' +
+            '</section>' +
+            '<section class="card" style="display:flex;flex-direction:column;gap:10px;border-color:rgba(13,115,119,0.35);">' +
+              '<h3>📤 ' + esc(bi('اختبار الإرسال (Test SMS)', 'Test SMS Delivery')) + '</h3>' +
+              '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('أدخل رقم هاتف تجربة لإرسال رسالة فورية تحتوي على كود التفعيل التجريبي (123456) عبر SMSGate.', 'Enter a test phone number to send an activation message with code 123456 via SMSGate.')) + '</div>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رقم هاتف التجربة', 'Test Phone Number')) +
+                '<input class="input" id="smsGateTestPhone" type="tel" value="' + esc(ui.smsTestPhone || '') + '" placeholder="010xxxxxxxx" dir="ltr" />' +
+              '</label>' +
+              '<button class="btn btn-green btn-block" id="btnTestSmsGate" type="button"' + (testSt.busy ? ' disabled' : '') + '>' +
+                (testSt.busy ? '<span class="btn-spinner" aria-hidden="true"></span> ' : '📩 ') +
+                esc(bi(testSt.busy ? 'جاري إرسال الرسالة التجريبية...' : 'إرسال رسالة تجريبية', testSt.busy ? 'Sending Test SMS...' : 'Send Test SMS')) +
+              '</button>' +
+              (testSt.msg
+                ? '<div class="alert-banner" style="' +
+                    (testSt.ok === true
+                      ? 'background:#DCFCE7;border-color:#16A34A;color:#14532D;'
+                      : (testSt.ok === false
+                          ? 'background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);'
+                          : 'background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);')) +
+                    'font-size:0.86rem;">' + esc(testSt.msg) + '</div>'
+                : '') +
+            '</section>';
         } else {
           const cfg = db.config;
           tabBodyHtml =
@@ -2380,6 +2549,7 @@
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('إعدادات المنصة والـ PIN', 'Settings & PIN')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'OTP_CODES' ? 'active' : '') + '" type="button" data-admin-tab="OTP_CODES">🔑 ' + esc(bi('أكواد التفعيل (OTP)', 'OTP Codes')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'SMSGATE' ? 'active' : '') + '" type="button" data-admin-tab="SMSGATE">📡 ' + esc(bi('إعدادات بوابة الرسائل (SMSGate)', 'SMSGate Settings')) + '</button>' +
           '</div>' +
 
           tabBodyHtml;
@@ -2461,7 +2631,20 @@
       // 6. النوافذ المنبثقة (Modals) والروشتة الذكية والتحقق بالـ OTP
       // ================================================================
       let modalIntervalTimer = null;
+      let otpSmsCountdownTimer = null;
+      let otpSmsAbortController = null;
+      function stopOtpSmsDispatch() {
+        if (otpSmsCountdownTimer) {
+          clearInterval(otpSmsCountdownTimer);
+          otpSmsCountdownTimer = null;
+        }
+        if (otpSmsAbortController) {
+          try { otpSmsAbortController.abort(); } catch (e) {}
+          otpSmsAbortController = null;
+        }
+      }
       function closeModal() {
+        stopOtpSmsDispatch();
         if (modalIntervalTimer) {
           clearInterval(modalIntervalTimer);
           modalIntervalTimer = null;
@@ -2470,6 +2653,7 @@
       }
 
       function openModal(title, bodyHtml, onMount) {
+        stopOtpSmsDispatch();
         if (modalIntervalTimer) {
           clearInterval(modalIntervalTimer);
           modalIntervalTimer = null;
@@ -2673,20 +2857,42 @@
             ? encodeURIComponent('مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ' + db.account.fullName + ' - الرقم: ' + db.account.phone)
             : '';
 
+          function renderOtpSmsStatusHtml() {
+            const st = ui.otpSmsStatus || { state: 'IDLE', remainingSec: 25, errorMsg: '' };
+            const waFallbackBtn =
+              '<a class="btn btn-whatsapp btn-block" id="btnOtpWhatsappRequest" href="https://wa.me/' + esc(otpWaPhone) + '?text=' + otpWaText + '" target="_blank" rel="noopener">💬 ' +
+                esc(bi('استلم الكود عبر واتساب', 'Receive Code via WhatsApp')) +
+              '</a>';
+
+            if (st.state === 'SENDING') {
+              return '<div class="alert-banner" style="background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);font-size:0.86rem;display:flex;align-items:center;gap:8px;">' +
+                '<span class="btn-spinner" style="border-color:rgba(13,115,119,0.25);border-top-color:var(--teal);" aria-hidden="true"></span>' +
+                '<span>' + esc(bi(
+                  'جاري إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر بوابة الرسائل... (' + st.remainingSec + ' ثانية)',
+                  'Sending 6-digit OTP to your phone via SMS... (' + st.remainingSec + 's)'
+                )) + '</span>' +
+              '</div>';
+            }
+            if (st.state === 'SENT') {
+              return '<div class="alert-banner" style="background:#DCFCE7;border-color:#16A34A;color:#14532D;font-size:0.86rem;">' +
+                '✓ ' + esc(bi('تم إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر SMS. أدخله بالأسفل لتفعيل الحجز.', '6-digit verification code sent to your phone via SMS. Enter it below.')) +
+              '</div>';
+            }
+            if (st.state === 'FAILED') {
+              return '<div class="alert-banner" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);font-size:0.84rem;">' +
+                '⚠️ ' + esc(st.errorMsg || bi('تعذر إرسال الرسالة خلال 25 ثانية. يمكنك استلام الكود عبر واتساب فوراً.', 'SMS delivery failed within 25s. Receive your code via WhatsApp below.')) +
+              '</div>' + waFallbackBtn;
+            }
+            return waFallbackBtn;
+          }
+
           const otpCardHtml = (hasAcc && !isVerified)
             ? '<div class="card" style="background:var(--warn-bg);border:1.5px solid var(--warn-border);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
                 '<div style="font-weight:800;color:var(--warn-text);">🔐 ' + esc(bi('تأكيد رقم الهاتف برمز التحقق (OTP من 6 أرقام)', 'Verify Phone Number (6-digit OTP)')) + '</div>' +
-                '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.5;">' + esc(bi('جاهز للربط مع Firebase Phone Authentication. اطلب الكود عبر واتساب التفعيل (' + ((db.config && db.config.otpWhatsappPhone) || '01141271027') + ') أو جرب الإرسال الفوري، ثم أدخل الأرقام الستة لتفعيل حجز المواعيد.', 'Request your 6-digit OTP via Activation WhatsApp (' + ((db.config && db.config.otpWhatsappPhone) || '01141271027') + ') or test OTP, then enter the 6 digits to unlock bookings.')) + '</div>' +
-                (ui.otpChallenge
-                  ? '<div class="alert-banner" style="background:#DCFCE7;border-color:#16A34A;color:#14532D;font-size:0.86rem;">' +
-                      '🧪 <strong>' + esc(bi('إشعار الاختبار الفوري (Test OTP):', 'Test OTP Notification:')) + '</strong> ' +
-                      '<span dir="ltr" style="font-size:1.1rem;font-weight:800;letter-spacing:2px;">' + esc(ui.otpChallenge.testOtpCode) + '</span>' +
-                      ' <span style="font-size:0.78rem;">(' + esc(ui.otpChallenge.formattedE164Phone) + ')</span>' +
-                    '</div>'
-                  : '') +
-                '<a class="btn btn-whatsapp btn-block" id="btnOtpWhatsappRequest" href="https://wa.me/' + esc(otpWaPhone) + '?text=' + otpWaText + '" target="_blank" rel="noopener">💬 ' + esc(bi('اطلب كود التفعيل (OTP) عبر واتساب', 'Request OTP via WhatsApp')) + '</a>' +
-                '<button class="btn btn-outline btn-block" id="btnResendOtp" type="button" style="background:#fff;">📩 ' + esc(bi(ui.otpChallenge ? 'إعادة إرسال رمز التحقق التجريبي (Test OTP)' : 'إرسال رمز التحقق التجريبي (Test OTP)', ui.otpChallenge ? 'Resend Test OTP' : 'Send Test OTP')) + '</button>' +
-                '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="' + esc(bi('أدخل رمز التحقق (6 أرقام)', 'Enter 6-digit OTP code')) + '" dir="ltr" />' +
+                '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.5;">' + esc(bi('يتم إرسال كود التحقق المكون من 6 أرقام إلى هاتفك عبر SMSGate، وفي حال تعذر الإرسال خلال 25 ثانية يظهر زر استلام الكود عبر واتساب (' + ((db.config && db.config.otpWhatsappPhone) || '01141271027') + ').', 'A 6-digit OTP is sent via SMSGate. If delivery fails within 25s, you can receive it via WhatsApp (' + ((db.config && db.config.otpWhatsappPhone) || '01141271027') + ').')) + '</div>' +
+                '<div id="otpSmsStatusBox" style="display:flex;flex-direction:column;gap:8px;">' + renderOtpSmsStatusHtml() + '</div>' +
+                '<button class="btn btn-outline btn-block" id="btnResendOtp" type="button" style="background:#fff;"' + (ui.otpSmsStatus && ui.otpSmsStatus.state === 'SENDING' ? ' disabled' : '') + '>📩 ' + esc(bi(ui.otpChallenge ? 'إعادة إرسال كود التفعيل (SMS)' : 'إرسال كود التفعيل عبر SMS', ui.otpChallenge ? 'Resend OTP via SMS' : 'Send OTP via SMS')) + '</button>' +
+                '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="' + esc(bi('أدخل كود التفعيل (6 أرقام)', 'Enter 6-digit OTP code')) + '" dir="ltr" />' +
                 '<button class="btn btn-primary btn-block" id="btnVerifyOtpSubmit" type="button">✓ ' + esc(bi('تأكيد وتفعيل الحساب', 'Verify & Activate Account')) + '</button>' +
               '</div>'
             : '';
@@ -2754,6 +2960,109 @@
           bindPasswordToggleButtons(body);
         }
 
+        function updateOtpStatusBoxInPlace() {
+          const box = document.getElementById('otpSmsStatusBox');
+          if (box && db.account && db.account.isPhoneVerified === false) {
+            const otpPhoneDigits = normalizePhoneDigits((db.config && db.config.otpWhatsappPhone) || DEFAULT_CONFIG.otpWhatsappPhone || '01141271027');
+            const otpWaPhone = otpPhoneDigits.startsWith('2') ? otpPhoneDigits : ('2' + otpPhoneDigits);
+            const otpWaText = encodeURIComponent('مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ' + db.account.fullName + ' - الرقم: ' + db.account.phone);
+            const st = ui.otpSmsStatus || { state: 'IDLE', remainingSec: 25, errorMsg: '' };
+            const waBtn =
+              '<a class="btn btn-whatsapp btn-block" id="btnOtpWhatsappRequest" href="https://wa.me/' + esc(otpWaPhone) + '?text=' + otpWaText + '" target="_blank" rel="noopener">💬 ' +
+                esc(bi('استلم الكود عبر واتساب', 'Receive Code via WhatsApp')) +
+              '</a>';
+            if (st.state === 'SENDING') {
+              box.innerHTML =
+                '<div class="alert-banner" style="background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);font-size:0.86rem;display:flex;align-items:center;gap:8px;">' +
+                  '<span class="btn-spinner" style="border-color:rgba(13,115,119,0.25);border-top-color:var(--teal);" aria-hidden="true"></span>' +
+                  '<span>' + esc(bi(
+                    'جاري إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر بوابة الرسائل... (' + st.remainingSec + ' ثانية)',
+                    'Sending 6-digit OTP to your phone via SMS... (' + st.remainingSec + 's)'
+                  )) + '</span>' +
+                '</div>';
+            } else if (st.state === 'SENT') {
+              box.innerHTML =
+                '<div class="alert-banner" style="background:#DCFCE7;border-color:#16A34A;color:#14532D;font-size:0.86rem;">' +
+                  '✓ ' + esc(bi('تم إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر SMS. أدخله بالأسفل لتفعيل الحجز.', '6-digit verification code sent to your phone via SMS. Enter it below.')) +
+                '</div>';
+            } else if (st.state === 'FAILED') {
+              box.innerHTML =
+                '<div class="alert-banner" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);font-size:0.84rem;">' +
+                  '⚠️ ' + esc(st.errorMsg || bi('تعذر إرسال الرسالة خلال 25 ثانية. يمكنك استلام الكود عبر واتساب فوراً.', 'SMS delivery failed within 25s. Receive your code via WhatsApp below.')) +
+                '</div>' + waBtn;
+            } else {
+              box.innerHTML = waBtn;
+            }
+          }
+          const resendBtn = document.getElementById('btnResendOtp');
+          if (resendBtn) {
+            resendBtn.disabled = Boolean(ui.otpSmsStatus && ui.otpSmsStatus.state === 'SENDING');
+          }
+        }
+
+        async function dispatchOtpViaSmsGate(account) {
+          if (!account) return;
+          stopOtpSmsDispatch();
+          const gen = FirebaseReadyOtpProvider.sendVerificationCode(account.phone);
+          if (!gen.ok) {
+            ui.otpChallenge = null;
+            ui.otpSmsStatus = { state: 'FAILED', remainingSec: 0, errorMsg: gen.error };
+            refreshAccountModal();
+            return;
+          }
+          ui.otpChallenge = gen.challenge;
+          ui.otpSmsStatus = { state: 'SENDING', remainingSec: 25, errorMsg: '' };
+          refreshAccountModal();
+
+          otpSmsAbortController = new AbortController();
+          const currentController = otpSmsAbortController;
+
+          otpSmsCountdownTimer = setInterval(function () {
+            if (!ui.otpSmsStatus || ui.otpSmsStatus.state !== 'SENDING') {
+              clearInterval(otpSmsCountdownTimer);
+              otpSmsCountdownTimer = null;
+              return;
+            }
+            if (ui.otpSmsStatus.remainingSec > 1) {
+              ui.otpSmsStatus.remainingSec -= 1;
+              updateOtpStatusBoxInPlace();
+            } else {
+              clearInterval(otpSmsCountdownTimer);
+              otpSmsCountdownTimer = null;
+            }
+          }, 1000);
+
+          const cfg = db.config || DEFAULT_CONFIG;
+          const smsBody = 'منصة ' + (cfg.platformNameAr || 'طب الحجايزة') + ': كود تفعيل حسابك هو: ' + gen.challenge.testOtpCode;
+          const sendRes = await SmsGateService.sendSms({
+            serverUrl: cfg.smsGateServerUrl || DEFAULT_CONFIG.smsGateServerUrl,
+            username: cfg.smsGateUsername || '',
+            password: cfg.smsGatePassword || '',
+            phone: account.phone,
+            messageText: smsBody,
+            timeoutMs: 25000,
+            externalSignal: currentController.signal
+          });
+
+          if (otpSmsCountdownTimer) {
+            clearInterval(otpSmsCountdownTimer);
+            otpSmsCountdownTimer = null;
+          }
+          if (sendRes.aborted) return;
+
+          if (sendRes.ok) {
+            ui.otpSmsStatus = { state: 'SENT', remainingSec: 0, errorMsg: '' };
+            showToast(bi('تم إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر SMS', '6-digit OTP sent to your phone via SMS'));
+          } else {
+            ui.otpSmsStatus = {
+              state: 'FAILED',
+              remainingSec: 0,
+              errorMsg: sendRes.error || bi('تعذر الإرسال عبر الرسائل، اضغط استلم الكود عبر واتساب', 'SMS delivery failed, use WhatsApp below')
+            };
+          }
+          updateOtpStatusBoxInPlace();
+        }
+
         function mountAccountHandlers() {
           document.querySelectorAll('[data-pick-mem]').forEach((el) => {
             el.onclick = function () {
@@ -2767,14 +3076,7 @@
           const resendBtn = document.getElementById('btnResendOtp');
           if (resendBtn && db.account) {
             resendBtn.onclick = function () {
-              const res = FirebaseReadyOtpProvider.sendVerificationCode(db.account.phone);
-              if (!res.ok) {
-                showToast(res.error);
-                return;
-              }
-              ui.otpChallenge = res.challenge;
-              showToast(bi('رمز التحقق التجريبي (Test OTP): ' + res.challenge.testOtpCode, 'Test OTP code: ' + res.challenge.testOtpCode), 6000);
-              refreshAccountModal();
+              dispatchOtpViaSmsGate(db.account);
             };
           }
 
@@ -2785,6 +3087,8 @@
               if (ui.otpChallenge) {
                 const fbRes = FirebaseReadyOtpProvider.verifyCode(ui.otpChallenge, code);
                 if (fbRes.ok) {
+                  stopOtpSmsDispatch();
+                  ui.otpSmsStatus = { state: 'IDLE', remainingSec: 25, errorMsg: '' };
                   markAccountVerified(db.account);
                   saveState(db);
                   showToast(bi('تم تأكيد رقم الهاتف وتفعيل الحساب بنجاح! يمكنك الآن حجز المواعيد.', 'Phone verified & account activated! You can now book appointments.'));
@@ -2798,6 +3102,8 @@
                 showToast(check.error);
                 return;
               }
+              stopOtpSmsDispatch();
+              ui.otpSmsStatus = { state: 'IDLE', remainingSec: 25, errorMsg: '' };
               showToast(bi('تم تفعيل الحساب بنجاح! يمكنك الآن حجز المواعيد فوراً.', 'Account activated successfully!'));
               refreshAccountModal();
               renderApp();
@@ -2862,17 +3168,10 @@
               db.familyMembers.push(newSelfMem);
               db.activeMemberId = newSelfMem.id;
 
-              const otpSend = FirebaseReadyOtpProvider.sendVerificationCode(phone);
-              ui.otpChallenge = otpSend.ok ? otpSend.challenge : null;
               saveState(db);
               authMode = 'NONE';
-              if (otpSend.ok) {
-                showToast(bi('تم إنشاء الحساب! رمز التحقق التجريبي (Test OTP): ' + otpSend.challenge.testOtpCode, 'Account created! Test OTP: ' + otpSend.challenge.testOtpCode), 6000);
-              } else {
-                showToast(bi('تم إنشاء الحساب! يرجى إدخال رمز التحقق لتفعيل الحجز.', 'Account created! Verify OTP to activate booking.'));
-              }
-              refreshAccountModal();
               renderApp();
+              dispatchOtpViaSmsGate(newAcc);
             };
           }
 
@@ -3751,6 +4050,88 @@
             saveState(db);
             await refreshMedicationsFromApi();
             showToast(bi('تمت استعادة الإعدادات الافتراضية للمنصة', 'Restored default settings'));
+            renderApp();
+          };
+        }
+
+        const saveSmsGateBtn = document.getElementById('btnSaveSmsGate');
+        if (saveSmsGateBtn) {
+          saveSmsGateBtn.onclick = function () {
+            const urlVal = (document.getElementById('smsGateServerUrl').value || '').trim() || DEFAULT_CONFIG.smsGateServerUrl;
+            const userVal = (document.getElementById('smsGateUsername').value || '').trim();
+            const passVal = (document.getElementById('smsGatePassword').value || '').trim();
+            db.config.smsGateServerUrl = urlVal;
+            db.config.smsGateUsername = userVal;
+            db.config.smsGatePassword = passVal;
+            saveState(db);
+            ui.smsTestStatus = {
+              busy: false,
+              ok: true,
+              msg: bi('✓ تم حفظ إعدادات بوابة الرسائل (SMSGate) بنجاح في التخزين الدائم.', '✓ SMSGate settings saved to persistent storage.')
+            };
+            showToast(bi('تم حفظ إعدادات بوابة الرسائل (SMSGate) بنجاح', 'SMSGate settings saved'));
+            renderApp();
+          };
+        }
+
+        const testPhoneInp = document.getElementById('smsGateTestPhone');
+        if (testPhoneInp) {
+          testPhoneInp.oninput = function (e) {
+            ui.smsTestPhone = e.target.value;
+          };
+        }
+
+        const testSmsGateBtn = document.getElementById('btnTestSmsGate');
+        if (testSmsGateBtn) {
+          testSmsGateBtn.onclick = async function () {
+            const urlVal = (document.getElementById('smsGateServerUrl').value || '').trim() || DEFAULT_CONFIG.smsGateServerUrl;
+            const userVal = (document.getElementById('smsGateUsername').value || '').trim();
+            const passVal = (document.getElementById('smsGatePassword').value || '').trim();
+            const phoneVal = (document.getElementById('smsGateTestPhone').value || '').trim();
+
+            ui.smsTestPhone = phoneVal;
+            db.config.smsGateServerUrl = urlVal;
+            db.config.smsGateUsername = userVal;
+            db.config.smsGatePassword = passVal;
+            saveState(db);
+
+            if (!phoneVal || normalizePhoneDigits(phoneVal).length < 10) {
+              ui.smsTestStatus = {
+                busy: false,
+                ok: false,
+                msg: bi('يرجى كتابة رقم هاتف تجربة صحيح (11 رقم) أولاً.', 'Please enter a valid 11-digit test phone number.')
+              };
+              renderApp();
+              return;
+            }
+
+            ui.smsTestStatus = { busy: true, ok: null, msg: bi('جاري الاتصال بخادم SMSGate وإرسال كود 123456...', 'Connecting to SMSGate and sending code 123456...') };
+            renderApp();
+
+            const res = await SmsGateService.sendSms({
+              serverUrl: urlVal,
+              username: userVal,
+              password: passVal,
+              phone: phoneVal,
+              messageText: 'منصة ' + (db.config.platformNameAr || 'طب الحجايزة') + ': كود التفعيل الخاص بك هو: 123456',
+              timeoutMs: 25000
+            });
+
+            if (res.ok) {
+              ui.smsTestStatus = {
+                busy: false,
+                ok: true,
+                msg: bi('✓ تم إرسال الرسالة التجريبية (كود التفعيل: 123456) بنجاح إلى ' + res.phone, '✓ Test SMS (OTP 123456) sent successfully to ' + res.phone)
+              };
+              showToast(bi('تم إرسال الرسالة التجريبية (123456) بنجاح!', 'Test SMS sent!'));
+            } else {
+              ui.smsTestStatus = {
+                busy: false,
+                ok: false,
+                msg: res.error || bi('تعذر إرسال الرسالة التجريبية', 'Test SMS failed')
+              };
+              showToast(ui.smsTestStatus.msg);
+            }
             renderApp();
           };
         }

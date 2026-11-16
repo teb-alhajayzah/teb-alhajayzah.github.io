@@ -89,6 +89,8 @@ import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.PatientAccountEntity
 import com.example.ui.AppRoleMode
+import com.example.ui.SmsDispatchStatus
+import com.example.ui.SmsOtpUiState
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
 import com.example.ui.theme.DelayWarningText
@@ -312,6 +314,7 @@ fun AccountAndFamilyDialog(
     familyMembers: List<FamilyMemberEntity>,
     activeMemberId: String,
     activeOtpChallenge: OtpChallenge?,
+    smsOtpUiState: SmsOtpUiState = SmsOtpUiState(),
     supportPhone: String = "01125002428",
     otpWhatsappPhone: String = "01141271027",
     appVersionLabel: String,
@@ -424,14 +427,14 @@ fun AccountAndFamilyDialog(
                                             Icon(Icons.Filled.Sms, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "تأكيد الحساب بكود التفعيل (Single-Use OTP)",
+                                                text = "تأكيد رقم الهاتف برمز التحقق (OTP)",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 color = TealPrimary,
                                                 fontWeight = FontWeight.Bold,
                                             )
                                         }
                                         Text(
-                                            text = "لا يمكن حجز أي موعد إلا بعد إدخال كود تفعيل من 6 أرقام المستلم ورقياً من سكرتيرة العيادة أو عبر واتساب، ثم الضغط على «تأكيد وتفعيل الحساب» (يحترق الكود تلقائياً فور الاستخدام).",
+                                            text = "يتم إرسال كود تفعيل من 6 أرقام إلى هاتفك تلقائياً عبر بوابة الرسائل، وفي حال تعذر الإرسال خلال 25 ثانية يظهر زر استلام الكود عبر واتساب.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -440,27 +443,105 @@ fun AccountAndFamilyDialog(
                                         val waOtpPhone = if (cleanOtpDigits.startsWith("2")) cleanOtpDigits else "2$cleanOtpDigits"
                                         val waMessage = "مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ${activeAccount.fullName} - الرقم: ${activeAccount.phone}"
 
-                                        Button(
-                                            onClick = {
-                                                val encoded = URLEncoder.encode(waMessage, "UTF-8")
-                                                val intent = Intent(
-                                                    Intent.ACTION_VIEW,
-                                                    Uri.parse("https://wa.me/$waOtpPhone?text=$encoded"),
-                                                )
-                                                context.startActivity(intent)
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = SlotAvailableBorder,
-                                                contentColor = Color.White,
-                                            ),
+                                        when (smsOtpUiState.status) {
+                                            SmsDispatchStatus.SENDING -> {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    ) {
+                                                        CircularProgressIndicator(
+                                                            strokeWidth = 2.dp,
+                                                            modifier = Modifier.size(18.dp),
+                                                            color = TealPrimary,
+                                                        )
+                                                        Text(
+                                                            text = "جاري إرسال كود التفعيل إلى هاتفك عبر بوابة الرسائل... (${smsOtpUiState.remainingSeconds} ثانية)",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = TealPrimary,
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            SmsDispatchStatus.SENT -> {
+                                                Surface(
+                                                    color = SlotAvailableBg,
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    border = BorderStroke(1.dp, SlotAvailableBorder),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Text(
+                                                        text = "✓ تم إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر SMS. أدخله بالأسفل لتفعيل الحساب.",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = SlotAvailableText,
+                                                        modifier = Modifier.padding(10.dp),
+                                                    )
+                                                }
+                                            }
+
+                                            SmsDispatchStatus.FAILED -> {
+                                                Surface(
+                                                    color = SlotBookedBg,
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    border = BorderStroke(1.dp, SlotBookedBorder),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Text(
+                                                        text = "⚠️ ${smsOtpUiState.errorMessage.ifBlank { "تعذر إرسال الرسالة خلال 25 ثانية. يمكنك استلام الكود عبر واتساب فوراً." }}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = SlotBookedText,
+                                                        modifier = Modifier.padding(10.dp),
+                                                    )
+                                                }
+                                            }
+
+                                            SmsDispatchStatus.IDLE -> Unit
+                                        }
+
+                                        if (smsOtpUiState.status == SmsDispatchStatus.FAILED || smsOtpUiState.status == SmsDispatchStatus.IDLE) {
+                                            Button(
+                                                onClick = {
+                                                    val encoded = URLEncoder.encode(waMessage, "UTF-8")
+                                                    val intent = Intent(
+                                                        Intent.ACTION_VIEW,
+                                                        Uri.parse("https://wa.me/$waOtpPhone?text=$encoded"),
+                                                    )
+                                                    context.startActivity(intent)
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = SlotAvailableBorder,
+                                                    contentColor = Color.White,
+                                                ),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(48.dp)
+                                                    .testTag("otp_whatsapp_request_button"),
+                                            ) {
+                                                Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("استلم الكود عبر واتساب")
+                                            }
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = onSendOrResendOtp,
+                                            enabled = smsOtpUiState.status != SmsDispatchStatus.SENDING,
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(48.dp)
-                                                .testTag("otp_whatsapp_request_button"),
+                                                .height(46.dp)
+                                                .testTag("otp_resend_sms_button"),
                                         ) {
-                                            Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Filled.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("اطلب كود التفعيل عبر واتساب")
+                                            Text(if (activeOtpChallenge != null) "إعادة إرسال كود التفعيل (SMS)" else "إرسال كود التفعيل عبر SMS")
                                         }
 
                                         OutlinedTextField(
