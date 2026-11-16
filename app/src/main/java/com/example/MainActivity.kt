@@ -241,7 +241,6 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                                 onOpenDoctorBooking = viewModel::openDoctorBooking,
                                                 onCancelSlot = viewModel::cancelAppointment,
                                                 onOpenOtpAccountDialog = {
-                                                    viewModel.sendOrResendOtpForActiveAccount()
                                                     showAccountDialog = true
                                                 },
                                                 onShowMessage = showMessage,
@@ -316,6 +315,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         onGenerateSchedule = viewModel::generateSchedule,
                                         onCompleteVisit = viewModel::completeVisitWithPrescription,
                                         onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
+                                        onGenerateOtpBatch = viewModel::generateActivationCodes,
                                         onPreviewImage = { path, title -> previewImage = path to title },
                                         onShowMessage = showMessage,
                                     )
@@ -337,6 +337,8 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         onUnblockPhone = viewModel::unblockPhoneByAdmin,
                                         onSavePlatformSettings = viewModel::updateBrandConfig,
                                         onResetPlatformSettings = viewModel::resetBrandConfig,
+                                        onGenerateOtpBatch = viewModel::generateActivationCodes,
+                                        onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
                                 }
@@ -355,6 +357,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             familyMembers = state.familyMembers,
             activeMemberId = state.activeMemberId,
             activeOtpChallenge = state.activeOtpChallenge,
+            supportPhone = state.brandConfig.supportPhone,
             appVersionLabel = state.brandConfig.appVersionLabel,
             onSelectMember = viewModel::selectActiveFamilyMember,
             onAddFamilyMember = { name, relation, age, phone ->

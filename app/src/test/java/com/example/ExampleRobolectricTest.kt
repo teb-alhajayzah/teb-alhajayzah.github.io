@@ -211,7 +211,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun phoneOtpVerificationAndAdminPinLockoutAndPhoneBlockingWork() = runBlocking {
+    fun singleUseActivationOtpCodesAndAdminPinLockoutAndPhoneBlockingWork() = runBlocking {
         repository.ensureSeeded()
 
         val otpProvider = FirebaseReadyTestOtpProvider()
@@ -227,16 +227,65 @@ class ExampleRobolectricTest {
         val createdAcc = regRes.getOrThrow()
         assertFalse(createdAcc.isPhoneVerified)
 
-        val challengeRes = otpProvider.sendVerificationCode(createdAcc.phone)
-        assertTrue(challengeRes.isSuccess)
-        val challenge = challengeRes.getOrThrow()
-        assertEquals(6, challenge.testOtpCode?.length)
-        assertTrue(otpProvider.verifyCode(challenge, "000000").isFailure || challenge.testOtpCode == "000000")
-        assertTrue(otpProvider.verifyCode(challenge, challenge.testOtpCode!!).isSuccess)
+        val gen10Res = repository.generateActivationCodeBatch(10, "ADMIN")
+        assertTrue(gen10Res.isSuccess)
+        assertEquals(10, gen10Res.getOrThrow())
 
-        repository.markAccountPhoneVerified(createdAcc.id)
+        val gen20Res = repository.generateActivationCodeBatch(20, "د. محمد عبد الرحمن")
+        assertTrue(gen20Res.isSuccess)
+        assertEquals(20, gen20Res.getOrThrow())
+
+        val allCodes = repository.activationCodesFlow.first()
+        assertEquals(35, allCodes.size) // 5 seeded + 10 + 20
+        assertEquals(35, allCodes.map { it.code }.toSet().size)
+
+        val pickedCode = allCodes.first { !it.isUsed }.code
+        assertEquals(6, pickedCode.length)
+
+        // Wrong code must fail
+        assertTrue(
+            repository.verifyAndBurnActivationCode(
+                accountId = createdAcc.id,
+                accountName = createdAcc.fullName,
+                accountPhone = createdAcc.phone,
+                enteredCode = "000000",
+            ).isFailure
+        )
+
+        // Valid unused code activates account and burns the code permanently
+        val verifyRes = repository.verifyAndBurnActivationCode(
+            accountId = createdAcc.id,
+            accountName = createdAcc.fullName,
+            accountPhone = createdAcc.phone,
+            enteredCode = pickedCode,
+        )
+        assertTrue(verifyRes.isSuccess)
+
         val updatedAccount = repository.allAccountsFlow.first().first { it.id == createdAcc.id }
         assertTrue(updatedAccount.isPhoneVerified)
+
+        val burnedEntity = repository.activationCodesFlow.first().first { it.code == pickedCode }
+        assertTrue(burnedEntity.isUsed)
+        assertEquals("محمود حسن علي", burnedEntity.usedByName)
+        assertEquals("01099887766", burnedEntity.usedByPhone)
+
+        // Second account attempting to reuse the burned code must be rejected
+        val secondAccRes = repository.registerPatientAccount(
+            fullName = "حساب ثاني",
+            phone = "01088776655",
+            nationalId = "",
+            password = "pass",
+        )
+        assertTrue(secondAccRes.isSuccess)
+        val secondAcc = secondAccRes.getOrThrow()
+        val reuseRes = repository.verifyAndBurnActivationCode(
+            accountId = secondAcc.id,
+            accountName = secondAcc.fullName,
+            accountPhone = secondAcc.phone,
+            enteredCode = pickedCode,
+        )
+        assertTrue(reuseRes.isFailure)
+        assertFalse(repository.allAccountsFlow.first().first { it.id == secondAcc.id }.isPhoneVerified)
 
         // Admin PIN lockout after 3 wrong attempts -> 15 min lockout
         val t0 = 1_000_000L

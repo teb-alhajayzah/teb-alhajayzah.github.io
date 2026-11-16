@@ -59,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +68,8 @@ import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
+import com.example.ui.components.PasswordOutlinedTextField
+import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.theme.SlotAvailableBg
 import com.example.ui.theme.SlotAvailableText
 import com.example.ui.theme.SlotBookedBg
@@ -125,8 +128,11 @@ fun SuperAdminDashboardScreen(
         adminPin: String,
     ) -> Unit,
     onResetPlatformSettings: () -> Unit,
+    onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
+    onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
+    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var defaultFormClinicType by remember { mutableStateOf(ClinicType.PRIVATE) }
@@ -245,6 +251,12 @@ fun SuperAdminDashboardScreen(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
                         text = { Text("إعدادات المنصة والـ PIN") },
+                    )
+                    Tab(
+                        selected = selectedTab == 4,
+                        onClick = { selectedTab = 4 },
+                        text = { Text("أكواد التفعيل (OTP)") },
+                        modifier = Modifier.testTag("admin_otp_codes_tab"),
                     )
                 }
             }
@@ -528,12 +540,12 @@ fun SuperAdminDashboardScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                OutlinedTextField(
+                                PasswordOutlinedTextField(
                                     value = cfgAdminPin,
                                     onValueChange = { cfgAdminPin = it },
-                                    label = { Text("الرقم السري للوحة التحكم (Admin PIN)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
+                                    label = "الرقم السري للوحة التحكم (Admin PIN)",
+                                    keyboardType = KeyboardType.NumberPassword,
+                                    toggleTestTag = "admin_change_pin_toggle",
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag("admin_change_pin_input"),
@@ -569,6 +581,16 @@ fun SuperAdminDashboardScreen(
                             }
                         }
                     }
+                }
+
+                4 -> {
+                    otpCodeGeneratorItems(
+                        context = context,
+                        brandConfig = state.brandConfig,
+                        activationCodes = state.activationCodes,
+                        onGenerateBatch = { count -> onGenerateOtpBatch(count, "ADMIN") },
+                        onShowMessage = onShowMessage,
+                    )
                 }
             }
         }
@@ -905,12 +927,14 @@ private fun DoctorFormDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                PasswordOutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("كلمة المرور للدكتور") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    label = "كلمة المرور للدكتور",
+                    toggleTestTag = "admin_doc_password_toggle",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("admin_doc_password_input"),
                 )
             }
         },

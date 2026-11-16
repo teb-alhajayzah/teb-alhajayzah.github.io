@@ -154,4 +154,47 @@ interface TebDao {
 
     @Query("DELETE FROM blocked_phones WHERE phone = :phone")
     suspend fun unblockPhone(phone: String)
+
+    @Query("SELECT * FROM activation_otp_codes ORDER BY isUsed ASC, createdAtMillis DESC")
+    fun observeAllActivationCodes(): Flow<List<ActivationOtpCodeEntity>>
+
+    @Query("SELECT * FROM activation_otp_codes")
+    suspend fun getAllActivationCodesOnce(): List<ActivationOtpCodeEntity>
+
+    @Query("SELECT * FROM activation_otp_codes WHERE code = :code LIMIT 1")
+    suspend fun getActivationCode(code: String): ActivationOtpCodeEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertActivationCodes(codes: List<ActivationOtpCodeEntity>)
+
+    @Query(
+        "UPDATE activation_otp_codes " +
+            "SET isUsed = 1, usedByName = :usedByName, usedByPhone = :usedByPhone, usedAtMillis = :usedAtMillis " +
+            "WHERE code = :code AND isUsed = 0"
+    )
+    suspend fun markActivationCodeUsed(
+        code: String,
+        usedByName: String,
+        usedByPhone: String,
+        usedAtMillis: Long,
+    ): Int
+
+    @Transaction
+    suspend fun redeemActivationCodeForAccount(
+        code: String,
+        accountId: String,
+        usedByName: String,
+        usedByPhone: String,
+        usedAtMillis: Long,
+    ): Boolean {
+        val updatedRows = markActivationCodeUsed(
+            code = code,
+            usedByName = usedByName,
+            usedByPhone = usedByPhone,
+            usedAtMillis = usedAtMillis,
+        )
+        if (updatedRows <= 0) return false
+        markAccountPhoneVerified(accountId)
+        return true
+    }
 }

@@ -43,6 +43,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,11 +56,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -68,6 +70,8 @@ import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
+import com.example.ui.components.PasswordOutlinedTextField
+import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.patient.MedicalRecordTimelineCard
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
@@ -150,12 +154,11 @@ fun DoctorLoginGateScreen(
                         .testTag("doctor_login_identifier"),
                 )
 
-                OutlinedTextField(
+                PasswordOutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("كلمة المرور") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
+                    label = "كلمة المرور",
+                    toggleTestTag = "doctor_login_password_toggle",
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("doctor_login_password"),
@@ -200,9 +203,11 @@ fun DoctorDashboardScreen(
     onGenerateSchedule: (doctorId: String, startMin: Int, endMin: Int, durationMin: Int) -> Unit,
     onCompleteVisit: (slotId: String, diagnosis: String, medications: String, notes: String, attachmentPath: String) -> Unit,
     onToggleFavoriteMed: (doctorId: String, medicationId: String) -> Unit,
+    onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
     onPreviewImage: (path: String, title: String) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     val activeDoctor = state.loggedInDoctor ?: return
     val slots = remember(state.allSlots, activeDoctor.id) {
         state.slotsForDoctor(activeDoctor.id)
@@ -212,6 +217,7 @@ fun DoctorDashboardScreen(
     val bookedCount = slots.count { it.status == SlotStatus.BOOKED }
     val completedCount = slots.count { it.status == SlotStatus.COMPLETED }
 
+    var selectedTab by remember { mutableIntStateOf(0) }
     var slotForManualBooking by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForPrescription by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForEmrView by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
@@ -256,119 +262,145 @@ fun DoctorDashboardScreen(
                 }
             }
 
-            // Summary Metrics + Delay & Schedule Generator Controls
             item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = activeDoctor.doctorName,
-                                    style = MaterialTheme.typography.titleLarge,
-                                )
-                                Text(
-                                    text = "${activeDoctor.clinicName} • ${TimeUtils.formatMinutesAr(activeDoctor.workStartMinutes)} - ${TimeUtils.formatMinutesAr(activeDoctor.workEndMinutes)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (activeDoctor.currentDelayMinutes > 0) {
-                                Surface(
-                                    color = DelayWarningBg,
-                                    shape = RoundedCornerShape(10.dp),
-                                    border = BorderStroke(1.dp, DelayWarningBorder),
-                                ) {
-                                    Text(
-                                        text = "تأخير: +${activeDoctor.currentDelayMinutes} د",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = DelayWarningText,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                    )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            StatPill("محجوز", bookedCount.toString(), SlotBookedBg, SlotBookedText, Modifier.weight(1f))
-                            StatPill("متاح", availableCount.toString(), SlotAvailableBg, SlotAvailableText, Modifier.weight(1f))
-                            StatPill("تم الكشف", completedCount.toString(), SlotCompletedBg, SlotCompletedText, Modifier.weight(1f))
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Button(
-                                onClick = { onDelayDoctor(activeDoctor.id, 15) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = DelayWarningBorder,
-                                    contentColor = Color.White,
-                                ),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .testTag("delay_15_min_button"),
-                            ) {
-                                Icon(Icons.Filled.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("تأخير 15 دقيقة")
-                            }
-                            OutlinedButton(
-                                onClick = { onDelayDoctor(activeDoctor.id, 30) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .testTag("delay_30_min_button"),
-                            ) {
-                                Text("تأخير 30 دقيقة")
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = { showScheduleDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .testTag("generate_schedule_button"),
-                        ) {
-                            Icon(Icons.Filled.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)")
-                        }
-                    }
+                TabRow(selectedTabIndex = selectedTab) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("جدول المواعيد والعيادة") },
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("أكواد التفعيل (OTP)") },
+                        modifier = Modifier.testTag("doctor_otp_codes_tab"),
+                    )
                 }
             }
 
-            item {
-                Text(
-                    text = "قائمة مواعيد اليوم (${slots.size})",
-                    style = MaterialTheme.typography.titleLarge,
+            if (selectedTab == 1) {
+                otpCodeGeneratorItems(
+                    context = context,
+                    brandConfig = state.brandConfig,
+                    activationCodes = state.activationCodes,
+                    onGenerateBatch = { count -> onGenerateOtpBatch(count, activeDoctor.doctorName) },
+                    onShowMessage = onShowMessage,
                 )
-            }
+            } else {
+                // Summary Metrics + Delay & Schedule Generator Controls
+                item {
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = activeDoctor.doctorName,
+                                        style = MaterialTheme.typography.titleLarge,
+                                    )
+                                    Text(
+                                        text = "${activeDoctor.clinicName} • ${TimeUtils.formatMinutesAr(activeDoctor.workStartMinutes)} - ${TimeUtils.formatMinutesAr(activeDoctor.workEndMinutes)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (activeDoctor.currentDelayMinutes > 0) {
+                                    Surface(
+                                        color = DelayWarningBg,
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(1.dp, DelayWarningBorder),
+                                    ) {
+                                        Text(
+                                            text = "تأخير: +${activeDoctor.currentDelayMinutes} د",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = DelayWarningText,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        )
+                                    }
+                                }
+                            }
 
-            items(slots, key = { it.id }) { slot ->
-                DoctorSlotCard(
-                    slot = slot,
-                    onManualBook = { slotForManualBooking = slot },
-                    onViewEmr = { slotForEmrView = slot },
-                    onWritePrescription = { slotForPrescription = slot },
-                    onCancel = { onCancelSlot(slot.id) },
-                )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                StatPill("محجوز", bookedCount.toString(), SlotBookedBg, SlotBookedText, Modifier.weight(1f))
+                                StatPill("متاح", availableCount.toString(), SlotAvailableBg, SlotAvailableText, Modifier.weight(1f))
+                                StatPill("تم الكشف", completedCount.toString(), SlotCompletedBg, SlotCompletedText, Modifier.weight(1f))
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Button(
+                                    onClick = { onDelayDoctor(activeDoctor.id, 15) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = DelayWarningBorder,
+                                        contentColor = Color.White,
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("delay_15_min_button"),
+                                ) {
+                                    Icon(Icons.Filled.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("تأخير 15 دقيقة")
+                                }
+                                OutlinedButton(
+                                    onClick = { onDelayDoctor(activeDoctor.id, 30) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("delay_30_min_button"),
+                                ) {
+                                    Text("تأخير 30 دقيقة")
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { showScheduleDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("generate_schedule_button"),
+                            ) {
+                                Icon(Icons.Filled.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)")
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "قائمة مواعيد اليوم (${slots.size})",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                }
+
+                items(slots, key = { it.id }) { slot ->
+                    DoctorSlotCard(
+                        slot = slot,
+                        onManualBook = { slotForManualBooking = slot },
+                        onViewEmr = { slotForEmrView = slot },
+                        onWritePrescription = { slotForPrescription = slot },
+                        onCancel = { onCancelSlot(slot.id) },
+                    )
+                }
             }
         }
     }

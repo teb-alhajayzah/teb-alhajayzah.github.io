@@ -129,3 +129,14 @@ data class BlockedPhoneEntity(
     val reason: String = "حظر إداري بسبب حجز وهمي / مخالفة",
     val blockedAtMillis: Long = System.currentTimeMillis(),
 )
+
+@Entity(tableName = "activation_otp_codes")
+data class ActivationOtpCodeEntity(
+    @PrimaryKey val code: String,
+    val isUsed: Boolean = false,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val usedByName: String = "",
+    val usedByPhone: String = "",
+    val usedAtMillis: Long = 0L,
+    val generatedBy: String = "ADMIN",
+)

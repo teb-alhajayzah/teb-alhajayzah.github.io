@@ -8,6 +8,7 @@ import com.example.auth.OtpChallenge
 import com.example.auth.PhoneOtpAuthProvider
 import com.example.config.AppConfig
 import com.example.config.PlatformBrandConfig
+import com.example.data.local.ActivationOtpCodeEntity
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.BlockedPhoneEntity
 import com.example.data.local.BookingSource
@@ -73,6 +74,7 @@ data class TebUiState(
     val medications: List<EgyptianMedication> = MedicationCatalog.builtInMedications,
     val isLiveMedicationsApi: Boolean = false,
     val favoriteMedsByDoctor: Map<String, Set<String>> = emptyMap(),
+    val activationCodes: List<ActivationOtpCodeEntity> = emptyList(),
 ) {
     val activeMember: FamilyMemberEntity?
         get() = familyMembers.firstOrNull { it.id == activeMemberId } ?: familyMembers.firstOrNull()
@@ -274,7 +276,8 @@ class TebViewModel(
         accountBundleFlow,
         clinicBundleFlow,
         medicationBundleFlow,
-    ) { sel, acc, clinic, medBundle ->
+        repository.activationCodesFlow,
+    ) { sel, acc, clinic, medBundle, activationCodes ->
         val favMap = medBundle.favorites
             .groupBy { it.doctorId }
             .mapValues { (_, list) -> list.map { it.medicationId }.toSet() }
@@ -309,6 +312,7 @@ class TebViewModel(
             medications = medBundle.medications,
             isLiveMedicationsApi = medBundle.isLiveRemote,
             favoriteMedsByDoctor = favMap,
+            activationCodes = activationCodes,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -541,42 +545,50 @@ class TebViewModel(
         }
     }
 
+    fun generateActivationCodes(count: Int, generatedBy: String) {
+        viewModelScope.launch {
+            val res = repository.generateActivationCodeBatch(count, generatedBy)
+            res.onSuccess { createdCount ->
+                _snackbarMessages.tryEmit("تم توليد $createdCount كود تفعيل جديد ذي استخدام واحد بنجاح")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر توليد أكواد التفعيل")
+            }
+        }
+    }
+
     fun sendOrResendOtpForActiveAccount() {
         val acc = uiState.value.activeAccount ?: return
         val res = otpProvider.sendVerificationCode(acc.phone)
         res.onSuccess { challenge ->
             _activeOtpChallenge.value = challenge
-            _snackbarMessages.tryEmit("رمز التحقق التجريبي (Test OTP) لـ ${acc.phone}: ${challenge.testOtpCode}")
         }.onFailure { err ->
-            _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال رمز التحقق")
+            _snackbarMessages.tryEmit(err.message ?: "تعذر تجهيز طلب التفعيل")
         }
     }
 
     fun verifyActiveAccountOtp(enteredCode: String) {
         val acc = uiState.value.activeAccount ?: return
-        val challenge = _activeOtpChallenge.value
-        if (challenge == null) {
-            _snackbarMessages.tryEmit("اضغط على إرسال رمز التحقق أولاً")
-            return
-        }
-        val check = otpProvider.verifyCode(challenge, enteredCode)
-        check.onSuccess {
-            viewModelScope.launch {
-                repository.markAccountPhoneVerified(acc.id)
+        viewModelScope.launch {
+            val result = repository.verifyAndBurnActivationCode(
+                accountId = acc.id,
+                accountName = acc.fullName,
+                accountPhone = acc.phone,
+                enteredCode = enteredCode,
+            )
+            result.onSuccess {
                 _activeOtpChallenge.value = null
-                _snackbarMessages.tryEmit("تم تأكيد رقم الهاتف وتفعيل الحساب بنجاح! يمكنك الحجز الآن.")
+                _snackbarMessages.tryEmit("تم تأكيد وتفعيل الحساب بنجاح وحرق الكود نهائياً! يمكنك الحجز الآن.")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "كود التفعيل غير صحيح")
             }
-        }.onFailure { err ->
-            _snackbarMessages.tryEmit(err.message ?: "رمز التحقق غير صحيح")
         }
     }
 
     fun bookAppointmentAsPatient(slotId: String, member: FamilyMemberEntity) {
         val account = uiState.value.activeAccount
         if (account != null && !account.isPhoneVerified) {
-            sendOrResendOtpForActiveAccount()
             _openAccountForOtpEvents.tryEmit(Unit)
-            _snackbarMessages.tryEmit("الحساب غير مفعّل: يرجى إدخال رمز التحقق (OTP) أولاً لمنع الحجوزات الوهمية")
+            _snackbarMessages.tryEmit("الحساب غير مفعّل: يرجى إدخال كود التفعيل المكون من 6 أرقام أولاً لمنع الحجوزات الوهمية")
             return
         }
         viewModelScope.launch {
@@ -727,15 +739,9 @@ class TebViewModel(
                 return@launch
             }
             val result = repository.registerPatientAccount(fullName, phone, nationalId, password)
-            result.onSuccess { acc ->
-                val challengeRes = otpProvider.sendVerificationCode(acc.phone)
-                challengeRes.onSuccess { challenge ->
-                    _activeOtpChallenge.value = challenge
-                    _openAccountForOtpEvents.tryEmit(Unit)
-                    _snackbarMessages.tryEmit("تم إنشاء الحساب! رمز التحقق التجريبي (Test OTP): ${challenge.testOtpCode}")
-                }.onFailure { otpErr ->
-                    _snackbarMessages.tryEmit(otpErr.message ?: "تم إنشاء الحساب، يرجى التحقق من الرقم")
-                }
+            result.onSuccess {
+                _openAccountForOtpEvents.tryEmit(Unit)
+                _snackbarMessages.tryEmit("تم إنشاء الحساب! يرجى طلب وإدخال كود التفعيل (6 أرقام) لتفعيل الحجز.")
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر إنشاء الحساب")
             }

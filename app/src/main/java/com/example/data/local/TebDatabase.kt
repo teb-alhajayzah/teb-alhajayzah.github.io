@@ -17,8 +17,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DelayNotificationEntity::class,
         DoctorFavoriteMedEntity::class,
         BlockedPhoneEntity::class,
+        ActivationOtpCodeEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -67,6 +68,25 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `activation_otp_codes` (
+                        `code` TEXT NOT NULL,
+                        `isUsed` INTEGER NOT NULL,
+                        `createdAtMillis` INTEGER NOT NULL,
+                        `usedByName` TEXT NOT NULL,
+                        `usedByPhone` TEXT NOT NULL,
+                        `usedAtMillis` INTEGER NOT NULL,
+                        `generatedBy` TEXT NOT NULL,
+                        PRIMARY KEY(`code`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -74,7 +94,7 @@ abstract class TebDatabase : RoomDatabase() {
                     TebDatabase::class.java,
                     "teb_al_hajayzah.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }

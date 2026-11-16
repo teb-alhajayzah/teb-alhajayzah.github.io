@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.config.AppConfig
 import com.example.config.PlatformBrandConfig
+import com.example.data.local.ActivationOtpCodeEntity
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.BlockedPhoneEntity
 import com.example.data.local.BookingSource
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.security.SecureRandom
 import java.util.UUID
 
 private val Context.tebDataStore by preferencesDataStore(name = "teb_prefs")
@@ -38,6 +40,7 @@ class TebRepository(
     private val appContext: Context,
 ) {
     private val seedMutex = Mutex()
+    private val secureRandom = SecureRandom()
 
     private val activeAccountKey = stringPreferencesKey("active_account_id")
     private val activeMemberKey = stringPreferencesKey("active_member_id")
@@ -102,6 +105,7 @@ class TebRepository(
     val notificationsFlow: Flow<List<DelayNotificationEntity>> = dao.observeNotifications()
     val allDoctorFavoritesFlow: Flow<List<DoctorFavoriteMedEntity>> = dao.observeAllDoctorFavorites()
     val blockedPhonesFlow: Flow<List<BlockedPhoneEntity>> = dao.observeBlockedPhones()
+    val activationCodesFlow: Flow<List<ActivationOtpCodeEntity>> = dao.observeAllActivationCodes()
 
     fun observeFamilyMembers(accountId: String): Flow<List<FamilyMemberEntity>> =
         dao.observeFamilyMembers(accountId)
@@ -236,6 +240,64 @@ class TebRepository(
 
     suspend fun markAccountPhoneVerified(accountId: String) {
         dao.markAccountPhoneVerified(accountId)
+    }
+
+    suspend fun generateActivationCodeBatch(count: Int, generatedBy: String = "ADMIN"): Result<Int> {
+        val safeCount = count.coerceIn(1, 100)
+        val existingCodes = dao.getAllActivationCodesOnce().map { it.code }.toHashSet()
+        val now = System.currentTimeMillis()
+        val generated = ArrayList<ActivationOtpCodeEntity>(safeCount)
+        var attempts = 0
+        while (generated.size < safeCount && attempts < safeCount * 30) {
+            attempts++
+            val candidate = (100000 + secureRandom.nextInt(900000)).toString()
+            if (existingCodes.add(candidate)) {
+                generated += ActivationOtpCodeEntity(
+                    code = candidate,
+                    isUsed = false,
+                    createdAtMillis = now + generated.size,
+                    usedByName = "",
+                    usedByPhone = "",
+                    usedAtMillis = 0L,
+                    generatedBy = generatedBy.ifBlank { "ADMIN" },
+                )
+            }
+        }
+        if (generated.isEmpty()) {
+            return Result.failure(IllegalStateException("تعذر توليد أكواد جديدة حالياً"))
+        }
+        dao.insertActivationCodes(generated)
+        return Result.success(generated.size)
+    }
+
+    suspend fun verifyAndBurnActivationCode(
+        accountId: String,
+        accountName: String,
+        accountPhone: String,
+        enteredCode: String,
+    ): Result<Unit> {
+        val cleanCode = enteredCode.filter { it.isDigit() }
+        if (cleanCode.length != 6) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال كود التفعيل المكون من 6 أرقام"))
+        }
+        val codeEntity = dao.getActivationCode(cleanCode)
+            ?: return Result.failure(IllegalArgumentException("كود التفعيل غير صحيح أو غير مسجل. اطلب الكود من السكرتيرة أو عبر واتساب."))
+        if (codeEntity.isUsed) {
+            val usedInfo = if (codeEntity.usedByName.isNotBlank()) " (${codeEntity.usedByName})" else ""
+            return Result.failure(IllegalStateException("هذا الكود تم استخدامه بالفعل ومنتهي الصلاحية$usedInfo، ولا يمكن استخدامه مجدداً."))
+        }
+        val redeemed = dao.redeemActivationCodeForAccount(
+            code = cleanCode,
+            accountId = accountId,
+            usedByName = accountName.trim(),
+            usedByPhone = accountPhone.trim(),
+            usedAtMillis = System.currentTimeMillis(),
+        )
+        return if (redeemed) {
+            Result.success(Unit)
+        } else {
+            Result.failure(IllegalStateException("هذا الكود تم استخدامه بالفعل ومنتهي الصلاحية."))
+        }
     }
 
     suspend fun loginDoctor(identifier: String, password: String): Result<ClinicDoctorEntity> {
@@ -407,6 +469,9 @@ class TebRepository(
 
     suspend fun ensureSeeded() {
         seedMutex.withLock {
+            if (dao.getAllActivationCodesOnce().isEmpty()) {
+                generateActivationCodeBatch(5, "SYSTEM")
+            }
             if (dao.countDoctors() > 0) return
 
             val defaultAccount = PatientAccountEntity(

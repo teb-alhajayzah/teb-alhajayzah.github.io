@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -26,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocalHospital
@@ -67,11 +70,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,6 +100,7 @@ import com.example.ui.theme.TealPrimary
 import com.example.ui.theme.TealPrimaryDark
 import kotlinx.coroutines.delay
 import java.io.File
+import java.net.URLEncoder
 
 @Composable
 fun TebTopHeader(
@@ -282,16 +286,18 @@ fun AccountAndFamilyDialog(
     familyMembers: List<FamilyMemberEntity>,
     activeMemberId: String,
     activeOtpChallenge: OtpChallenge?,
+    supportPhone: String = "01125002428",
     appVersionLabel: String,
     onSelectMember: (String) -> Unit,
     onAddFamilyMember: (name: String, relation: String, age: Int, phone: String) -> Unit,
     onLogin: (identifier: String, password: String) -> Unit,
     onRegister: (name: String, phone: String, nationalId: String, password: String) -> Unit,
-    onSendOrResendOtp: () -> Unit,
+    onSendOrResendOtp: () -> Unit = {},
     onVerifyOtp: (code: String) -> Unit,
     onTriggerHiddenAdmin: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var newMemberName by remember { mutableStateOf("") }
     var newMemberRelation by remember { mutableStateOf("الابن") }
@@ -384,42 +390,50 @@ fun AccountAndFamilyDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(10.dp),
+                                        modifier = Modifier.padding(12.dp),
                                         verticalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(Icons.Filled.Sms, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "تأكيد الحساب برمز التحقق (OTP)",
+                                                text = "تأكيد الحساب بكود التفعيل (Single-Use OTP)",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 color = TealPrimary,
                                                 fontWeight = FontWeight.Bold,
                                             )
                                         }
                                         Text(
-                                            text = "لا يمكن حجز أي موعد إلا بعد إدخال كود التحقق المكون من 6 أرقام لمنع الحجوزات الوهمية.",
+                                            text = "لا يمكن حجز أي موعد إلا بعد إدخال كود تفعيل من 6 أرقام المستلم ورقياً من سكرتيرة العيادة أو عبر واتساب، ثم الضغط على «تأكيد وتفعيل الحساب» (يحترق الكود تلقائياً فور الاستخدام).",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
 
-                                        if (activeOtpChallenge?.testOtpCode != null) {
-                                            Surface(
-                                                color = DelayWarningBg,
-                                                shape = RoundedCornerShape(10.dp),
-                                                border = BorderStroke(1.dp, DelayWarningBorder),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .testTag("test_otp_banner"),
-                                            ) {
-                                                Text(
-                                                    text = "إشعار تجريبي (Test OTP للرقم ${activeOtpChallenge.formattedE164Phone}):\nكود التحقق الخاص بك هو: ${activeOtpChallenge.testOtpCode}",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = DelayWarningText,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.padding(10.dp),
+                                        val cleanDigits = supportPhone.filter { it.isDigit() }.ifBlank { "01125002428" }
+                                        val waPhone = if (cleanDigits.startsWith("2")) cleanDigits else "2$cleanDigits"
+                                        val waMessage = "مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ${activeAccount.fullName} - الرقم: ${activeAccount.phone}"
+
+                                        Button(
+                                            onClick = {
+                                                val encoded = URLEncoder.encode(waMessage, "UTF-8")
+                                                val intent = Intent(
+                                                    Intent.ACTION_VIEW,
+                                                    Uri.parse("https://wa.me/$waPhone?text=$encoded"),
                                                 )
-                                            }
+                                                context.startActivity(intent)
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = SlotAvailableBorder,
+                                                contentColor = Color.White,
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp)
+                                                .testTag("otp_whatsapp_request_button"),
+                                        ) {
+                                            Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("اطلب كود التفعيل عبر واتساب")
                                         }
 
                                         OutlinedTextField(
@@ -427,7 +441,7 @@ fun AccountAndFamilyDialog(
                                             onValueChange = { ch ->
                                                 otpInput = ch.filter { it.isDigit() }.take(6)
                                             },
-                                            label = { Text("أدخل كود التحقق (6 أرقام)") },
+                                            label = { Text("أدخل كود التفعيل (6 أرقام)") },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             modifier = Modifier
@@ -435,27 +449,16 @@ fun AccountAndFamilyDialog(
                                                 .testTag("otp_code_input"),
                                         )
 
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(
-                                                onClick = { onVerifyOtp(otpInput) },
-                                                modifier = Modifier
-                                                    .weight(1.2f)
-                                                    .height(48.dp)
-                                                    .testTag("otp_verify_submit"),
-                                            ) {
-                                                Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("تأكيد وتفعيل")
-                                            }
-                                            OutlinedButton(
-                                                onClick = onSendOrResendOtp,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(48.dp)
-                                                    .testTag("otp_resend_button"),
-                                            ) {
-                                                Text(if (activeOtpChallenge == null) "إرسال الرمز" else "إعادة إرسال")
-                                            }
+                                        Button(
+                                            onClick = { onVerifyOtp(otpInput) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp)
+                                                .testTag("otp_verify_submit"),
+                                        ) {
+                                            Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("تأكيد وتفعيل الحساب")
                                         }
                                     }
                                 }
@@ -619,13 +622,14 @@ fun AccountAndFamilyDialog(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            OutlinedTextField(
+                            PasswordOutlinedTextField(
                                 value = loginPassword,
                                 onValueChange = { loginPassword = it },
-                                label = { Text("كلمة المرور") },
-                                visualTransformation = PasswordVisualTransformation(),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                                label = "كلمة المرور",
+                                toggleTestTag = "login_password_toggle",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("login_password_input"),
                             )
                             Button(
                                 onClick = {
@@ -674,13 +678,14 @@ fun AccountAndFamilyDialog(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            OutlinedTextField(
+                            PasswordOutlinedTextField(
                                 value = regPassword,
                                 onValueChange = { regPassword = it },
-                                label = { Text("كلمة المرور") },
-                                visualTransformation = PasswordVisualTransformation(),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                                label = "كلمة المرور",
+                                toggleTestTag = "reg_password_toggle",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("reg_password_input"),
                             )
                             Button(
                                 onClick = {
@@ -692,7 +697,7 @@ fun AccountAndFamilyDialog(
                                     .height(50.dp)
                                     .testTag("reg_submit_button"),
                             ) {
-                                Text("إنشاء الحساب وإرسال رمز التحقق (OTP)")
+                                Text("إنشاء الحساب والمتابعة للتفعيل (OTP)")
                             }
                         }
                     }
@@ -778,13 +783,12 @@ fun AdminPinLockDialog(
                         )
                     }
                 } else {
-                    OutlinedTextField(
+                    PasswordOutlinedTextField(
                         value = pinInput,
                         onValueChange = { pinInput = it },
-                        label = { Text("الرقم السري للوحة التحكم (Admin PIN)") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        singleLine = true,
+                        label = "الرقم السري للوحة التحكم (Admin PIN)",
+                        keyboardType = KeyboardType.NumberPassword,
+                        toggleTestTag = "admin_pin_toggle",
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("admin_pin_input"),
