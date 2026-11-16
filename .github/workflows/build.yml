@@ -30,17 +30,25 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Restore fixed signing keystore cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/keystore
+          key: teb-alhajayzah-keystore-v1
+
       - name: Prepare fixed signing keystore (teb-alhajayzah.jks)
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          mkdir -p "${{ runner.temp }}/keystore"
+          KEYSTORE_FILE="${{ runner.temp }}/keystore/teb-alhajayzah.jks"
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "${{ github.workspace }}/teb-alhajayzah.jks"
-          elif [ ! -f "${{ github.workspace }}/teb-alhajayzah.jks" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
+          elif [ ! -f "$KEYSTORE_FILE" ]; then
             keytool -genkeypair -v \
-              -keystore "${{ github.workspace }}/teb-alhajayzah.jks" \
+              -keystore "$KEYSTORE_FILE" \
               -alias upload \
               -keyalg RSA \
               -keysize 2048 \
@@ -58,7 +66,7 @@ jobs:
 
       - name: Build Release APK
         env:
-          KEYSTORE_PATH: ${{ github.workspace }}/teb-alhajayzah.jks
+          KEYSTORE_PATH: ${{ runner.temp }}/keystore/teb-alhajayzah.jks
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'tebalhajayzah2026' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'tebalhajayzah2026' }}
         run: |
