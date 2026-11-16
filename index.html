@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0D7377" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="description" content="طب الحجايزة - منصة متكاملة لحجز مواعيد العيادات ومستشفى الحجايزة التخصصي وإدارة الملفات الطبية والروشتة الذكية." />
   <title>طب الحجايزة | حجز المواعيد والملف الطبي</title>
   <link rel="manifest" href="./manifest.json" />
@@ -86,7 +89,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 10px;
     }
 
     .brand-box {
@@ -105,7 +108,7 @@
     }
 
     .brand-title {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       font-weight: 800;
       white-space: nowrap;
       overflow: hidden;
@@ -113,8 +116,11 @@
     }
 
     .brand-sub {
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       opacity: 0.88;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .header-actions {
@@ -128,14 +134,14 @@
       min-width: 44px;
       height: 44px;
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.22);
+      border: 1px solid rgba(255,255,255,0.24);
       background: rgba(255,255,255,0.14);
       color: #fff;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.15rem;
+      font-size: 1.1rem;
       position: relative;
       padding: 0 10px;
       transition: background 0.15s;
@@ -143,6 +149,27 @@
 
     .icon-btn:hover {
       background: rgba(255,255,255,0.24);
+    }
+
+    .lang-toggle-btn {
+      font-size: 0.84rem;
+      font-weight: 800;
+      gap: 4px;
+      padding: 0 10px;
+      letter-spacing: 0.3px;
+    }
+
+    .lang-pill-active {
+      background: #fff;
+      color: var(--teal-dark);
+      padding: 2px 6px;
+      border-radius: 7px;
+      font-weight: 800;
+    }
+
+    .lang-pill-dim {
+      opacity: 0.82;
+      padding: 2px 4px;
     }
 
     .badge-dot {
@@ -176,7 +203,7 @@
       border: none;
       border-radius: 10px;
       padding: 10px 12px;
-      font-size: 0.94rem;
+      font-size: 0.92rem;
       font-weight: 700;
       cursor: pointer;
       background: transparent;
@@ -259,7 +286,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      text-align: right;
+      text-align: start;
       transition: transform 0.12s, border-color 0.15s;
       box-shadow: 0 2px 10px rgba(0,0,0,0.04);
     }
@@ -766,7 +793,7 @@
       font-weight: 700;
       font-size: 0.9rem;
       cursor: pointer;
-      text-align: right;
+      text-align: start;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -808,22 +835,25 @@
       <div class="header-row">
         <div class="brand-box">
           <img src="./icon.svg" alt="شعار طب الحجايزة" class="brand-logo" />
-          <div>
+          <div style="min-width:0;">
             <div class="brand-title" id="hdrBrandName">طب الحجايزة</div>
             <div class="brand-sub" id="hdrVillageName">قرية الحجايزة والقرى المجاورة</div>
           </div>
         </div>
         <div class="header-actions">
-          <button class="icon-btn" id="btnNotifications" title="التنبيهات">
+          <button class="icon-btn lang-toggle-btn" id="btnLangToggle" type="button" title="تبديل اللغة / Switch Language" aria-label="تبديل اللغة AR / EN">
+            🌐 <span class="lang-pill-active" id="langArBadge">AR</span><span style="opacity:0.6;">/</span><span class="lang-pill-dim" id="langEnBadge">EN</span>
+          </button>
+          <button class="icon-btn" id="btnNotifications" type="button" title="التنبيهات">
             🔔<span class="badge-dot" id="alertBadge" style="display:none">0</span>
           </button>
-          <button class="icon-btn" id="btnAccount" title="الحساب وأفراد العائلة">👤</button>
+          <button class="icon-btn" id="btnAccount" type="button" title="الحساب وأفراد العائلة">👤</button>
         </div>
       </div>
 
       <div class="role-switcher">
-        <button class="role-btn active" id="rolePatientBtn">🏥 واجهة المريض</button>
-        <button class="role-btn" id="roleDoctorBtn">🩺 لوحة الدكتور والسكرتيرة</button>
+        <button class="role-btn active" id="rolePatientBtn" type="button">🏥 واجهة المريض</button>
+        <button class="role-btn" id="roleDoctorBtn" type="button">🩺 لوحة الدكتور والسكرتيرة</button>
       </div>
     </div>
   </header>
@@ -833,11 +863,11 @@
   <footer class="site-footer" id="siteFooter"></footer>
 
   <nav class="bottom-nav" id="bottomNav">
-    <button class="nav-item active" data-tab="HOME"><span class="nav-icon">🏠</span><span>الرئيسية</span></button>
-    <button class="nav-item" data-tab="PRIVATE"><span class="nav-icon">🩺</span><span>العيادات</span></button>
-    <button class="nav-item" data-tab="HOSPITAL"><span class="nav-icon">🏥</span><span>المستشفى</span></button>
-    <button class="nav-item" data-tab="SPECIALTIES"><span class="nav-icon">📋</span><span>التخصصات</span></button>
-    <button class="nav-item" data-tab="EMR"><span class="nav-icon">📁</span><span>ملفي الطبي</span></button>
+    <button class="nav-item active" data-tab="HOME" type="button"><span class="nav-icon">🏠</span><span id="navLblHome">الرئيسية</span></button>
+    <button class="nav-item" data-tab="PRIVATE" type="button"><span class="nav-icon">🩺</span><span id="navLblPrivate">العيادات</span></button>
+    <button class="nav-item" data-tab="HOSPITAL" type="button"><span class="nav-icon">🏥</span><span id="navLblHospital">المستشفى</span></button>
+    <button class="nav-item" data-tab="SPECIALTIES" type="button"><span class="nav-icon">📋</span><span id="navLblSpecs">التخصصات</span></button>
+    <button class="nav-item" data-tab="EMR" type="button"><span class="nav-icon">📁</span><span id="navLblEmr">ملفي الطبي</span></button>
   </nav>
 
   <div id="modalRoot"></div>
@@ -850,14 +880,17 @@
       'use strict';
 
       // ================================================================
-      // 1. ملف الإعدادات الموحد (Unified Config) لسهولة التوسع لأي قرية أو مركز
+      // 1. ملف الإعدادات الموحد (Unified Config) — نسخة إنتاجية نظيفة 100%
       // ================================================================
       const DEFAULT_CONFIG = {
         platformNameAr: 'طب الحجايزة',
         platformNameEn: 'Teb Al-Hajayzah',
         villageNameAr: 'قرية الحجايزة والقرى المجاورة',
+        villageNameEn: 'Al-Hajayzah & Neighboring Villages',
         hospitalNameAr: 'مستشفى الحجايزة التخصصي',
+        hospitalNameEn: 'Al-Hajayzah Specialized Hospital',
         taglineAr: 'منصتك الطبية لحجز العيادات والملف الصحي الموحد',
+        taglineEn: 'Your medical platform for clinic bookings and unified health records',
         homeAnnouncementAr: '',
         supportPhone: '01125002428',
         appVersionLabel: 'v1.0.0',
@@ -867,7 +900,14 @@
         adminPin: '202600'
       };
 
-      const STORAGE_KEY = 'teb_alhajayzah_web_state_v1';
+      const LEGACY_STORAGE_KEY = 'teb_alhajayzah_web_state_v1';
+      const STORAGE_KEY = 'teb_alhajayzah_web_state_v2_prod';
+      const LANG_KEY = 'teb_alhajayzah_lang_v1';
+
+      // Clean out any cached demo/seed storage from older deployments
+      try {
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      } catch (e) { /* ignore storage errors */ }
 
       // ================================================================
       // 2. قاعدة بيانات الأدوية المصرية المدمجة (Offline) + الدعم السحابي
@@ -934,147 +974,28 @@
       ];
 
       // ================================================================
-      // 3. البيانات المبدئية لعيادات ومستشفى الحجايزة (Seed Data)
+      // 3. الحالة الإنتاجية النظيفة (بدون أي بيانات أو عيادات أو أسماء وهمية)
       // ================================================================
-      function buildDoctorSlots(doc, preBooked) {
+      function buildDoctorSlots(doc) {
         const list = [];
         let cur = doc.workStartMinutes;
         let idx = 0;
         while (cur < doc.workEndMinutes) {
-          const pre = preBooked[idx];
           list.push({
             id: doc.id + '_today_' + idx,
             doctorId: doc.id,
             startMinutes: cur,
             delayMinutes: 0,
-            status: pre ? pre.status : 'AVAILABLE',
-            patientName: pre ? pre.name : '',
-            patientPhone: pre ? pre.phone : '',
-            familyMemberId: pre ? (pre.memberId || '') : '',
-            bookingSource: pre ? 'APP' : ''
+            status: 'AVAILABLE',
+            patientName: '',
+            patientPhone: '',
+            familyMemberId: '',
+            bookingSource: ''
           });
           cur += doc.slotDurationMinutes;
           idx++;
         }
         return list;
-      }
-
-      function createSeedState() {
-        const defaultMaps = 'https://maps.google.com/?q=الحجايزة+السنبلاوين+الدقهلية';
-        const doctors = [
-          { id: 'doc_batna_1', doctorName: 'د. محمد عبد الرحمن', specialty: 'باطنة وجهاز هضمي', clinicName: 'عيادة الشفاء التخصصية', clinicType: 'PRIVATE', locationLabel: 'شارع المستشفى، الحجايزة', bio: 'أخصائي أمراض الباطنة والجهاز الهضمي والكبد — خبرة 15 عاماً.', mapsUrl: defaultMaps, username: '01001001001', password: '1234', feeEgp: 150, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_kids_1', doctorName: 'د. سارة محمود النجار', specialty: 'أطفال وحديثي الولادة', clinicName: 'عيادة براعم الحجايزة', clinicType: 'PRIVATE', locationLabel: 'بجوار المسجد الكبير، الحجايزة', bio: 'أخصائي طب الأطفال وحديثي الولادة ومتابعة النمو والتغذية.', mapsUrl: defaultMaps, username: '01001001002', password: '1234', feeEgp: 130, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_ortho_1', doctorName: 'د. طارق حسن الشافعي', specialty: 'عظام ومفاصل', clinicName: 'مستشفى الحجايزة التخصصي - قسم العظام', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', bio: 'استشاري جراحة العظام والكسور والمفاصل وإصابات الملاعب.', mapsUrl: defaultMaps, username: '01001001003', password: '1234', feeEgp: 100, workStartMinutes: 17 * 60, workEndMinutes: 21 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
-          { id: 'doc_obgyn_1', doctorName: 'د. نادية إبراهيم زكي', specialty: 'نساء وتوليد', clinicName: 'مستشفى الحجايزة التخصصي - قسم النساء', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الثاني', bio: 'أخصائي أمراض النساء والتوليد ومتابعة الحمل بالسونار.', mapsUrl: defaultMaps, username: '01001001004', password: '1234', feeEgp: 120, workStartMinutes: 18 * 60, workEndMinutes: 21 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_dental_1', doctorName: 'د. كريم طارق المنصوري', specialty: 'أسنان', clinicName: 'عيادة الابتسامة للأسنان', clinicType: 'PRIVATE', locationLabel: 'أمام الوحدة المحلية، الحجايزة', bio: 'طب وجراحة الفم والأسنان وعلاج الجذور والتركيبات.', mapsUrl: defaultMaps, username: '01001001005', password: '1234', feeEgp: 150, workStartMinutes: 16 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.9 },
-          { id: 'doc_cardio_1', doctorName: 'د. خالد مصطفى العطار', specialty: 'قلب وأوعية دموية', clinicName: 'مستشفى الحجايزة التخصصي - وحدة القلب', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأرضي', bio: 'استشاري أمراض القلب والأوعية الدموية ورسم القلب والإيكو.', mapsUrl: defaultMaps, username: '01001001006', password: '1234', feeEgp: 160, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 },
-          { id: 'doc_eye_1', doctorName: 'د. هالة فؤاد سلامة', specialty: 'رمد وجراحة عيون', clinicName: 'مركز النور للعيون', clinicType: 'PRIVATE', locationLabel: 'ميدان الحجايزة الرئيسي', bio: 'أخصائي طب وجراحة العيون وفحص قاع العين والنظارات.', mapsUrl: defaultMaps, username: '01001001007', password: '1234', feeEgp: 140, workStartMinutes: 17 * 60 + 20, workEndMinutes: 20 * 60 + 40, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
-          { id: 'doc_ent_1', doctorName: 'د. عمرو يحيى البنا', specialty: 'أنف وأذن وحنجرة', clinicName: 'مستشفى الحجايزة التخصصي - عيادة 4', clinicType: 'HOSPITAL', locationLabel: 'مستشفى الحجايزة - الدور الأول', bio: 'أخصائي جراحة الأنف والأذن والحنجرة وعلاج الجيوب الأنفية.', mapsUrl: defaultMaps, username: '01001001008', password: '1234', feeEgp: 100, workStartMinutes: 16 * 60, workEndMinutes: 19 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.7 },
-          { id: 'doc_derm_1', doctorName: 'د. ريم عادل الدسوقي', specialty: 'جلدية وتجميل', clinicName: 'عيادة الندى للجلدية', clinicType: 'PRIVATE', locationLabel: 'طريق المركز، الحجايزة', bio: 'أخصائي الأمراض الجلدية والتناسلية والعناية بالبشرة والشعر.', mapsUrl: defaultMaps, username: '01001001009', password: '1234', feeEgp: 120, workStartMinutes: 17 * 60, workEndMinutes: 20 * 60 + 20, slotDurationMinutes: 20, currentDelayMinutes: 0, rating: 4.8 }
-        ];
-
-        const preBookMap = {
-          doc_batna_1: {
-            0: { name: 'محمود إبراهيم علي', phone: '01022334455', status: 'COMPLETED' },
-            1: { name: 'أحمد محمد السيد', phone: '01012345678', memberId: 'mem_self_ahmed', status: 'BOOKED' },
-            4: { name: 'سيد عبد الفتاح', phone: '01144556677', status: 'BOOKED' }
-          },
-          doc_kids_1: {
-            2: { name: 'كريم أحمد محمد', phone: '01012345678', memberId: 'mem_son', status: 'BOOKED' }
-          },
-          doc_ortho_1: {
-            1: { name: 'سعاد حسن عبد الله', phone: '01012345678', memberId: 'mem_mother', status: 'BOOKED' },
-            3: { name: 'حسن عبد القادر', phone: '01288990011', status: 'BOOKED' }
-          }
-        };
-
-        let slots = [];
-        doctors.forEach((doc) => {
-          slots = slots.concat(buildDoctorSlots(doc, preBookMap[doc.id] || { 1: { name: 'علاء فتحي سالم', phone: '01077889900', status: 'BOOKED' } }));
-        });
-
-        const defaultAccount = {
-          id: 'acc_ahmed',
-          fullName: 'أحمد محمد السيد',
-          phone: '01012345678',
-          nationalId: '29005141200451',
-          password: '1234',
-          isPhoneVerified: true
-        };
-
-        return {
-          config: Object.assign({}, DEFAULT_CONFIG),
-          account: defaultAccount,
-          accounts: [Object.assign({}, defaultAccount)],
-          blockedPhones: [],
-          adminSecurity: { failedAttempts: 0, lockoutUntilMillis: 0 },
-          familyMembers: [
-            { id: 'mem_self_ahmed', accountId: 'acc_ahmed', fullName: 'أحمد محمد السيد', relation: 'نفسي (صاحب الحساب)', age: 36, phone: '01012345678' },
-            { id: 'mem_mother', accountId: 'acc_ahmed', fullName: 'سعاد حسن عبد الله', relation: 'الأم', age: 62, phone: '01012345678' },
-            { id: 'mem_wife', accountId: 'acc_ahmed', fullName: 'فاطمة علي محمود', relation: 'الزوجة', age: 31, phone: '01098765432' },
-            { id: 'mem_son', accountId: 'acc_ahmed', fullName: 'كريم أحمد محمد', relation: 'الابن', age: 9, phone: '01012345678' }
-          ],
-          activeMemberId: 'mem_self_ahmed',
-          doctors: doctors,
-          slots: slots,
-          records: [
-            {
-              id: 'rec_1',
-              familyMemberId: 'mem_self_ahmed',
-              patientName: 'أحمد محمد السيد',
-              patientPhone: '01012345678',
-              doctorId: 'doc_batna_1',
-              doctorName: 'د. محمد عبد الرحمن',
-              specialty: 'باطنة وجهاز هضمي',
-              visitDateLabel: '10 نوفمبر 2026',
-              diagnosis: 'التهاب بسيط بالمعدة وارتجاع مريئي',
-              medications: '• كونترولوك (Controloc) 40 مجم — قرص قبل الفطار بنصف ساعة\n• جافيسكون (Gaviscon) — ملعقة كبيرة بعد الأكل وعند اللزوم',
-              notes: 'الابتعاد عن الأطعمة الدسمة والمشروبات الغازية لمدة أسبوعين.',
-              attachmentDataUrl: '',
-              recordType: 'PRESCRIPTION',
-              createdAtMillis: Date.now() - 5 * 86400000
-            },
-            {
-              id: 'rec_2',
-              familyMemberId: 'mem_mother',
-              patientName: 'سعاد حسن عبد الله',
-              patientPhone: '01012345678',
-              doctorId: 'doc_cardio_1',
-              doctorName: 'د. خالد مصطفى العطار',
-              specialty: 'قلب وأوعية دموية',
-              visitDateLabel: '3 نوفمبر 2026',
-              diagnosis: 'متابعة ضغط الدم المرتفع (مستقر)',
-              medications: '• كونكور (Concor) 5 مجم — قرص صباحاً يومياً\n• أسبوسيد (Aspocid) 75 مجم — قرص بعد الغداء',
-              notes: 'قياس الضغط مرتين أسبوعياً وتقليل الملح.',
-              attachmentDataUrl: '',
-              recordType: 'PRESCRIPTION',
-              createdAtMillis: Date.now() - 12 * 86400000
-            },
-            {
-              id: 'rec_3',
-              familyMemberId: 'mem_son',
-              patientName: 'كريم أحمد محمد',
-              patientPhone: '01012345678',
-              doctorId: 'doc_kids_1',
-              doctorName: 'د. سارة محمود النجار',
-              specialty: 'أطفال وحديثي الولادة',
-              visitDateLabel: '28 أكتوبر 2026',
-              diagnosis: 'نزلة شعبية حادة مع ارتفاع طفيف في الحرارة',
-              medications: '• أوجمنتين شراب (Augmentin) 457 مجم/5 مل — 5 سم كل 12 ساعة لمدة 7 أيام\n• بروفين شراب (Brufen) 100 مجم/5 مل — عند اللزوم لخفض الحرارة',
-              notes: 'شرب سوائل دافئة والراحة التامة.',
-              attachmentDataUrl: '',
-              recordType: 'PRESCRIPTION',
-              createdAtMillis: Date.now() - 18 * 86400000
-            }
-          ],
-          notifications: [],
-          activationCodes: generateUniqueCodeList(5, [], 'SYSTEM'),
-          doctorFavorites: {
-            doc_batna_1: ['med_controloc', 'med_gaviscon', 'med_motilium'],
-            doc_kids_1: ['med_augmentin_ped', 'med_brufen_ped'],
-            doc_dental_1: ['med_augmentin_1g', 'med_catafast']
-          }
-        };
       }
 
       function generateUniqueCodeList(count, existingList, generatedBy) {
@@ -1101,6 +1022,24 @@
         return created;
       }
 
+      function createCleanProductionState() {
+        return {
+          config: Object.assign({}, DEFAULT_CONFIG),
+          account: null,
+          accounts: [],
+          blockedPhones: [],
+          adminSecurity: { failedAttempts: 0, lockoutUntilMillis: 0 },
+          familyMembers: [],
+          activeMemberId: null,
+          doctors: [],
+          slots: [],
+          records: [],
+          notifications: [],
+          activationCodes: generateUniqueCodeList(5, [], 'SYSTEM'),
+          doctorFavorites: {}
+        };
+      }
+
       function loadState() {
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
@@ -1108,42 +1047,37 @@
             const parsed = JSON.parse(raw);
             if (parsed && Array.isArray(parsed.doctors) && Array.isArray(parsed.slots)) {
               parsed.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
-              if (!parsed.account) {
-                parsed.account = { id: 'acc_ahmed', fullName: 'أحمد محمد السيد', phone: '01012345678', nationalId: '29005141200451', password: '1234', isPhoneVerified: true };
-              }
-              if (typeof parsed.account.isPhoneVerified !== 'boolean') {
-                parsed.account.isPhoneVerified = true;
-              }
-              if (!Array.isArray(parsed.accounts) || parsed.accounts.length === 0) {
-                parsed.accounts = [Object.assign({}, parsed.account)];
-              }
-              if (!Array.isArray(parsed.blockedPhones)) {
-                parsed.blockedPhones = [];
-              }
-              if (!Array.isArray(parsed.activationCodes)) {
-                parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
-              }
+              if (!Array.isArray(parsed.accounts)) parsed.accounts = [];
+              if (!Array.isArray(parsed.familyMembers)) parsed.familyMembers = [];
+              if (!Array.isArray(parsed.records)) parsed.records = [];
+              if (!Array.isArray(parsed.notifications)) parsed.notifications = [];
+              if (!Array.isArray(parsed.blockedPhones)) parsed.blockedPhones = [];
+              if (!Array.isArray(parsed.activationCodes)) parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
+              if (!parsed.doctorFavorites || typeof parsed.doctorFavorites !== 'object') parsed.doctorFavorites = {};
               parsed.adminSecurity = Object.assign({ failedAttempts: 0, lockoutUntilMillis: 0 }, parsed.adminSecurity || {});
-              parsed.doctors = parsed.doctors.map((d, idx) => Object.assign({
-                bio: '',
-                mapsUrl: 'https://maps.google.com/?q=الحجايزة+السنبلاوين+الدقهلية',
-                username: '0100100100' + (idx + 1),
-                password: '1234'
-              }, d));
               return parsed;
             }
           }
-        } catch (e) { /* fallback to seed */ }
-        const seed = createSeedState();
-        saveState(seed);
-        return seed;
+        } catch (e) { /* fallback to clean state */ }
+        const clean = createCleanProductionState();
+        saveState(clean);
+        return clean;
       }
 
       function saveState(nextState) {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
         } catch (e) {
-          showToast('تنبيه: مساحة التخزين المحلية ممتلئة');
+          showToast(bi('تنبيه: مساحة التخزين المحلية ممتلئة', 'Warning: Local storage is full'));
+        }
+      }
+
+      function loadSavedLang() {
+        try {
+          const v = localStorage.getItem(LANG_KEY);
+          return v === 'en' ? 'en' : 'ar';
+        } catch (e) {
+          return 'ar';
         }
       }
 
@@ -1151,6 +1085,7 @@
 
       // Ephemeral UI State
       const ui = {
+        lang: loadSavedLang(), // 'ar' | 'en'
         roleMode: 'PATIENT', // PATIENT | DOCTOR | ADMIN
         patientTab: 'HOME', // HOME | PRIVATE | HOSPITAL | SPECIALTIES | EMR
         bookingDoctorId: null,
@@ -1166,6 +1101,10 @@
         medications: BUILTIN_MEDICATIONS.slice(),
         isLiveMedsApi: false
       };
+
+      function bi(arText, enText) {
+        return ui.lang === 'en' ? enText : arText;
+      }
 
       // ================================================================
       // 3B. محرك التحقق عبر الهاتف (Firebase Phone Auth Ready + Test OTP)
@@ -1185,7 +1124,10 @@
         sendVerificationCode: function (rawPhone) {
           const digits = String(rawPhone || '').replace(/\D/g, '');
           if (digits.length < 10) {
-            return { ok: false, error: 'يرجى إدخال رقم هاتف صحيح مكون من 11 رقماً' };
+            return {
+              ok: false,
+              error: bi('يرجى إدخال رقم هاتف صحيح مكون من 11 رقماً', 'Please enter a valid 11-digit phone number')
+            };
           }
           const code = String(Math.floor(100000 + Math.random() * 900000));
           return {
@@ -1201,10 +1143,10 @@
         },
         verifyCode: function (challenge, enteredCode) {
           const clean = String(enteredCode || '').replace(/\D/g, '');
-          if (!challenge) return { ok: false, error: 'اضغط إرسال الرمز أولاً' };
-          if (clean.length !== 6) return { ok: false, error: 'يرجى إدخال رمز التحقق المكون من 6 أرقام' };
-          if (Date.now() > challenge.expiresAtMillis) return { ok: false, error: 'انتهت صلاحية الرمز، اضغط إعادة إرسال' };
-          if (clean !== challenge.testOtpCode) return { ok: false, error: 'رمز التحقق غير صحيح، تأكد من الأرقام الستة' };
+          if (!challenge) return { ok: false, error: bi('اضغط إرسال الرمز أولاً', 'Please request the OTP code first') };
+          if (clean.length !== 6) return { ok: false, error: bi('يرجى إدخال رمز التحقق المكون من 6 أرقام', 'Please enter the 6-digit verification code') };
+          if (Date.now() > challenge.expiresAtMillis) return { ok: false, error: bi('انتهت صلاحية الرمز، اضغط إعادة إرسال', 'OTP code expired, please resend') };
+          if (clean !== challenge.testOtpCode) return { ok: false, error: bi('رمز التحقق غير صحيح، تأكد من الأرقام الستة', 'Invalid OTP code, check the 6 digits') };
           return { ok: true };
         }
       };
@@ -1224,7 +1166,14 @@
         const sec = db.adminSecurity || { failedAttempts: 0, lockoutUntilMillis: 0 };
         if (sec.lockoutUntilMillis > now) {
           const remMin = Math.ceil((sec.lockoutUntilMillis - now) / 60000);
-          return { ok: false, locked: true, error: 'تم قفل بوابة الإدارة مؤقتاً بسبب 3 محاولات خاطئة. حاول بعد ' + remMin + ' دقيقة.' };
+          return {
+            ok: false,
+            locked: true,
+            error: bi(
+              'تم قفل بوابة الإدارة مؤقتاً بسبب 3 محاولات خاطئة. حاول بعد ' + remMin + ' دقيقة.',
+              'Admin portal is temporarily locked after 3 failed attempts. Try again in ' + remMin + ' min.'
+            )
+          };
         }
         const expectedPin = (db.config.adminPin || DEFAULT_CONFIG.adminPin || '202600').trim();
         if (String(enteredPin || '').trim() === expectedPin) {
@@ -1237,12 +1186,26 @@
         if (nextFails >= MAX_ADMIN_PIN_ATTEMPTS) {
           db.adminSecurity = { failedAttempts: nextFails, lockoutUntilMillis: now + ADMIN_LOCKOUT_MILLIS };
           saveState(db);
-          return { ok: false, locked: true, error: 'تم إدخال رقم سري خاطئ 3 مرات. تم قفل الإدارة لمدة 15 دقيقة.' };
+          return {
+            ok: false,
+            locked: true,
+            error: bi(
+              'تم إدخال رقم سري خاطئ 3 مرات. تم قفل الإدارة لمدة 15 دقيقة.',
+              '3 failed PIN attempts. Admin access locked for 15 minutes.'
+            )
+          };
         }
         db.adminSecurity = { failedAttempts: nextFails, lockoutUntilMillis: 0 };
         saveState(db);
         const left = MAX_ADMIN_PIN_ATTEMPTS - nextFails;
-        return { ok: false, locked: false, error: 'الرقم السري غير صحيح. المحاولات المتبقية قبل القفل: ' + left };
+        return {
+          ok: false,
+          locked: false,
+          error: bi(
+            'الرقم السري غير صحيح. المحاولات المتبقية قبل القفل: ' + left,
+            'Incorrect PIN. Remaining attempts before lockout: ' + left
+          )
+        };
       }
 
       // ================================================================
@@ -1260,7 +1223,7 @@
       function renderPasswordFieldHtml(id, value, placeholder, extraAttrs) {
         return '<div class="pwd-field-wrap">' +
           '<input class="input" id="' + esc(id) + '" type="password" value="' + esc(value || '') + '" placeholder="' + esc(placeholder || '') + '" dir="ltr" ' + (extraAttrs || '') + ' />' +
-          '<button type="button" class="pwd-eye-btn" data-toggle-pwd="' + esc(id) + '" title="إظهار / إخفاء" aria-label="إظهار أو إخفاء الرقم السري">👁️</button>' +
+          '<button type="button" class="pwd-eye-btn" data-toggle-pwd="' + esc(id) + '" title="' + esc(bi('إظهار / إخفاء', 'Show / Hide')) + '" aria-label="' + esc(bi('إظهار أو إخفاء الرقم السري', 'Show or hide password')) + '">👁️</button>' +
         '</div>';
       }
 
@@ -1272,7 +1235,7 @@
             const makeVisible = target.type === 'password';
             target.type = makeVisible ? 'text' : 'password';
             btn.textContent = makeVisible ? '🙈' : '👁️';
-            btn.setAttribute('aria-label', makeVisible ? 'إخفاء الرقم السري' : 'إظهار الرقم السري');
+            btn.setAttribute('aria-label', makeVisible ? bi('إخفاء الرقم السري', 'Hide password') : bi('إظهار الرقم السري', 'Show password'));
           };
         });
       }
@@ -1282,57 +1245,65 @@
         const created = generateUniqueCodeList(count, list, generatedBy);
         db.activationCodes = created.concat(list);
         saveState(db);
-        showToast('تم توليد ' + created.length + ' كود تفعيل جديد ذي استخدام واحد بنجاح');
+        showToast(bi('تم توليد ' + created.length + ' كود تفعيل جديد ذي استخدام واحد بنجاح', 'Generated ' + created.length + ' new single-use OTP codes'));
         return created.length;
       }
 
       function verifyAndBurnActivationCode(account, rawCode) {
         const clean = String(rawCode || '').replace(/\D/g, '');
         if (clean.length !== 6) {
-          return { ok: false, error: 'يرجى إدخال كود التفعيل المكون من 6 أرقام' };
+          return { ok: false, error: bi('يرجى إدخال كود التفعيل المكون من 6 أرقام', 'Please enter the 6-digit OTP code') };
         }
         const codes = db.activationCodes || [];
         const found = codes.find((c) => String(c.code) === clean);
         if (!found) {
-          return { ok: false, error: 'كود التفعيل غير صحيح أو غير مسجل. اطلبه من السكرتيرة أو عبر واتساب.' };
+          return { ok: false, error: bi('كود التحقق غير صحيح أو غير مطابق.', 'Verification code is invalid or does not match.') };
         }
         if (found.isUsed) {
           return {
             ok: false,
-            error: 'هذا الكود تم استخدامه بالفعل ومنتهي الصلاحية' + (found.usedByName ? ' (' + found.usedByName + ')' : '') + '، ولا يمكن إعادة استخدامه.'
+            error: bi(
+              'هذا الكود تم استخدامه بالفعل ومنتهي الصلاحية' + (found.usedByName ? ' (' + found.usedByName + ')' : '') + '، ولا يمكن إعادة استخدامه.',
+              'This code has already been used and expired.'
+            )
           };
         }
         found.isUsed = true;
-        found.usedByName = (account && account.fullName) ? account.fullName : 'مريض';
+        found.usedByName = (account && account.fullName) ? account.fullName : bi('مريض', 'Patient');
         found.usedByPhone = (account && account.phone) ? account.phone : '';
         found.usedAtMillis = Date.now();
+        markAccountVerified(account);
+        saveState(db);
+        return { ok: true };
+      }
+
+      function markAccountVerified(account) {
         if (account) {
           account.isPhoneVerified = true;
           const idx = (db.accounts || []).findIndex((a) => a.id === account.id);
           if (idx >= 0) db.accounts[idx].isPhoneVerified = true;
         }
-        saveState(db);
-        return { ok: true };
+        ui.otpChallenge = null;
       }
 
       function printAvailableActivationCodes() {
         const cfg = db.config;
         const available = (db.activationCodes || []).filter((c) => !c.isUsed);
         if (available.length === 0) {
-          showToast('لا توجد أكواد متاحة للطباعة، قم بتوليد أكواد جديدة أولاً');
+          showToast(bi('لا توجد أكواد متاحة للطباعة، قم بتوليد أكواد جديدة أولاً', 'No available codes to print. Generate new codes first.'));
           return;
         }
         const cardsHtml = available.map((c, idx) =>
           '<div class="otp-print-card">' +
-            '<div style="font-size:11px;color:#0D7377;font-weight:700;margin-bottom:4px;">' + esc(cfg.platformNameAr) + ' • بطاقة ' + (idx + 1) + '</div>' +
+            '<div style="font-size:11px;color:#0D7377;font-weight:700;margin-bottom:4px;">' + esc(cfg.platformNameAr) + ' • ' + (idx + 1) + '</div>' +
             '<div dir="ltr" style="font-size:24px;font-weight:800;letter-spacing:4px;color:#14532D;margin:6px 0;">' + esc(c.code) + '</div>' +
-            '<div style="font-size:10px;color:#4F646B;">كود استخدام واحد لتفعيل حساب المريض</div>' +
+            '<div style="font-size:10px;color:#4F646B;">' + esc(bi('كود استخدام واحد لتفعيل حساب المريض', 'Single-use patient verification code')) + '</div>' +
           '</div>'
         ).join('');
         document.getElementById('printSheet').innerHTML =
           '<div class="rx-print-header">' +
-            '<div><h2 style="color:#0D7377;margin:0;">أكواد تفعيل المرضى — ' + esc(cfg.platformNameAr) + '</h2>' +
-            '<div style="font-size:13px;color:#4F646B;">' + esc(cfg.villageNameAr) + ' • المتاح للطباعة: ' + available.length + ' كود</div></div>' +
+            '<div><h2 style="color:#0D7377;margin:0;">' + esc(bi('أكواد تفعيل المرضى', 'Patient Activation Codes')) + ' — ' + esc(cfg.platformNameAr) + '</h2>' +
+            '<div style="font-size:13px;color:#4F646B;">' + esc(cfg.villageNameAr) + ' • ' + available.length + '</div></div>' +
             '<div style="font-size:13px;color:#4F646B;">' + esc(cfg.appVersionLabel) + '</div>' +
           '</div>' +
           '<div class="otp-print-grid">' + cardsHtml + '</div>';
@@ -1349,38 +1320,38 @@
 
         return '<section class="card" style="display:flex;flex-direction:column;gap:12px;">' +
             '<div>' +
-              '<h3 style="font-size:1.1rem;color:var(--teal);">🔑 مولد أكواد التفعيل ذات الاستخدام الواحد (OTP)</h3>' +
-              '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">كل كود يعمل مرة واحدة فقط لتفعيل حساب المريض ثم يحترق تلقائياً لمنع الحجوزات الوهمية.</div>' +
+              '<h3 style="font-size:1.1rem;color:var(--teal);">🔑 ' + esc(bi('مولد أكواد التفعيل ذات الاستخدام الواحد (OTP)', 'Single-Use Activation Code Generator (OTP)')) + '</h3>' +
+              '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">' + esc(bi('كل كود يعمل مرة واحدة فقط لتفعيل حساب المريض ثم يحترق تلقائياً لمنع الحجوزات الوهمية.', 'Each code activates one patient account then invalidates automatically.')) + '</div>' +
             '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-              '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + availableCount + '</div><div>متاح للاستخدام</div></div>' +
-              '<div class="stat-box" style="background:var(--booked-bg);color:var(--booked-text);"><div class="stat-num">' + usedCount + '</div><div>مستخدم / منتهي</div></div>' +
+              '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + availableCount + '</div><div>' + esc(bi('متاح للاستخدام', 'Available')) + '</div></div>' +
+              '<div class="stat-box" style="background:var(--booked-bg);color:var(--booked-text);"><div class="stat-num">' + usedCount + '</div><div>' + esc(bi('مستخدم / منتهي', 'Used / Expired')) + '</div></div>' +
             '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-              '<button class="btn btn-primary" id="btnGenOtp10">➕ توليد 10 أكواد جديدة</button>' +
-              '<button class="btn btn-primary" id="btnGenOtp20">➕ توليد 20 كوداً جديداً</button>' +
+              '<button class="btn btn-primary" id="btnGenOtp10" type="button">➕ ' + esc(bi('توليد 10 أكواد جديدة', 'Generate 10 Codes')) + '</button>' +
+              '<button class="btn btn-primary" id="btnGenOtp20" type="button">➕ ' + esc(bi('توليد 20 كوداً جديداً', 'Generate 20 Codes')) + '</button>' +
             '</div>' +
-            '<button class="btn btn-outline btn-block" id="btnPrintAvailableOtp">🖨️ طباعة الأكواد المتاحة (' + availableCount + ')</button>' +
+            '<button class="btn btn-outline btn-block" id="btnPrintAvailableOtp" type="button">🖨️ ' + esc(bi('طباعة الأكواد المتاحة (' + availableCount + ')', 'Print Available Codes (' + availableCount + ')')) + '</button>' +
           '</section>' +
           '<section style="display:flex;flex-direction:column;gap:10px;">' +
-            '<h3>سجل أكواد التفعيل (' + codes.length + ')</h3>' +
+            '<h3>' + esc(bi('سجل أكواد التفعيل (' + codes.length + ')', 'Activation Codes Log (' + codes.length + ')')) + '</h3>' +
             (codes.length === 0
-              ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد أكواد حالياً. اضغط توليد أكواد جديدة بالأعلى.</div>'
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد أكواد حالياً. اضغط توليد أكواد جديدة بالأعلى.', 'No codes generated yet.')) + '</div>'
               : codes.map((c) => {
                   const used = Boolean(c.isUsed);
                   return '<div class="card" style="background:' + (used ? 'rgba(254,226,226,0.45)' : 'rgba(220,252,231,0.45)') + ';border-color:' + (used ? 'var(--booked-border)' : 'var(--avail-border)') + ';display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
                     '<div>' +
                       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
                         '<strong dir="ltr" style="font-size:1.25rem;letter-spacing:2px;font-family:monospace;color:' + (used ? 'var(--booked-text)' : 'var(--avail-text)') + ';">' + esc(c.code) + '</strong>' +
-                        '<span class="badge ' + (used ? 'badge-booked' : 'badge-avail') + '">' + (used ? 'مستخدم / منتهي' : 'متاح للاستخدام') + '</span>' +
+                        '<span class="badge ' + (used ? 'badge-booked' : 'badge-avail') + '">' + esc(used ? bi('مستخدم / منتهي', 'Used') : bi('متاح للاستخدام', 'Available')) + '</span>' +
                       '</div>' +
                       (used
-                        ? '<div style="font-size:0.84rem;color:var(--booked-text);font-weight:700;margin-top:4px;">استخدمه: ' + esc(c.usedByName || 'مريض') + ' (' + esc(c.usedByPhone || 'بدون هاتف') + ')</div>'
-                        : '<div style="font-size:0.82rem;color:var(--avail-text);margin-top:4px;">جاهز للإرسال عبر واتساب أو التسليم الورقي</div>') +
+                        ? '<div style="font-size:0.84rem;color:var(--booked-text);font-weight:700;margin-top:4px;">' + esc(bi('استخدمه: ', 'Used by: ')) + esc(c.usedByName || bi('مريض', 'Patient')) + ' (' + esc(c.usedByPhone || '-') + ')</div>'
+                        : '<div style="font-size:0.82rem;color:var(--avail-text);margin-top:4px;">' + esc(bi('جاهز للإرسال عبر واتساب أو التسليم الورقي', 'Ready to share via WhatsApp or print')) + '</div>') +
                     '</div>' +
                     (!used
-                      ? '<button class="btn btn-primary" data-copy-otp="' + esc(c.code) + '" style="min-height:42px;padding:6px 14px;">📋 نسخ الكود</button>'
-                      : '<span style="font-weight:700;color:var(--booked-border);font-size:0.86rem;">✓ محروق</span>') +
+                      ? '<button class="btn btn-primary" type="button" data-copy-otp="' + esc(c.code) + '" style="min-height:42px;padding:6px 14px;">📋 ' + esc(bi('نسخ الكود', 'Copy')) + '</button>'
+                      : '<span style="font-weight:700;color:var(--booked-border);font-size:0.86rem;">✓ ' + esc(bi('محروق', 'Burned')) + '</span>') +
                   '</div>';
                 }).join('')) +
           '</section>';
@@ -1406,7 +1377,7 @@
               try { document.execCommand('copy'); } catch (e) {}
               document.body.removeChild(ta);
             }
-            showToast('تم نسخ الكود ' + code + ' بنجاح لإرساله عبر واتساب');
+            showToast(bi('تم نسخ الكود ' + code + ' بنجاح', 'Copied code ' + code));
           };
         });
       }
@@ -1415,14 +1386,14 @@
         const norm = ((totalMinutes % 1440) + 1440) % 1440;
         const h24 = Math.floor(norm / 60);
         const m = norm % 60;
-        const period = h24 >= 12 ? 'م' : 'ص';
+        const period = ui.lang === 'en' ? (h24 >= 12 ? 'PM' : 'AM') : (h24 >= 12 ? 'م' : 'ص');
         const h12 = h24 === 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
         return h12 + ':' + (m < 10 ? '0' + m : m) + ' ' + period;
       }
 
       function formatTodayAr() {
         try {
-          return new Intl.DateTimeFormat('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+          return new Intl.DateTimeFormat(ui.lang === 'en' ? 'en-EG' : 'ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
         } catch (e) {
           return new Date().toLocaleDateString();
         }
@@ -1434,13 +1405,16 @@
         el.textContent = msg;
         el.style.display = 'block';
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs || 3200);
+        toastTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs || 3400);
       }
 
       let apkNoticeTimer = null;
       function startBackgroundApkDownload(customUrl) {
         const downloadUrl = (customUrl && String(customUrl).trim()) || DEFAULT_CONFIG.apkDownloadUrl;
-        const noticeText = 'جاري تحميل تطبيق طب الحجايزة... تابع شريط الإشعارات في الأعلى';
+        const noticeText = bi(
+          'جاري تحميل تطبيق طب الحجايزة... تابع شريط الإشعارات في الأعلى',
+          'Downloading Teb Al-Hajayzah APK... Check your notification bar above'
+        );
 
         const noticeEl = document.getElementById('apkDownloadNotice');
         if (noticeEl) {
@@ -1472,6 +1446,7 @@
       }
 
       function getActiveMember() {
+        if (!db.familyMembers || db.familyMembers.length === 0) return null;
         return db.familyMembers.find((m) => m.id === db.activeMemberId) || db.familyMembers[0];
       }
 
@@ -1559,16 +1534,44 @@
       // 5. العرض والتفاعل (Rendering Engine)
       // ================================================================
       function updateHeader() {
-        document.getElementById('hdrBrandName').textContent = db.config.platformNameAr;
-        document.getElementById('hdrVillageName').textContent = db.config.villageNameAr;
+        const isEn = ui.lang === 'en';
+        document.documentElement.lang = isEn ? 'en' : 'ar';
+        document.documentElement.dir = isEn ? 'ltr' : 'rtl';
+        document.title = isEn
+          ? (db.config.platformNameEn || 'Teb Al-Hajayzah') + ' | Medical Booking & EMR'
+          : (db.config.platformNameAr || 'طب الحجايزة') + ' | حجز المواعيد والملف الطبي';
+
+        document.getElementById('hdrBrandName').textContent = isEn
+          ? (db.config.platformNameEn || 'Teb Al-Hajayzah')
+          : db.config.platformNameAr;
+        document.getElementById('hdrVillageName').textContent = isEn
+          ? (db.config.villageNameEn || DEFAULT_CONFIG.villageNameEn)
+          : db.config.villageNameAr;
+
+        const arBadge = document.getElementById('langArBadge');
+        const enBadge = document.getElementById('langEnBadge');
+        if (arBadge && enBadge) {
+          arBadge.className = isEn ? 'lang-pill-dim' : 'lang-pill-active';
+          enBadge.className = isEn ? 'lang-pill-active' : 'lang-pill-dim';
+        }
+
+        const pBtn = document.getElementById('rolePatientBtn');
+        const dBtn = document.getElementById('roleDoctorBtn');
+        pBtn.textContent = bi('🏥 واجهة المريض', '🏥 Patient Portal');
+        dBtn.textContent = bi('🩺 لوحة الدكتور والسكرتيرة', '🩺 Doctor & Secretary');
+        pBtn.classList.toggle('active', ui.roleMode === 'PATIENT');
+        dBtn.classList.toggle('active', ui.roleMode === 'DOCTOR');
+
+        document.getElementById('navLblHome').textContent = bi('الرئيسية', 'Home');
+        document.getElementById('navLblPrivate').textContent = bi('العيادات', 'Clinics');
+        document.getElementById('navLblHospital').textContent = bi('المستشفى', 'Hospital');
+        document.getElementById('navLblSpecs').textContent = bi('التخصصات', 'Specialties');
+        document.getElementById('navLblEmr').textContent = bi('ملفي الطبي', 'My Records');
 
         const unread = db.notifications.filter((n) => !n.isRead).length;
         const badge = document.getElementById('alertBadge');
         badge.textContent = String(unread);
         badge.style.display = unread > 0 ? 'flex' : 'none';
-
-        document.getElementById('rolePatientBtn').classList.toggle('active', ui.roleMode === 'PATIENT');
-        document.getElementById('roleDoctorBtn').classList.toggle('active', ui.roleMode === 'DOCTOR');
 
         const showNav = ui.roleMode === 'PATIENT' && !ui.bookingDoctorId;
         const nav = document.getElementById('bottomNav');
@@ -1594,20 +1597,20 @@
           (doc.bio ? '<div style="font-size:0.84rem;color:var(--text-muted);line-height:1.45;">' + esc(doc.bio) + '</div>' : '') +
           '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.86rem;color:var(--text-muted);gap:8px;">' +
             '<span>📍 ' + esc(doc.locationLabel) + '</span>' +
-            '<strong style="color:var(--teal);white-space:nowrap;">الكشف: ' + esc(doc.feeEgp) + ' ج.م</strong>' +
+            '<strong style="color:var(--teal);white-space:nowrap;">' + esc(bi('الكشف: ', 'Fee: ')) + esc(doc.feeEgp) + ' ' + esc(bi('ج.م', 'EGP')) + '</strong>' +
           '</div>' +
           (doc.mapsUrl
-            ? '<div><a class="chip" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:32px;padding:4px 10px;font-size:0.8rem;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">🗺️ موقع العيادة على خرائط جوجل</a></div>'
+            ? '<div><a class="chip" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:32px;padding:4px 10px;font-size:0.8rem;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">🗺️ ' + esc(bi('موقع العيادة على خرائط جوجل', 'Open Clinic on Google Maps')) + '</a></div>'
             : '') +
           (doc.currentDelayMinutes > 0
-            ? '<div class="alert-banner" style="padding:8px 10px;font-size:0.84rem;">⚠️ تأخير حالي: +' + doc.currentDelayMinutes + ' دقيقة</div>'
+            ? '<div class="alert-banner" style="padding:8px 10px;font-size:0.84rem;">⚠️ ' + esc(bi('تأخير حالي: +' + doc.currentDelayMinutes + ' دقيقة', 'Current Delay: +' + doc.currentDelayMinutes + ' min')) + '</div>'
             : '') +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;">' +
             '<div style="display:flex;gap:6px;">' +
-              '<span class="badge badge-avail">متاح: ' + avail + '</span>' +
-              '<span class="badge badge-booked">محجوز: ' + booked + '</span>' +
+              '<span class="badge badge-avail">' + esc(bi('متاح: ', 'Open: ')) + avail + '</span>' +
+              '<span class="badge badge-booked">' + esc(bi('محجوز: ', 'Booked: ')) + booked + '</span>' +
             '</div>' +
-            '<button class="btn btn-primary" data-open-doc="' + esc(doc.id) + '" style="min-height:40px;padding:8px 14px;">عرض المواعيد</button>' +
+            '<button class="btn btn-primary" type="button" data-open-doc="' + esc(doc.id) + '" style="min-height:40px;padding:8px 14px;">' + esc(bi('عرض المواعيد', 'View Slots')) + '</button>' +
           '</div>' +
         '</div>';
       }
@@ -1616,6 +1619,7 @@
         const cfg = db.config;
         const phoneDigits = (cfg.supportPhone || '01125002428').replace(/\D/g, '');
         const waPhone = phoneDigits.startsWith('2') ? phoneDigits : ('2' + phoneDigits);
+        const brandTitle = bi(cfg.platformNameAr, cfg.platformNameEn || 'Teb Al-Hajayzah');
         const waMsg = encodeURIComponent('مرحباً، أود الاستفسار أو تسجيل عيادة جديدة في منصة ' + cfg.platformNameAr);
 
         return '<div class="footer-inner">' +
@@ -1624,35 +1628,35 @@
             // 1. بطاقة التحميل والتحديث المباشر
             '<div class="apk-card" id="apkDownloadSection">' +
               '<div style="display:flex;align-items:center;gap:12px;">' +
-                '<img src="./icon.svg" alt="' + esc(cfg.platformNameAr) + '" style="width:48px;height:48px;border-radius:14px;flex-shrink:0;" />' +
+                '<img src="./icon.svg" alt="' + esc(brandTitle) + '" style="width:48px;height:48px;border-radius:14px;flex-shrink:0;" />' +
                 '<div>' +
-                  '<h3 style="font-size:1.05rem;color:var(--teal-text);">' + esc(cfg.platformNameAr) + ' (' + esc(cfg.appVersionLabel) + ')</h3>' +
-                  '<div style="font-size:0.84rem;color:var(--text-muted);">تحميل وتحديث تطبيق الأندرويد الرسمي مباشرة بدون صفحات وسيطة</div>' +
+                  '<h3 style="font-size:1.05rem;color:var(--teal-text);">' + esc(brandTitle) + ' (' + esc(cfg.appVersionLabel) + ')</h3>' +
+                  '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('تحميل وتحديث تطبيق الأندرويد الرسمي مباشرة بدون صفحات وسيطة', 'Direct official Android APK download & updates')) + '</div>' +
                 '</div>' +
               '</div>' +
               '<a class="btn btn-primary btn-block" id="btnApkDirectDownload" href="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '" download="طب الحجايزة.apk" data-apk-url="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '">' +
-                '⬇️ تحميل مباشر للتطبيق (APK)' +
+                '⬇️ ' + esc(bi('تحميل مباشر للتطبيق (APK)', 'Direct APK Download')) +
               '</a>' +
               '<div id="apkDownloadNotice" class="apk-download-notice" role="status" aria-live="polite" style="display:none;"></div>' +
             '</div>' +
 
             // 2. روابط سريعة
             '<div class="footer-box">' +
-              '<h3 style="font-size:1.02rem;color:var(--teal);">🔗 روابط سريعة</h3>' +
+              '<h3 style="font-size:1.02rem;color:var(--teal);">🔗 ' + esc(bi('روابط سريعة', 'Quick Links')) + '</h3>' +
               '<div class="footer-quick-links">' +
-                '<button class="footer-link-btn" data-footer-tab="PRIVATE">🩺 العيادات الخاصة</button>' +
-                '<button class="footer-link-btn" data-footer-tab="HOSPITAL">🏥 المستشفى التخصصي</button>' +
-                '<button class="footer-link-btn" data-footer-tab="SPECIALTIES">📋 التخصصات الطبية</button>' +
-                '<button class="footer-link-btn" data-footer-tab="EMR">📁 ملفي الطبي</button>' +
+                '<button class="footer-link-btn" type="button" data-footer-tab="PRIVATE">🩺 ' + esc(bi('العيادات الخاصة', 'Private Clinics')) + '</button>' +
+                '<button class="footer-link-btn" type="button" data-footer-tab="HOSPITAL">🏥 ' + esc(bi('المستشفى التخصصي', 'Hospital')) + '</button>' +
+                '<button class="footer-link-btn" type="button" data-footer-tab="SPECIALTIES">📋 ' + esc(bi('التخصصات الطبية', 'Specialties')) + '</button>' +
+                '<button class="footer-link-btn" type="button" data-footer-tab="EMR">📁 ' + esc(bi('ملفي الطبي', 'Medical File')) + '</button>' +
               '</div>' +
             '</div>' +
 
             // 3. التواصل وطلب انضمام عيادة
             '<div class="footer-box">' +
-              '<h3 style="font-size:1.02rem;color:var(--teal);">📞 التواصل وطلب انضمام عيادة</h3>' +
-              '<div style="font-size:0.86rem;color:var(--text-muted);">لتسجيل العيادات الجديدة أو استفسارات المرضى والأطباء:</div>' +
+              '<h3 style="font-size:1.02rem;color:var(--teal);">📞 ' + esc(bi('التواصل وطلب انضمام عيادة', 'Contact & Clinic Onboarding')) + '</h3>' +
+              '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(bi('لتسجيل العيادات الجديدة أو استفسارات المرضى والأطباء:', 'For adding new clinics or patient/doctor support:')) + '</div>' +
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto;">' +
-                '<a class="btn btn-whatsapp" href="https://wa.me/' + esc(waPhone) + '?text=' + waMsg + '" target="_blank" rel="noopener">💬 واتساب مباشر</a>' +
+                '<a class="btn btn-whatsapp" href="https://wa.me/' + esc(waPhone) + '?text=' + waMsg + '" target="_blank" rel="noopener">💬 ' + esc(bi('واتساب مباشر', 'WhatsApp')) + '</a>' +
                 '<a class="btn btn-outline" href="tel:' + esc(phoneDigits) + '">📱 ' + esc(cfg.supportPhone) + '</a>' +
               '</div>' +
             '</div>' +
@@ -1661,7 +1665,10 @@
 
           // 4. شريط الحقوق
           '<div class="footer-bottom-bar">' +
-            'جميع الحقوق محفوظة © 2026 منصة طب الحجايزة - لخدمة أهالي الحجايزة والقرى المجاورة' +
+            esc(bi(
+              'جميع الحقوق محفوظة © 2026 منصة ' + cfg.platformNameAr + ' - لخدمة أهالي الحجايزة والقرى المجاورة',
+              '© 2026 ' + (cfg.platformNameEn || 'Teb Al-Hajayzah') + ' Platform — Serving Al-Hajayzah & Neighboring Villages'
+            )) +
           '</div>' +
         '</div>';
       }
@@ -1677,15 +1684,15 @@
             '<span class="badge" style="background:var(--surface-soft);color:var(--text-muted);">' + esc(rec.visitDateLabel) + '</span>' +
           '</div>' +
           '<div class="med-box">' +
-            '<div><strong>' + (isUpload ? 'العنوان: ' : 'التشخيص الطبي: ') + '</strong>' + esc(rec.diagnosis) + '</div>' +
-            (rec.medications ? '<div style="margin-top:6px;"><strong>💊 الأدوية:</strong>\n' + esc(rec.medications) + '</div>' : '') +
-            (rec.notes ? '<div style="margin-top:6px;color:var(--text-muted);"><strong>ملاحظات:</strong> ' + esc(rec.notes) + '</div>' : '') +
+            '<div><strong>' + esc(isUpload ? bi('العنوان: ', 'Title: ') : bi('التشخيص الطبي: ', 'Diagnosis: ')) + '</strong>' + esc(rec.diagnosis) + '</div>' +
+            (rec.medications ? '<div style="margin-top:6px;"><strong>💊 ' + esc(bi('الأدوية:', 'Medications:')) + '</strong>\n' + esc(rec.medications) + '</div>' : '') +
+            (rec.notes ? '<div style="margin-top:6px;color:var(--text-muted);"><strong>' + esc(bi('ملاحظات:', 'Notes:')) + '</strong> ' + esc(rec.notes) + '</div>' : '') +
           '</div>' +
           (rec.attachmentDataUrl
             ? '<div style="margin-top:10px;"><img class="attach-img" src="' + esc(rec.attachmentDataUrl) + '" alt="مرفق طبي" data-preview-img="' + esc(rec.id) + '" /></div>'
             : '') +
           (!isUpload
-            ? '<div style="margin-top:10px;"><button class="btn btn-outline btn-block" data-print-rec="' + esc(rec.id) + '">🖨️ طباعة الروشتة (Print / PDF)</button></div>'
+            ? '<div style="margin-top:10px;"><button class="btn btn-outline btn-block" type="button" data-print-rec="' + esc(rec.id) + '">🖨️ ' + esc(bi('طباعة الروشتة (Print / PDF)', 'Print Prescription (PDF)')) + '</button></div>'
             : '') +
         '</article>';
       }
@@ -1695,9 +1702,11 @@
         const familyIds = new Set(db.familyMembers.map((m) => m.id));
         const familyNames = new Set(db.familyMembers.map((m) => m.fullName));
 
-        const myBooked = db.slots
-          .filter((s) => s.status === 'BOOKED' && (familyIds.has(s.familyMemberId) || familyNames.has(s.patientName)))
-          .sort((a, b) => (a.startMinutes + a.delayMinutes) - (b.startMinutes + b.delayMinutes));
+        const myBooked = db.account
+          ? db.slots
+              .filter((s) => s.status === 'BOOKED' && (familyIds.has(s.familyMemberId) || familyNames.has(s.patientName)))
+              .sort((a, b) => (a.startMinutes + a.delayMinutes) - (b.startMinutes + b.delayMinutes))
+          : [];
 
         const latestDelay = db.notifications[0];
         const privateCount = db.doctors.filter((d) => d.clinicType === 'PRIVATE').length;
@@ -1707,64 +1716,81 @@
         const announcement = (db.config.homeAnnouncementAr || '').trim();
         const needsOtp = db.account && db.account.isPhoneVerified === false;
 
+        const welcomeHeading = activeMember
+          ? bi('أهلاً بك، ' + activeMember.fullName, 'Welcome, ' + activeMember.fullName)
+          : bi('أهلاً بك في منصة ' + db.config.platformNameAr, 'Welcome to ' + (db.config.platformNameEn || 'Teb Al-Hajayzah'));
+
+        const accountSectionHtml = db.account
+          ? '<section>' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+                '<h3>' + esc(bi('الحجز والملف الطبي باسم:', 'Booking & Records for:')) + '</h3>' +
+                '<button class="btn btn-outline" id="btnAddFamilyQuick" type="button" style="min-height:38px;padding:6px 12px;">+ ' + esc(bi('إضافة فرد عائلة', 'Add Family Member')) + '</button>' +
+              '</div>' +
+              '<div class="chips-row">' +
+                db.familyMembers.map((m) =>
+                  '<button class="chip ' + (activeMember && m.id === activeMember.id ? 'active' : '') + '" type="button" data-select-member="' + esc(m.id) + '">' +
+                    '👤 ' + esc(m.fullName.split(' ')[0]) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
+                  '</button>'
+                ).join('') +
+              '</div>' +
+            '</section>'
+          : '<section class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--teal-soft);border-color:rgba(13,115,119,0.3);">' +
+              '<div>' +
+                '<div style="font-weight:800;color:var(--teal-text);">🔐 ' + esc(bi('سجّل حسابك الآن برقم الهاتف (تأكيد OTP من 6 أرقام)', 'Create your account via phone (6-digit OTP verified)')) + '</div>' +
+                '<div style="font-size:0.86rem;color:var(--teal-text);">' + esc(bi('لإتمام الحجز الموثوق وإدارة ملفك الطبي وملفات أسرتك.', 'Verify your phone number to unlock instant clinic bookings & unified medical records.')) + '</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<button class="btn btn-primary" id="btnHeroRegister" type="button" style="min-height:42px;">🆕 ' + esc(bi('إنشاء حساب جديد', 'Register')) + '</button>' +
+                '<button class="btn btn-outline" id="btnHeroLogin" type="button" style="min-height:42px;background:#fff;">🔑 ' + esc(bi('تسجيل دخول', 'Sign In')) + '</button>' +
+              '</div>' +
+            '</section>';
+
         return '<section class="hero-card">' +
-            '<h2 style="font-size:1.35rem;">أهلاً بك، ' + esc(activeMember.fullName) + '</h2>' +
-            '<div style="opacity:0.94;">' + esc(db.config.taglineAr) + '</div>' +
-            '<span class="hero-pill">احجز موعدك في ثوانٍ بدون انتظار • ' + esc(db.config.hospitalNameAr) + '</span>' +
+            '<h2 style="font-size:1.35rem;">' + esc(welcomeHeading) + '</h2>' +
+            '<div style="opacity:0.94;">' + esc(bi(db.config.taglineAr, db.config.taglineEn || DEFAULT_CONFIG.taglineEn)) + '</div>' +
+            '<span class="hero-pill">' + esc(bi('احجز موعدك في ثوانٍ بدون انتظار • ' + db.config.hospitalNameAr, 'Book instantly with zero wait • ' + (db.config.hospitalNameEn || DEFAULT_CONFIG.hospitalNameEn))) + '</span>' +
           '</section>' +
 
           (announcement ? '<div class="alert-banner" style="background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);">📢 ' + esc(announcement) + '</div>' : '') +
 
           (needsOtp
-            ? '<button type="button" class="alert-banner" id="btnHomeOtpWarning" style="cursor:pointer;width:100%;text-align:right;">🔐 حسابك قيد التفعيل: يرجى إدخال رمز التحقق (OTP) المكون من 6 أرقام لتفعيل حجز المواعيد. اضغط هنا للتأكيد.</button>'
+            ? '<button type="button" class="alert-banner" id="btnHomeOtpWarning" style="cursor:pointer;width:100%;text-align:start;">🔐 ' + esc(bi('حسابك قيد التفعيل: يرجى إدخال رمز التحقق (OTP) المكون من 6 أرقام لتفعيل حجز المواعيد. اضغط هنا للتأكيد.', 'Account pending verification: enter the 6-digit OTP code to unlock bookings. Tap to verify.')) + '</button>'
             : '') +
 
           (latestDelay ? '<div class="alert-banner">⚠️ ' + esc(latestDelay.message) + '</div>' : '') +
 
-          '<section>' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-              '<h3>الحجز والملف الطبي باسم:</h3>' +
-              '<button class="btn btn-outline" id="btnAddFamilyQuick" style="min-height:38px;padding:6px 12px;">+ إضافة فرد عائلة</button>' +
-            '</div>' +
-            '<div class="chips-row">' +
-              db.familyMembers.map((m) =>
-                '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" data-select-member="' + esc(m.id) + '">' +
-                  '👤 ' + esc(m.fullName.split(' ')[0]) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
-                '</button>'
-              ).join('') +
-            '</div>' +
-          '</section>' +
+          accountSectionHtml +
 
           '<section>' +
-            '<h3 style="margin-bottom:10px;">الأقسام الرئيسية</h3>' +
+            '<h3 style="margin-bottom:10px;">' + esc(bi('الأقسام الرئيسية', 'Main Sections')) + '</h3>' +
             '<div class="sections-grid">' +
-              '<button class="section-tile" data-goto-tab="PRIVATE">' +
+              '<button class="section-tile" type="button" data-goto-tab="PRIVATE">' +
                 '<div class="tile-icon" style="background:#E0F2F1;color:#0D7377;">🩺</div>' +
-                '<div class="tile-title">العيادات الخاصة</div>' +
-                '<div class="tile-sub" style="color:#0D7377;">' + privateCount + ' عيادات متاحة</div>' +
+                '<div class="tile-title">' + esc(bi('العيادات الخاصة', 'Private Clinics')) + '</div>' +
+                '<div class="tile-sub" style="color:#0D7377;">' + privateCount + ' ' + esc(bi('عيادة متاحة', 'Clinics')) + '</div>' +
               '</button>' +
-              '<button class="section-tile" data-goto-tab="HOSPITAL">' +
+              '<button class="section-tile" type="button" data-goto-tab="HOSPITAL">' +
                 '<div class="tile-icon" style="background:#E3F2FD;color:#0F5E8C;">🏥</div>' +
-                '<div class="tile-title">المستشفى التخصصي</div>' +
-                '<div class="tile-sub" style="color:#0F5E8C;">' + hospitalCount + ' أقسام طبية</div>' +
+                '<div class="tile-title">' + esc(bi('المستشفى التخصصي', 'Hospital')) + '</div>' +
+                '<div class="tile-sub" style="color:#0F5E8C;">' + hospitalCount + ' ' + esc(bi('أقسام طبية', 'Departments')) + '</div>' +
               '</button>' +
-              '<button class="section-tile" data-goto-tab="SPECIALTIES">' +
+              '<button class="section-tile" type="button" data-goto-tab="SPECIALTIES">' +
                 '<div class="tile-icon" style="background:#ECFDF5;color:#15803D;">📋</div>' +
-                '<div class="tile-title">التخصصات الطبية</div>' +
-                '<div class="tile-sub" style="color:#15803D;">' + specsCount + ' تخصصات</div>' +
+                '<div class="tile-title">' + esc(bi('التخصصات الطبية', 'Specialties')) + '</div>' +
+                '<div class="tile-sub" style="color:#15803D;">' + specsCount + ' ' + esc(bi('تخصصات', 'Specialties')) + '</div>' +
               '</button>' +
-              '<button class="section-tile" data-goto-tab="EMR">' +
+              '<button class="section-tile" type="button" data-goto-tab="EMR">' +
                 '<div class="tile-icon" style="background:#FFF7ED;color:#C2410C;">📁</div>' +
-                '<div class="tile-title">ملفي الطبي</div>' +
-                '<div class="tile-sub" style="color:#C2410C;">الروشتات والتحاليل</div>' +
+                '<div class="tile-title">' + esc(bi('ملفي الطبي', 'My Medical File')) + '</div>' +
+                '<div class="tile-sub" style="color:#C2410C;">' + esc(bi('الروشتات والتحاليل', 'Prescriptions & Labs')) + '</div>' +
               '</button>' +
             '</div>' +
           '</section>' +
 
           '<section>' +
-            '<h3 style="margin-bottom:10px;">مواعيد العائلة المحجوزة اليوم (' + myBooked.length + ')</h3>' +
+            '<h3 style="margin-bottom:10px;">' + esc(bi('مواعيد العائلة المحجوزة اليوم (' + myBooked.length + ')', 'Today\'s Booked Appointments (' + myBooked.length + ')')) + '</h3>' +
             (myBooked.length === 0
-              ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد حجوزات قادمة اليوم. اختر عيادة لحجز موعدك بضغطة واحدة.</div>'
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد حجوزات قادمة اليوم. اختر عيادة لحجز موعدك بضغطة واحدة.', 'No upcoming bookings today. Select any clinic to book in one tap.')) + '</div>'
               : '<div style="display:flex;flex-direction:column;gap:10px;">' + myBooked.map((slot) => {
                   const doc = db.doctors.find((d) => d.id === slot.doctorId);
                   if (!doc) return '';
@@ -1778,13 +1804,13 @@
                       '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);font-size:0.98rem;">' + formatMinutesAr(eff) + '</span>' +
                     '</div>' +
                     (slot.delayMinutes > 0
-                      ? '<div style="color:var(--warn-border);font-size:0.84rem;font-weight:700;margin-top:4px;">تم تعديل الموعد (+' + slot.delayMinutes + ' دقيقة تأخير)</div>'
+                      ? '<div style="color:var(--warn-border);font-size:0.84rem;font-weight:700;margin-top:4px;">' + esc(bi('تم تعديل الموعد (+' + slot.delayMinutes + ' دقيقة تأخير)', 'Updated (+' + slot.delayMinutes + ' min delay)')) + '</div>'
                       : '') +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;">' +
-                      '<span style="font-weight:700;">المريض: ' + esc(slot.patientName) + '</span>' +
+                      '<span style="font-weight:700;">' + esc(bi('المريض: ', 'Patient: ')) + esc(slot.patientName) + '</span>' +
                       '<div style="display:flex;gap:8px;">' +
-                        '<button class="btn btn-danger-outline" data-cancel-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;">إلغاء</button>' +
-                        '<button class="btn btn-primary" data-open-doc="' + esc(doc.id) + '" style="min-height:38px;padding:6px 12px;">تفاصيل العيادة</button>' +
+                        '<button class="btn btn-danger-outline" type="button" data-cancel-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;">' + esc(bi('إلغاء', 'Cancel')) + '</button>' +
+                        '<button class="btn btn-primary" type="button" data-open-doc="' + esc(doc.id) + '" style="min-height:38px;padding:6px 12px;">' + esc(bi('تفاصيل العيادة', 'Details')) + '</button>' +
                       '</div>' +
                     '</div>' +
                   '</div>';
@@ -1792,8 +1818,13 @@
           '</section>' +
 
           '<section>' +
-            '<h3 style="margin-bottom:10px;">أطباء متاحون الآن في ' + esc(db.config.villageNameAr) + '</h3>' +
-            '<div class="doctors-grid">' + db.doctors.slice(0, 4).map(renderDoctorCardHtml).join('') + '</div>' +
+            '<h3 style="margin-bottom:10px;">' + esc(bi('الأطباء والعيادات المتاحة في ' + db.config.villageNameAr, 'Available Doctors & Clinics in ' + (db.config.villageNameEn || DEFAULT_CONFIG.villageNameEn))) + '</h3>' +
+            (db.doctors.length === 0
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);display:flex;flex-direction:column;gap:8px;align-items:center;">' +
+                  '<div style="font-weight:700;color:var(--text);">' + esc(bi('المنصة جاهزة لاستقبال وإدراج العيادات المعتمدة', 'Platform is ready for verified clinics & doctors')) + '</div>' +
+                  '<div>' + esc(bi('لم يتم إدراج عيادات بعد. يمكن للأطباء طلب الانضمام مباشرة عبر زر الواتساب في أسفل الصفحة.', 'No clinics listed yet. Doctors can request onboarding via the WhatsApp contact button below.')) + '</div>' +
+                '</div>'
+              : '<div class="doctors-grid">' + db.doctors.slice(0, 4).map(renderDoctorCardHtml).join('') + '</div>') +
           '</section>';
       }
 
@@ -1812,16 +1843,16 @@
 
         return '<section>' +
             '<h2 style="margin-bottom:10px;">' + esc(title) + '</h2>' +
-            '<input class="input" id="dirSearchInput" type="search" placeholder="ابحث باسم الدكتور أو التخصص أو العيادة..." value="' + esc(ui.searchQuery) + '" />' +
+            '<input class="input" id="dirSearchInput" type="search" placeholder="' + esc(bi('ابحث باسم الدكتور أو التخصص أو العيادة...', 'Search by doctor name, specialty, or clinic...')) + '" value="' + esc(ui.searchQuery) + '" />' +
           '</section>' +
           (showSpecChips
             ? '<div class="chips-row">' +
-                '<button class="chip ' + (!ui.selectedSpecialty ? 'active' : '') + '" data-spec="">كل التخصصات</button>' +
-                specs.map((s) => '<button class="chip ' + (ui.selectedSpecialty === s ? 'active' : '') + '" data-spec="' + esc(s) + '">' + esc(s) + '</button>').join('') +
+                '<button class="chip ' + (!ui.selectedSpecialty ? 'active' : '') + '" type="button" data-spec="">' + esc(bi('كل التخصصات', 'All Specialties')) + '</button>' +
+                specs.map((s) => '<button class="chip ' + (ui.selectedSpecialty === s ? 'active' : '') + '" type="button" data-spec="' + esc(s) + '">' + esc(s) + '</button>').join('') +
               '</div>'
             : '') +
           (filtered.length === 0
-            ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد عيادات مطابقة للبحث</div>'
+            ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد عيادات مسجلة أو مطابقة للبحث حالياً.', 'No clinics registered or matching your search yet.')) + '</div>'
             : '<div class="doctors-grid">' + filtered.map(renderDoctorCardHtml).join('') + '</div>');
       }
 
@@ -1834,39 +1865,41 @@
         const slots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
 
         return '<div style="display:flex;align-items:center;gap:10px;">' +
-            '<button class="btn btn-outline" id="btnBookingBack" style="min-height:42px;">→ رجوع</button>' +
-            '<h2>الحجز اللحظي للمواعيد</h2>' +
+            '<button class="btn btn-outline" id="btnBookingBack" type="button" style="min-height:42px;">→ ' + esc(bi('رجوع', 'Back')) + '</button>' +
+            '<h2>' + esc(bi('الحجز اللحظي للمواعيد', 'Real-Time Appointment Booking')) + '</h2>' +
           '</div>' +
 
           '<section class="card">' +
             '<h3 style="font-size:1.2rem;">' + esc(doc.doctorName) + '</h3>' +
             '<div style="color:var(--teal);font-weight:700;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
             (doc.bio ? '<div style="font-size:0.9rem;color:var(--text-muted);margin-top:4px;">' + esc(doc.bio) + '</div>' : '') +
-            '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:4px;">📍 ' + esc(doc.locationLabel) + ' • سعر الكشف: ' + doc.feeEgp + ' ج.م</div>' +
-            '<div style="font-size:0.88rem;margin-top:4px;">🕒 مواعيد العمل: ' + formatMinutesAr(doc.workStartMinutes) + ' إلى ' + formatMinutesAr(doc.workEndMinutes) + ' (كل ' + doc.slotDurationMinutes + ' دقيقة)</div>' +
+            '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:4px;">📍 ' + esc(doc.locationLabel) + ' • ' + esc(bi('سعر الكشف: ', 'Fee: ')) + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
+            '<div style="font-size:0.88rem;margin-top:4px;">🕒 ' + esc(bi('مواعيد العمل: ', 'Working Hours: ')) + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (' + esc(bi('كل ' + doc.slotDurationMinutes + ' دقيقة', 'Every ' + doc.slotDurationMinutes + ' min')) + ')</div>' +
             (doc.mapsUrl
-              ? '<div style="margin-top:8px;"><a class="btn btn-outline" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:40px;padding:6px 14px;display:inline-flex;">🗺️ فتح موقع العيادة على خرائط جوجل</a></div>'
+              ? '<div style="margin-top:8px;"><a class="btn btn-outline" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:40px;padding:6px 14px;display:inline-flex;">🗺️ ' + esc(bi('فتح موقع العيادة على خرائط جوجل', 'Open Clinic on Google Maps')) + '</a></div>'
               : '') +
             (doc.currentDelayMinutes > 0
-              ? '<div class="alert-banner" style="margin-top:8px;">تحديث: العيادة متأخرة ' + doc.currentDelayMinutes + ' دقيقة والأوقات الظاهرة معدّلة تلقائياً.</div>'
+              ? '<div class="alert-banner" style="margin-top:8px;">' + esc(bi('تحديث: العيادة متأخرة ' + doc.currentDelayMinutes + ' دقيقة والأوقات الظاهرة معدّلة تلقائياً.', 'Update: Clinic delayed by ' + doc.currentDelayMinutes + ' min. Times auto-adjusted.')) + '</div>'
               : '') +
           '</section>' +
 
-          '<section>' +
-            '<div style="font-weight:700;margin-bottom:6px;">احجز الموعد لصالح:</div>' +
-            '<div class="chips-row">' +
-              db.familyMembers.map((m) =>
-                '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" data-select-member="' + esc(m.id) + '">' +
-                  esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
-                '</button>'
-              ).join('') +
-            '</div>' +
-          '</section>' +
+          (db.account && db.familyMembers.length > 0
+            ? '<section>' +
+                '<div style="font-weight:700;margin-bottom:6px;">' + esc(bi('احجز الموعد لصالح:', 'Book appointment for:')) + '</div>' +
+                '<div class="chips-row">' +
+                  db.familyMembers.map((m) =>
+                    '<button class="chip ' + (activeMember && m.id === activeMember.id ? 'active' : '') + '" type="button" data-select-member="' + esc(m.id) + '">' +
+                      esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
+                    '</button>'
+                  ).join('') +
+                '</div>' +
+              '</section>'
+            : '<div class="alert-banner" style="background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);">🔐 ' + esc(bi('يرجى تسجيل الدخول أو إنشاء حساب وتأكيده برمز التحقق (OTP) لإتمام الحجز.', 'Please sign in or register with 6-digit OTP verification to book an appointment.')) + '</div>') +
 
           '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-            '<span class="badge badge-avail">متاح للحجز</span>' +
-            '<span class="badge badge-booked">محجوز (مغلق)</span>' +
-            '<span class="badge badge-done">تم الكشف</span>' +
+            '<span class="badge badge-avail">' + esc(bi('متاح للحجز', 'Available')) + '</span>' +
+            '<span class="badge badge-booked">' + esc(bi('محجوز (مغلق)', 'Booked')) + '</span>' +
+            '<span class="badge badge-done">' + esc(bi('تم الكشف', 'Completed')) + '</span>' +
           '</div>' +
 
           '<section class="slots-grid">' +
@@ -1874,11 +1907,13 @@
               const eff = slot.startMinutes + slot.delayMinutes;
               const isMine = slot.status === 'BOOKED' && (familyIds.has(slot.familyMemberId) || familyNames.has(slot.patientName));
               const cls = slot.status === 'AVAILABLE' ? 'avail' : (slot.status === 'BOOKED' ? 'booked' : 'completed');
-              const label = slot.status === 'AVAILABLE' ? 'متاح' : (isMine ? 'محجوز لك' : (slot.status === 'BOOKED' ? 'محجوز' : 'تم الكشف'));
+              const label = slot.status === 'AVAILABLE'
+                ? bi('متاح', 'Available')
+                : (isMine ? bi('محجوز لك', 'Your Booking') : (slot.status === 'BOOKED' ? bi('محجوز', 'Booked') : bi('تم الكشف', 'Done')));
               return '<div class="slot-tile ' + cls + '" ' + (slot.status === 'AVAILABLE' ? 'data-book-slot="' + esc(slot.id) + '"' : '') + '>' +
                 '<div class="slot-time">' + formatMinutesAr(eff) + '</div>' +
-                '<div class="slot-state">' + label + '</div>' +
-                (isMine ? '<button class="chip" style="min-height:28px;padding:2px 8px;font-size:0.75rem;color:var(--booked-border);margin-top:4px;" data-cancel-slot="' + esc(slot.id) + '">إلغاء</button>' : '') +
+                '<div class="slot-state">' + esc(label) + '</div>' +
+                (isMine ? '<button class="chip" type="button" style="min-height:28px;padding:2px 8px;font-size:0.75rem;color:var(--booked-border);margin-top:4px;" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إلغاء', 'Cancel')) + '</button>' : '') +
               '</div>';
             }).join('') +
           '</section>';
@@ -1886,38 +1921,53 @@
 
       function renderMedicalFileScreen() {
         const activeMember = getActiveMember();
+        if (!db.account || !activeMember) {
+          return '<section>' +
+              '<h2>' + esc(bi('ملفي الطبي الموحد', 'My Unified Medical File')) + '</h2>' +
+              '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('جميع الزيارات السابقة، التشخيصات، الروشتات، وصور التحاليل والأشعة مع إمكانية الطباعة PDF.', 'All your visits, diagnoses, prescriptions, and lab images with PDF printing.')) + '</div>' +
+            '</section>' +
+            '<div class="card" style="text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;padding:24px;">' +
+              '<div style="font-size:2rem;">📁</div>' +
+              '<div style="font-weight:700;">' + esc(bi('سجّل دخولك أولاً للوصول إلى ملفك الطبي', 'Sign in to access your medical records')) + '</div>' +
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<button class="btn btn-primary" id="btnEmrRegister" type="button">🆕 ' + esc(bi('إنشاء حساب جديد', 'Create Account')) + '</button>' +
+                '<button class="btn btn-outline" id="btnEmrLogin" type="button">🔑 ' + esc(bi('تسجيل دخول', 'Sign In')) + '</button>' +
+              '</div>' +
+            '</div>';
+        }
+
         const records = db.records
           .filter((r) => r.familyMemberId === activeMember.id || r.patientName === activeMember.fullName)
           .sort((a, b) => b.createdAtMillis - a.createdAtMillis);
 
         return '<section>' +
-            '<h2>ملفي الطبي الموحد</h2>' +
-            '<div style="color:var(--text-muted);font-size:0.9rem;">جميع الزيارات السابقة، التشخيصات، الروشتات، وصور التحاليل والأشعة مع إمكانية الطباعة PDF.</div>' +
+            '<h2>' + esc(bi('ملفي الطبي الموحد', 'My Unified Medical File')) + '</h2>' +
+            '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('جميع الزيارات السابقة، التشخيصات، الروشتات، وصور التحاليل والأشعة مع إمكانية الطباعة PDF.', 'All visits, diagnoses, prescriptions, and lab uploads with PDF export.')) + '</div>' +
           '</section>' +
 
           '<div class="chips-row">' +
             db.familyMembers.map((m) =>
-              '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" data-select-member="' + esc(m.id) + '">' +
+              '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" type="button" data-select-member="' + esc(m.id) + '">' +
                 esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
               '</button>'
             ).join('') +
           '</div>' +
 
           '<section class="card" style="background:rgba(217,242,242,0.55);border-color:rgba(13,115,119,0.35);">' +
-            '<h3 style="margin-bottom:4px;">📤 إضافة تحاليل أو أشعة جديدة</h3>' +
-            '<div style="color:var(--text-muted);font-size:0.86rem;margin-bottom:10px;">ارفع صورة التحليل أو التقطها بالكاميرا لتظهر فوراً لجميع الأطباء</div>' +
+            '<h3 style="margin-bottom:4px;">📤 ' + esc(bi('إضافة تحاليل أو أشعة جديدة', 'Upload Lab Result or X-Ray')) + '</h3>' +
+            '<div style="color:var(--text-muted);font-size:0.86rem;margin-bottom:10px;">' + esc(bi('ارفع صورة التحليل أو التقطها بالكاميرا لتظهر فوراً لجميع الأطباء', 'Upload or capture a lab/scan photo to share with your doctors')) + '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
-              '<input class="input" id="uploadLabTitle" placeholder="اسم التحليل (مثال: صورة دم كاملة)" />' +
-              '<input class="input" id="uploadLabNotes" placeholder="ملاحظات للطبيب (اختياري)" />' +
+              '<input class="input" id="uploadLabTitle" placeholder="' + esc(bi('اسم التحليل (مثال: صورة دم كاملة)', 'Lab title (e.g. CBC)')) + '" />' +
+              '<input class="input" id="uploadLabNotes" placeholder="' + esc(bi('ملاحظات للطبيب (اختياري)', 'Doctor notes (optional)')) + '" />' +
             '</div>' +
             '<label class="btn btn-primary btn-block" style="cursor:pointer;">' +
-              '📷 اختيار أو تصوير صورة التحليل / الأشعة' +
+              '📷 ' + esc(bi('اختيار أو تصوير صورة التحليل / الأشعة', 'Choose or Take Lab / X-Ray Photo')) +
               '<input type="file" id="labPhotoInput" accept="image/*" capture="environment" style="display:none;" />' +
             '</label>' +
           '</section>' +
 
           (records.length === 0
-            ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد سجلات طبية مسجلة لـ ' + esc(activeMember.fullName) + ' بعد.</div>'
+            ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد سجلات طبية مسجلة لـ ' + activeMember.fullName + ' بعد.', 'No medical records found for ' + activeMember.fullName + ' yet.')) + '</div>'
             : '<div style="display:flex;flex-direction:column;gap:12px;">' + records.map(renderMedicalRecordCardHtml).join('') + '</div>');
       }
 
@@ -1926,16 +1976,16 @@
             '<div style="display:flex;align-items:center;gap:12px;">' +
               '<div class="tile-icon" style="background:var(--teal-soft);color:var(--teal);">🩺</div>' +
               '<div>' +
-                '<h2 style="font-size:1.25rem;">تسجيل دخول الأطباء والعيادات</h2>' +
-                '<div style="font-size:0.86rem;color:var(--text-muted);">أدخل اسم المستخدم (أو رقم الهاتف) وكلمة المرور الخاصة بعيادتك</div>' +
+                '<h2 style="font-size:1.25rem;">' + esc(bi('تسجيل دخول الأطباء والعيادات', 'Doctor & Clinic Login')) + '</h2>' +
+                '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(bi('أدخل اسم المستخدم (أو رقم الهاتف) وكلمة المرور الخاصة بعيادتك', 'Enter your clinic username/phone and password')) + '</div>' +
               '</div>' +
             '</div>' +
-            '<input class="input" id="docLoginIdentifier" placeholder="اسم المستخدم أو رقم الهاتف (مثال: 01001001001)" dir="ltr" />' +
-            renderPasswordFieldHtml('docLoginPassword', '', 'كلمة المرور') +
+            '<input class="input" id="docLoginIdentifier" placeholder="' + esc(bi('اسم المستخدم أو رقم الهاتف', 'Username or Phone Number')) + '" dir="ltr" />' +
+            renderPasswordFieldHtml('docLoginPassword', '', bi('كلمة المرور', 'Password')) +
             '<div id="docLoginError" style="display:none;color:var(--booked-border);font-weight:700;font-size:0.88rem;"></div>' +
-            '<button class="btn btn-primary btn-block" id="btnDocLoginSubmit">🔐 دخول إلى لوحة العيادة</button>' +
+            '<button class="btn btn-primary btn-block" id="btnDocLoginSubmit" type="button">🔐 ' + esc(bi('دخول إلى لوحة العيادة', 'Sign In to Clinic Dashboard')) + '</button>' +
             '<div style="background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">' +
-              'تُنشأ حسابات الأطباء وتُعدل من <strong>لوحة الإدارة العليا (' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + ')</strong>. (للتجربة السريعة: <code>01001001001</code> / <code>1234</code>)' +
+              esc(bi('تُنشأ حسابات الأطباء وتُدار حصرياً عبر إدارة المنصة.', 'Doctor accounts are created and managed exclusively by platform administration.')) +
             '</div>' +
           '</section>';
       }
@@ -1954,51 +2004,53 @@
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
                 '<div>' +
                   '<h3 style="font-size:1.15rem;">' + esc(doc.clinicName) + ' (' + esc(doc.specialty) + ')</h3>' +
-                  '<div style="font-size:0.86rem;color:var(--text-muted);">📍 ' + esc(doc.locationLabel) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' • الكشف: ' + doc.feeEgp + ' ج.م</div>' +
+                  '<div style="font-size:0.86rem;color:var(--text-muted);">📍 ' + esc(doc.locationLabel) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' • ' + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
                 '</div>' +
                 (doc.currentDelayMinutes > 0
-                  ? '<span class="badge" style="background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);">تأخير: +' + doc.currentDelayMinutes + ' د</span>'
+                  ? '<span class="badge" style="background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);">+' + doc.currentDelayMinutes + ' ' + esc(bi('د', 'm')) + '</span>'
                   : '') +
               '</div>' +
 
               '<div class="stats-row" style="margin-bottom:12px;">' +
-                '<div class="stat-box" style="background:var(--booked-bg);color:var(--booked-text);"><div class="stat-num">' + bookedCount + '</div><div>محجوز</div></div>' +
-                '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + availCount + '</div><div>متاح</div></div>' +
-                '<div class="stat-box" style="background:var(--done-bg);color:var(--done-text);"><div class="stat-num">' + doneCount + '</div><div>تم الكشف</div></div>' +
+                '<div class="stat-box" style="background:var(--booked-bg);color:var(--booked-text);"><div class="stat-num">' + bookedCount + '</div><div>' + esc(bi('محجوز', 'Booked')) + '</div></div>' +
+                '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + availCount + '</div><div>' + esc(bi('متاح', 'Available')) + '</div></div>' +
+                '<div class="stat-box" style="background:var(--done-bg);color:var(--done-text);"><div class="stat-num">' + doneCount + '</div><div>' + esc(bi('تم الكشف', 'Done')) + '</div></div>' +
               '</div>' +
 
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
-                '<button class="btn btn-warn" id="btnDelay15">🕒 تأخير 15 دقيقة</button>' +
-                '<button class="btn btn-outline" id="btnDelay30">تأخير 30 دقيقة</button>' +
+                '<button class="btn btn-warn" id="btnDelay15" type="button">🕒 ' + esc(bi('تأخير 15 دقيقة', 'Delay 15 min')) + '</button>' +
+                '<button class="btn btn-outline" id="btnDelay30" type="button">' + esc(bi('تأخير 30 دقيقة', 'Delay 30 min')) + '</button>' +
               '</div>' +
-              '<button class="btn btn-outline btn-block" id="btnOpenScheduleGen">📅 توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)</button>' +
+              '<button class="btn btn-outline btn-block" id="btnOpenScheduleGen" type="button">📅 ' + esc(bi('توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)', 'Auto-Generate Schedule (15/20/30 min)')) + '</button>' +
             '</section>' +
 
             '<section>' +
-              '<h3 style="margin-bottom:10px;">قائمة مواعيد اليوم (' + slots.length + ')</h3>' +
+              '<h3 style="margin-bottom:10px;">' + esc(bi('قائمة مواعيد اليوم (' + slots.length + ')', 'Today\'s Slots (' + slots.length + ')')) + '</h3>' +
               '<div style="display:flex;flex-direction:column;gap:10px;">' +
                 slots.map((slot) => {
                   const eff = slot.startMinutes + slot.delayMinutes;
                   const badgeCls = slot.status === 'AVAILABLE' ? 'badge-avail' : (slot.status === 'BOOKED' ? 'badge-booked' : 'badge-done');
-                  const titleText = slot.status === 'AVAILABLE' ? 'موعد متاح للحجز' : (slot.status === 'BOOKED' ? slot.patientName : slot.patientName + ' (تم الكشف ✓)');
-                  const sourceText = slot.bookingSource === 'PHONE_WALKIN' ? 'حجز هاتفي/حضور' : 'حجز عبر التطبيق';
+                  const titleText = slot.status === 'AVAILABLE'
+                    ? bi('موعد متاح للحجز', 'Available Slot')
+                    : (slot.status === 'BOOKED' ? slot.patientName : slot.patientName + ' (' + bi('تم الكشف ✓', 'Completed ✓') + ')');
+                  const sourceText = slot.bookingSource === 'PHONE_WALKIN' ? bi('حجز هاتفي/حضور', 'Phone / Walk-in') : bi('حجز عبر التطبيق', 'App Booking');
                   return '<div class="card">' +
                     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
                       '<span class="badge ' + badgeCls + '" style="font-size:1rem;padding:6px 12px;">' + formatMinutesAr(eff) + '</span>' +
                       '<div>' +
                         '<div style="font-weight:800;">' + esc(titleText) + '</div>' +
-                        (slot.status !== 'AVAILABLE' ? '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(slot.patientPhone) + ' • ' + sourceText + '</div>' : '') +
+                        (slot.status !== 'AVAILABLE' ? '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(slot.patientPhone) + ' • ' + esc(sourceText) + '</div>' : '') +
                       '</div>' +
                     '</div>' +
                     (slot.status === 'AVAILABLE'
-                      ? '<button class="btn btn-green btn-block" data-manual-slot="' + esc(slot.id) + '">📞 إضافة حجز هاتفي / حضور مباشر</button>'
+                      ? '<button class="btn btn-green btn-block" type="button" data-manual-slot="' + esc(slot.id) + '">📞 ' + esc(bi('إضافة حجز هاتفي / حضور مباشر', 'Add Phone / Walk-in Booking')) + '</button>'
                       : (slot.status === 'BOOKED'
                           ? '<div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;">' +
-                              '<button class="btn btn-outline" data-view-emr="' + esc(slot.id) + '">📁 ملف المريض</button>' +
-                              '<button class="btn btn-primary" data-write-rx="' + esc(slot.id) + '">💊 كتابة روشتة</button>' +
+                              '<button class="btn btn-outline" type="button" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('ملف المريض', 'Patient EMR')) + '</button>' +
+                              '<button class="btn btn-primary" type="button" data-write-rx="' + esc(slot.id) + '">💊 ' + esc(bi('كتابة روشتة', 'Write Rx')) + '</button>' +
                             '</div>' +
-                            '<div style="text-align:left;margin-top:6px;"><button class="btn" style="background:transparent;color:var(--booked-border);min-height:34px;padding:4px 8px;" data-cancel-slot="' + esc(slot.id) + '">إلغاء الحجز وإتاحته</button></div>'
-                          : '<button class="btn btn-outline btn-block" data-view-emr="' + esc(slot.id) + '">📁 عرض الملف الطبي والروشتة</button>')) +
+                            '<div style="text-align:end;margin-top:6px;"><button class="btn" type="button" style="background:transparent;color:var(--booked-border);min-height:34px;padding:4px 8px;" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إلغاء الحجز وإتاحته', 'Cancel & Free Slot')) + '</button></div>'
+                          : '<button class="btn btn-outline btn-block" type="button" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('عرض الملف الطبي والروشتة', 'View Record & Rx')) + '</button>')) +
                   '</div>';
                 }).join('') +
               '</div>' +
@@ -2006,14 +2058,14 @@
 
         return '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
             '<div>' +
-              '<h2>لوحة تحكم عيادة ' + esc(doc.doctorName) + '</h2>' +
-              '<div style="color:var(--text-muted);font-size:0.9rem;">إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وأكواد التفعيل.</div>' +
+              '<h2>' + esc(bi('لوحة تحكم عيادة ' + doc.doctorName, 'Clinic Dashboard — ' + doc.doctorName)) + '</h2>' +
+              '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وأكواد التفعيل.', 'Manage clinic schedule, walk-in bookings, delays, and OTP codes.')) + '</div>' +
             '</div>' +
-            '<button class="btn btn-danger-outline" id="btnDoctorLogout" style="min-height:40px;padding:6px 14px;">🚪 تسجيل خروج</button>' +
+            '<button class="btn btn-danger-outline" id="btnDoctorLogout" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
           '</section>' +
           '<div class="chips-row">' +
-            '<button class="chip ' + (ui.doctorTab !== 'OTP_CODES' ? 'active' : '') + '" data-doc-tab="SLOTS">📅 جدول المواعيد والعيادة</button>' +
-            '<button class="chip ' + (ui.doctorTab === 'OTP_CODES' ? 'active' : '') + '" data-doc-tab="OTP_CODES">🔑 أكواد التفعيل (OTP)</button>' +
+            '<button class="chip ' + (ui.doctorTab !== 'OTP_CODES' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
+            '<button class="chip ' + (ui.doctorTab === 'OTP_CODES' ? 'active' : '') + '" type="button" data-doc-tab="OTP_CODES">🔑 ' + esc(bi('أكواد التفعيل (OTP)', 'OTP Codes')) + '</button>' +
           '</div>' +
           bodyHtml;
       }
@@ -2043,26 +2095,26 @@
             return '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(emptyLabel) + '</div>';
           }
           return filtered.map((doc) => {
-            const typeLabel = doc.clinicType === 'HOSPITAL' ? '🏥 المستشفى التخصصي' : '🩺 عيادة خاصة';
+            const typeLabel = doc.clinicType === 'HOSPITAL' ? bi('🏥 المستشفى التخصصي', '🏥 Hospital Dept') : bi('🩺 عيادة خاصة', '🩺 Private Clinic');
             return '<div class="card">' +
               '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
                 '<div>' +
                   '<div style="font-weight:800;font-size:1.08rem;">' + esc(doc.doctorName) + '</div>' +
                   '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
                 '</div>' +
-                '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + typeLabel + '</span>' +
+                '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + esc(typeLabel) + '</span>' +
               '</div>' +
               (doc.bio ? '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' + esc(doc.bio) + '</div>' : '') +
               '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' +
-                '📍 ' + esc(doc.locationLabel) + ' • 💰 الكشف: ' + doc.feeEgp + ' ج.م • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (كل ' + doc.slotDurationMinutes + ' د)' +
+                '📍 ' + esc(doc.locationLabel) + ' • 💰 ' + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (' + doc.slotDurationMinutes + ' ' + esc(bi('د', 'm')) + ')' +
               '</div>' +
               '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:0.84rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
-                '<span>🔐 دخول الدكتور: <strong dir="ltr">' + esc(doc.username || doc.id) + '</strong></span>' +
-                '<span>🔑 كلمة المرور: <strong dir="ltr">' + esc(doc.password || '1234') + '</strong></span>' +
+                '<span>🔐 ' + esc(bi('دخول الدكتور:', 'Doctor Login:')) + ' <strong dir="ltr">' + esc(doc.username || doc.id) + '</strong></span>' +
+                '<span>🔑 ' + esc(bi('كلمة المرور:', 'Password:')) + ' <strong dir="ltr">' + esc(doc.password || '1234') + '</strong></span>' +
               '</div>' +
               '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
-                '<button class="btn btn-outline" data-admin-edit-doc="' + esc(doc.id) + '" style="flex:1;min-height:42px;">✏️ تعديل البيانات والمواعيد</button>' +
-                '<button class="btn btn-danger-outline" data-admin-delete-doc="' + esc(doc.id) + '" style="min-height:42px;">🗑️ حذف نهائي</button>' +
+                '<button class="btn btn-outline" type="button" data-admin-edit-doc="' + esc(doc.id) + '" style="flex:1;min-height:42px;">✏️ ' + esc(bi('تعديل البيانات والمواعيد', 'Edit Data & Schedule')) + '</button>' +
+                '<button class="btn btn-danger-outline" type="button" data-admin-delete-doc="' + esc(doc.id) + '" style="min-height:42px;">🗑️ ' + esc(bi('حذف نهائي', 'Delete')) + '</button>' +
               '</div>' +
             '</div>';
           }).join('');
@@ -2072,48 +2124,48 @@
         if (ui.adminTab === 'CLINICS') {
           tabBodyHtml =
             '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
-              '<button class="btn btn-primary" id="btnAdminAddPrivateDoctor" style="flex:1;min-width:220px;">➕ إضافة دكتور / عيادة خاصة</button>' +
-              '<input class="input" id="adminDoctorSearch" placeholder="ابحث عن دكتور أو عيادة أو اسم مستخدم..." value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
+              '<button class="btn btn-primary" id="btnAdminAddPrivateDoctor" type="button" style="flex:1;min-width:220px;">➕ ' + esc(bi('إضافة دكتور / عيادة خاصة', 'Add Private Doctor / Clinic')) + '</button>' +
+              '<input class="input" id="adminDoctorSearch" placeholder="' + esc(bi('ابحث عن دكتور أو عيادة أو اسم مستخدم...', 'Search doctor, clinic, or username...')) + '" value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
             '</section>' +
             '<section style="display:flex;flex-direction:column;gap:12px;">' +
-              '<h3>العيادات الخاصة والأطباء (' + privateDocs.length + ')</h3>' +
-              renderAdminDoctorsList(privateDocs, 'لا توجد عيادات خاصة مطابقة.') +
+              '<h3>' + esc(bi('العيادات الخاصة والأطباء (' + privateDocs.length + ')', 'Private Clinics & Doctors (' + privateDocs.length + ')')) + '</h3>' +
+              renderAdminDoctorsList(privateDocs, bi('لا توجد عيادات خاصة مضافة بعد. اضغط إضافة دكتور بالأعلى.', 'No private clinics added yet.')) +
             '</section>';
         } else if (ui.adminTab === 'HOSPITAL') {
           tabBodyHtml =
             '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
-              '<button class="btn btn-primary" id="btnAdminAddHospitalDept" style="flex:1;min-width:220px;">➕ إضافة قسم / طبيب بالمستشفى</button>' +
-              '<input class="input" id="adminDoctorSearch" placeholder="ابحث داخل أقسام ' + esc(db.config.hospitalNameAr) + '..." value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
+              '<button class="btn btn-primary" id="btnAdminAddHospitalDept" type="button" style="flex:1;min-width:220px;">➕ ' + esc(bi('إضافة قسم / طبيب بالمستشفى', 'Add Hospital Department / Doctor')) + '</button>' +
+              '<input class="input" id="adminDoctorSearch" placeholder="' + esc(bi('ابحث داخل أقسام ' + db.config.hospitalNameAr + '...', 'Search hospital departments...')) + '" value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
             '</section>' +
             '<section style="display:flex;flex-direction:column;gap:12px;">' +
-              '<h3>أقسام ' + esc(db.config.hospitalNameAr) + ' (' + hospitalDocs.length + ')</h3>' +
-              renderAdminDoctorsList(hospitalDocs, 'لا توجد أقسام مطابقة في المستشفى.') +
+              '<h3>' + esc(bi('أقسام ' + db.config.hospitalNameAr + ' (' + hospitalDocs.length + ')', 'Hospital Departments (' + hospitalDocs.length + ')')) + '</h3>' +
+              renderAdminDoctorsList(hospitalDocs, bi('لا توجد أقسام مضافة بالمستشفى بعد.', 'No hospital departments added yet.')) +
             '</section>';
         } else if (ui.adminTab === 'BOOKINGS') {
           tabBodyHtml =
             '<section class="card" style="display:flex;flex-direction:column;gap:8px;border-color:rgba(220,38,38,0.4);">' +
-              '<h3 style="color:var(--booked-text);">🚫 حظر رقم هاتف مسيء / حجوزات وهمية</h3>' +
+              '<h3 style="color:var(--booked-text);">🚫 ' + esc(bi('حظر رقم هاتف مسيء / حجوزات وهمية', 'Block Phone Number (Fake Bookings)')) + '</h3>' +
               '<div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;">' +
-                '<input class="input" id="adminBlockPhoneInp" type="tel" placeholder="رقم الهاتف المراد حظره" dir="ltr" />' +
-                '<input class="input" id="adminBlockReasonInp" placeholder="سبب الحظر (مثال: حجز وهمي)" />' +
+                '<input class="input" id="adminBlockPhoneInp" type="tel" placeholder="' + esc(bi('رقم الهاتف المراد حظره', 'Phone number to block')) + '" dir="ltr" />' +
+                '<input class="input" id="adminBlockReasonInp" placeholder="' + esc(bi('سبب الحظر (مثال: حجز وهمي)', 'Reason (e.g. Fake booking)')) + '" />' +
               '</div>' +
-              '<button class="btn btn-danger-outline btn-block" id="btnAdminBlockPhoneSubmit">🚫 حظر الرقم وإلغاء جميع حجوزاته النشطة</button>' +
+              '<button class="btn btn-danger-outline btn-block" id="btnAdminBlockPhoneSubmit" type="button">🚫 ' + esc(bi('حظر الرقم وإلغاء جميع حجوزاته النشطة', 'Block Phone & Cancel Bookings')) + '</button>' +
             '</section>' +
             '<section style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>الأرقام المحظورة حالياً (' + blockedList.length + ')</h3>' +
+              '<h3>' + esc(bi('الأرقام المحظورة حالياً (' + blockedList.length + ')', 'Blocked Phone Numbers (' + blockedList.length + ')')) + '</h3>' +
               (blockedList.length === 0
-                ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد أرقام محظورة حالياً.</div>'
+                ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد أرقام محظورة حالياً.', 'No blocked phone numbers.')) + '</div>'
                 : blockedList.map((b) =>
                     '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--booked-bg);border-color:var(--booked-border);">' +
-                      '<div><strong dir="ltr">' + esc(b.phone) + '</strong><div style="font-size:0.84rem;color:var(--booked-text);">' + esc(b.reason || 'حظر إداري') + '</div></div>' +
-                      '<button class="btn btn-outline" data-admin-unblock-phone="' + esc(b.phone) + '" style="min-height:38px;padding:6px 12px;">✓ رفع الحظر</button>' +
+                      '<div><strong dir="ltr">' + esc(b.phone) + '</strong><div style="font-size:0.84rem;color:var(--booked-text);">' + esc(b.reason || bi('حظر إداري', 'Blocked')) + '</div></div>' +
+                      '<button class="btn btn-outline" type="button" data-admin-unblock-phone="' + esc(b.phone) + '" style="min-height:38px;padding:6px 12px;">✓ ' + esc(bi('رفع الحظر', 'Unblock')) + '</button>' +
                     '</div>'
                   ).join('')) +
             '</section>' +
             '<section style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>جميع الحجوزات الحالية بالمنصة (' + allBookings.length + ')</h3>' +
+              '<h3>' + esc(bi('جميع الحجوزات الحالية بالمنصة (' + allBookings.length + ')', 'All Platform Bookings (' + allBookings.length + ')')) + '</h3>' +
               (allBookings.length === 0
-                ? '<div class="card" style="text-align:center;color:var(--text-muted);">لا توجد حجوزات حالية اليوم.</div>'
+                ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد حجوزات حالية اليوم.', 'No active bookings today.')) + '</div>'
                 : allBookings.map((item) => {
                     const s = item.slot;
                     const d = item.doc;
@@ -2122,7 +2174,7 @@
                       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
                         '<div>' +
                           '<strong>' + esc(s.patientName) + '</strong>' +
-                          '<div style="font-size:0.84rem;color:var(--text-muted);" dir="ltr">' + esc(s.patientPhone || 'بدون هاتف') + '</div>' +
+                          '<div style="font-size:0.84rem;color:var(--text-muted);" dir="ltr">' + esc(s.patientPhone || '-') + '</div>' +
                         '</div>' +
                         '<span class="badge badge-booked">' + formatMinutesAr(eff) + '</span>' +
                       '</div>' +
@@ -2130,8 +2182,8 @@
                         (d ? esc(d.doctorName + ' • ' + d.clinicName) : esc(s.doctorId)) +
                       '</div>' +
                       '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">' +
-                        '<button class="btn btn-outline" data-admin-cancel-slot="' + esc(s.id) + '" style="flex:1;min-height:38px;">إلغاء الحجز</button>' +
-                        (s.patientPhone ? '<button class="btn btn-danger-outline" data-admin-quick-block="' + esc(s.patientPhone) + '" style="min-height:38px;">🚫 حظر الرقم</button>' : '') +
+                        '<button class="btn btn-outline" type="button" data-admin-cancel-slot="' + esc(s.id) + '" style="flex:1;min-height:38px;">' + esc(bi('إلغاء الحجز', 'Cancel Booking')) + '</button>' +
+                        (s.patientPhone ? '<button class="btn btn-danger-outline" type="button" data-admin-quick-block="' + esc(s.patientPhone) + '" style="min-height:38px;">🚫 ' + esc(bi('حظر الرقم', 'Block Phone')) + '</button>' : '') +
                       '</div>' +
                     '</div>';
                   }).join('')) +
@@ -2142,18 +2194,18 @@
           const cfg = db.config;
           tabBodyHtml =
             '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>⚙️ إعدادات المنصة العامة والرقم السري (PIN)</h3>' +
-              '<label style="font-size:0.84rem;font-weight:700;">اسم المنصة<input class="input" id="admSetPlatform" value="' + esc(cfg.platformNameAr) + '" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">اسم القرية / المركز<input class="input" id="admSetVillage" value="' + esc(cfg.villageNameAr) + '" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">اسم المستشفى التخصصي<input class="input" id="admSetHospital" value="' + esc(cfg.hospitalNameAr) + '" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">رقم هاتف الدعم والواتساب<input class="input" id="admSetPhone" value="' + esc(cfg.supportPhone) + '" dir="ltr" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">إعلان هام في الصفحة الرئيسية (اختياري)<textarea class="textarea" id="admSetAnnouncement" placeholder="اتركه فارغاً لإخفاء شريط الإعلان...">' + esc(cfg.homeAnnouncementAr || '') + '</textarea></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">رابط تحميل التطبيق المباشر (APK)<input class="input" id="admSetApk" value="' + esc(cfg.apkDownloadUrl) + '" dir="ltr" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">رابط API الأدوية المصرية (اختياري)<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 الرقم السري للدخول السري (Admin PIN - 4 أرقام فأكثر)' + renderPasswordFieldHtml('admSetPin', cfg.adminPin || '202600', 'Admin PIN') + '</label>' +
+              '<h3>⚙️ ' + esc(bi('إعدادات المنصة العامة والرقم السري (PIN)', 'Platform Settings & Admin PIN')) + '</h3>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم المنصة', 'Platform Name')) + '<input class="input" id="admSetPlatform" value="' + esc(cfg.platformNameAr) + '" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم القرية / المركز', 'Village / District')) + '<input class="input" id="admSetVillage" value="' + esc(cfg.villageNameAr) + '" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم المستشفى التخصصي', 'Hospital Name')) + '<input class="input" id="admSetHospital" value="' + esc(cfg.hospitalNameAr) + '" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رقم هاتف الدعم والواتساب', 'Support & WhatsApp Phone')) + '<input class="input" id="admSetPhone" value="' + esc(cfg.supportPhone) + '" dir="ltr" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('إعلان هام في الصفحة الرئيسية (اختياري)', 'Home Announcement Banner (optional)')) + '<textarea class="textarea" id="admSetAnnouncement" placeholder="' + esc(bi('اتركه فارغاً لإخفاء شريط الإعلان...', 'Leave empty to hide banner...')) + '">' + esc(cfg.homeAnnouncementAr || '') + '</textarea></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط تحميل التطبيق المباشر (APK)', 'Direct APK Download URL')) + '<input class="input" id="admSetApk" value="' + esc(cfg.apkDownloadUrl) + '" dir="ltr" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط API الأدوية المصرية (اختياري)', 'Medications API URL (optional)')) + '<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 ' + esc(bi('الرقم السري للدخول السري (Admin PIN - 4 أرقام فأكثر)', 'Secret Admin PIN (4+ digits)')) + renderPasswordFieldHtml('admSetPin', cfg.adminPin || '202600', 'Admin PIN') + '</label>' +
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
-                '<button class="btn btn-outline" id="btnAdmResetCfg">استعادة الافتراضي</button>' +
-                '<button class="btn btn-primary" id="btnAdmSaveCfg">💾 حفظ كافة الإعدادات</button>' +
+                '<button class="btn btn-outline" id="btnAdmResetCfg" type="button">' + esc(bi('استعادة الافتراضي', 'Reset Defaults')) + '</button>' +
+                '<button class="btn btn-primary" id="btnAdmSaveCfg" type="button">💾 ' + esc(bi('حفظ كافة الإعدادات', 'Save Settings')) + '</button>' +
               '</div>' +
             '</section>';
         }
@@ -2161,26 +2213,26 @@
         return '<section class="hero-card">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
               '<div>' +
-                '<span class="hero-pill">🛡️ الإدارة العليا السرية • محمية بالـ PIN</span>' +
-                '<h2 style="font-size:1.35rem;margin-top:6px;">أهلاً بك، ' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + '</h2>' +
-                '<div style="opacity:0.92;font-size:0.9rem;">تحكم كامل في الأطباء، المستشفى، الحجوزات، الحظر، أكواد التفعيل، وإعدادات المنصة.</div>' +
+                '<span class="hero-pill">🛡️ ' + esc(bi('الإدارة العليا السرية • محمية بالـ PIN', 'Protected Super Admin • PIN Locked')) + '</span>' +
+                '<h2 style="font-size:1.35rem;margin-top:6px;">' + esc(bi('أهلاً بك، ' + (db.config.adminOwnerName || 'المهندس محمد يوسف'), 'Welcome, ' + (db.config.adminOwnerName || 'Eng. Mohamed Youssef'))) + '</h2>' +
+                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، الحجوزات، الحظر، أكواد التفعيل، وإعدادات المنصة.', 'Full control over clinics, hospital, bookings, blocks, OTP codes, and platform settings.')) + '</div>' +
               '</div>' +
-              '<button class="btn" id="btnAdminLogout" style="background:#fff;color:var(--teal);min-height:40px;">🚪 خروج وتأمين</button>' +
+              '<button class="btn" id="btnAdminLogout" type="button" style="background:#fff;color:var(--teal);min-height:40px;">🚪 ' + esc(bi('خروج وتأمين', 'Lock & Exit')) + '</button>' +
             '</div>' +
           '</section>' +
 
           '<section class="stats-row">' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">عيادات / مستشفى</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">حجوزات نشطة</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">أرقام محظورة</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">' + esc(bi('عيادات / مستشفى', 'Clinics / Hospital')) + '</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">' + esc(bi('حجوزات نشطة', 'Active Bookings')) + '</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">' + esc(bi('أرقام محظورة', 'Blocked Phones')) + '</div></div>' +
           '</section>' +
 
           '<div class="chips-row">' +
-            '<button class="chip ' + (ui.adminTab === 'CLINICS' ? 'active' : '') + '" data-admin-tab="CLINICS">🩺 الأطباء والعيادات</button>' +
-            '<button class="chip ' + (ui.adminTab === 'HOSPITAL' ? 'active' : '') + '" data-admin-tab="HOSPITAL">🏥 المستشفى والأقسام</button>' +
-            '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" data-admin-tab="BOOKINGS">📋 الحجوزات والحظر</button>' +
-            '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" data-admin-tab="SETTINGS">⚙️ إعدادات المنصة والـ PIN</button>' +
-            '<button class="chip ' + (ui.adminTab === 'OTP_CODES' ? 'active' : '') + '" data-admin-tab="OTP_CODES">🔑 أكواد التفعيل (OTP)</button>' +
+            '<button class="chip ' + (ui.adminTab === 'CLINICS' ? 'active' : '') + '" type="button" data-admin-tab="CLINICS">🩺 ' + esc(bi('الأطباء والعيادات', 'Clinics & Doctors')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'HOSPITAL' ? 'active' : '') + '" type="button" data-admin-tab="HOSPITAL">🏥 ' + esc(bi('المستشفى والأقسام', 'Hospital Depts')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('إعدادات المنصة والـ PIN', 'Settings & PIN')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'OTP_CODES' ? 'active' : '') + '" type="button" data-admin-tab="OTP_CODES">🔑 ' + esc(bi('أكواد التفعيل (OTP)', 'OTP Codes')) + '</button>' +
           '</div>' +
 
           tabBodyHtml;
@@ -2246,11 +2298,11 @@
         if (ui.patientTab === 'HOME') {
           root.innerHTML = renderPatientHome();
         } else if (ui.patientTab === 'PRIVATE') {
-          root.innerHTML = renderDirectory('العيادات الخاصة بالحجايزة', 'PRIVATE', false);
+          root.innerHTML = renderDirectory(bi('العيادات الخاصة بالحجايزة', 'Private Clinics in Al-Hajayzah'), 'PRIVATE', false);
         } else if (ui.patientTab === 'HOSPITAL') {
-          root.innerHTML = renderDirectory(db.config.hospitalNameAr, 'HOSPITAL', false);
+          root.innerHTML = renderDirectory(bi(db.config.hospitalNameAr, db.config.hospitalNameEn || DEFAULT_CONFIG.hospitalNameEn), 'HOSPITAL', false);
         } else if (ui.patientTab === 'SPECIALTIES') {
-          root.innerHTML = renderDirectory('التخصصات الطبية الشاملة', null, true);
+          root.innerHTML = renderDirectory(bi('التخصصات الطبية الشاملة', 'All Medical Specialties'), null, true);
         } else {
           root.innerHTML = renderMedicalFileScreen();
         }
@@ -2259,7 +2311,7 @@
       }
 
       // ================================================================
-      // 6. النوافذ المنبثقة (Modals) والروشتة الذكية
+      // 6. النوافذ المنبثقة (Modals) والروشتة الذكية والتحقق بالـ OTP
       // ================================================================
       let modalIntervalTimer = null;
       function closeModal() {
@@ -2281,7 +2333,7 @@
             '<div class="modal-panel">' +
               '<div class="modal-header">' +
                 '<h3>' + esc(title) + '</h3>' +
-                '<button class="btn btn-outline" id="btnCloseModal" style="min-height:36px;padding:4px 12px;">✕ إغلاق</button>' +
+                '<button class="btn btn-outline" id="btnCloseModal" type="button" style="min-height:36px;padding:4px 12px;">✕ ' + esc(bi('إغلاق', 'Close')) + '</button>' +
               '</div>' +
               '<div id="modalBody" style="display:flex;flex-direction:column;gap:10px;">' + bodyHtml + '</div>' +
             '</div>' +
@@ -2298,33 +2350,38 @@
       function openBookConfirmModal(slotId) {
         const slot = db.slots.find((s) => s.id === slotId);
         if (!slot || slot.status !== 'AVAILABLE') {
-          showToast('عذراً، تم حجز هذا الموعد للتو');
+          showToast(bi('عذراً، تم حجز هذا الموعد للتو', 'Sorry, this slot was just booked'));
           renderApp();
           return;
         }
         const member = getActiveMember();
-        if (isPhoneBlocked(db.account && db.account.phone) || isPhoneBlocked(member && member.phone)) {
-          showToast('عذراً، هذا الرقم محظور من الحجز عبر المنصة');
+        if (!db.account || !member) {
+          showToast(bi('يرجى إنشاء حساب أو تسجيل الدخول وتأكيد الهاتف أولاً', 'Please create an account or sign in first'));
+          openAccountModal('REGISTER');
           return;
         }
-        if (db.account && db.account.isPhoneVerified === false) {
-          showToast('يرجى تفعيل حسابك بكود التفعيل (6 أرقام) أولاً لمنع الحجوزات الوهمية');
+        if (isPhoneBlocked(db.account.phone) || isPhoneBlocked(member.phone)) {
+          showToast(bi('عذراً، هذا الرقم محظور من الحجز عبر المنصة', 'Sorry, this phone number is blocked'));
+          return;
+        }
+        if (db.account.isPhoneVerified === false) {
+          showToast(bi('يرجى إدخال رمز التحقق (OTP) المكون من 6 أرقام أولاً لمنع الحجوزات الوهمية', 'Please verify the 6-digit OTP code first before booking'));
           openAccountModal();
           return;
         }
         const doc = db.doctors.find((d) => d.id === slot.doctorId);
-        openModal('تأكيد حجز الموعد',
-          '<div><strong>الطبيب:</strong> ' + esc(doc.doctorName) + '</div>' +
-          '<div><strong>العيادة:</strong> ' + esc(doc.clinicName) + '</div>' +
-          '<div><strong>الموعد:</strong> ' + formatMinutesAr(slot.startMinutes + slot.delayMinutes) + '</div>' +
-          '<div><strong>اسم المريض:</strong> ' + esc(member.fullName) + '</div>' +
-          '<div style="color:var(--text-muted);font-size:0.86rem;">سيتم إغلاق الموعد فوراً باللون الأحمر عند تأكيد الحجز لمنع التضارب.</div>' +
-          '<button class="btn btn-green btn-block" id="btnConfirmBook">✓ تأكيد الحجز الآن</button>',
+        openModal(bi('تأكيد حجز الموعد', 'Confirm Appointment'),
+          '<div><strong>' + esc(bi('الطبيب:', 'Doctor:')) + '</strong> ' + esc(doc.doctorName) + '</div>' +
+          '<div><strong>' + esc(bi('العيادة:', 'Clinic:')) + '</strong> ' + esc(doc.clinicName) + '</div>' +
+          '<div><strong>' + esc(bi('الموعد:', 'Time:')) + '</strong> ' + formatMinutesAr(slot.startMinutes + slot.delayMinutes) + '</div>' +
+          '<div><strong>' + esc(bi('اسم المريض:', 'Patient:')) + '</strong> ' + esc(member.fullName) + '</div>' +
+          '<div style="color:var(--text-muted);font-size:0.86rem;">' + esc(bi('سيتم إغلاق الموعد فوراً باللون الأحمر عند تأكيد الحجز لمنع التضارب.', 'This slot will immediately turn red once confirmed to prevent conflicts.')) + '</div>' +
+          '<button class="btn btn-green btn-block" id="btnConfirmBook" type="button">✓ ' + esc(bi('تأكيد الحجز الآن', 'Confirm Booking')) + '</button>',
           function () {
             document.getElementById('btnConfirmBook').onclick = function () {
-              if (isPhoneBlocked(db.account && db.account.phone) || isPhoneBlocked(member.phone)) {
+              if (isPhoneBlocked(db.account.phone) || isPhoneBlocked(member.phone)) {
                 closeModal();
-                showToast('عذراً، هذا الرقم محظور من الحجز عبر المنصة');
+                showToast(bi('عذراً، هذا الرقم محظور من الحجز عبر المنصة', 'Sorry, this phone number is blocked'));
                 return;
               }
               slot.status = 'BOOKED';
@@ -2334,7 +2391,7 @@
               slot.bookingSource = 'APP';
               saveState(db);
               closeModal();
-              showToast('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح');
+              showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
               renderApp();
             };
           }
@@ -2353,18 +2410,18 @@
 
           return (
             '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;">' +
-              '<div style="font-weight:800;color:var(--teal-text);">🛡️ بوابة الإدارة العليا المحمية</div>' +
-              '<div style="font-size:0.84rem;color:var(--teal-text);">' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + ' • حماية مزدوجة برقم سري (PIN)</div>' +
+              '<div style="font-weight:800;color:var(--teal-text);">🛡️ ' + esc(bi('بوابة الإدارة العليا المحمية', 'Protected Super Admin Portal')) + '</div>' +
+              '<div style="font-size:0.84rem;color:var(--teal-text);">' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + ' • ' + esc(bi('حماية مزدوجة برقم سري (PIN)', 'Double PIN Protection')) + '</div>' +
             '</div>' +
             (isLocked
               ? '<div class="alert-banner" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);">' +
-                  '🔒 تم قفل الدخول لمدة 15 دقيقة بعد 3 محاولات خاطئة. الوقت المتبقي: <strong id="pinLockCountdown" dir="ltr">' + countdownLabel + '</strong>' +
+                  '🔒 ' + esc(bi('تم قفل الدخول لمدة 15 دقيقة بعد 3 محاولات خاطئة. الوقت المتبقي:', 'Locked for 15 minutes after 3 wrong attempts. Remaining:')) + ' <strong id="pinLockCountdown" dir="ltr">' + countdownLabel + '</strong>' +
                 '</div>'
-              : renderPasswordFieldHtml('adminPinInput', '', 'أدخل الرقم السري للإدارة (Admin PIN)', 'inputmode="numeric"') +
+              : renderPasswordFieldHtml('adminPinInput', '', bi('أدخل الرقم السري للإدارة (Admin PIN)', 'Enter Admin PIN'), 'inputmode="numeric"') +
                 (sec.failedAttempts > 0
-                  ? '<div style="color:var(--booked-border);font-size:0.84rem;font-weight:700;">تنبيه: المحاولات المتبقية قبل القفل (15 دقيقة): ' + Math.max(0, MAX_ADMIN_PIN_ATTEMPTS - sec.failedAttempts) + '</div>'
+                  ? '<div style="color:var(--booked-border);font-size:0.84rem;font-weight:700;">' + esc(bi('تنبيه: المحاولات المتبقية قبل القفل (15 دقيقة): ', 'Warning: Remaining attempts before 15-min lock: ')) + Math.max(0, MAX_ADMIN_PIN_ATTEMPTS - sec.failedAttempts) + '</div>'
                   : '') +
-                '<button class="btn btn-primary btn-block" id="btnVerifyAdminPin">🔓 فتح لوحة التحكم</button>')
+                '<button class="btn btn-primary btn-block" id="btnVerifyAdminPin" type="button">🔓 ' + esc(bi('فتح لوحة التحكم', 'Unlock Dashboard')) + '</button>')
           );
         }
 
@@ -2401,7 +2458,7 @@
               ui.isAdminLoggedIn = true;
               ui.roleMode = 'ADMIN';
               closeModal();
-              showToast('تم فتح لوحة تحكم الإدارة العليا بنجاح');
+              showToast(bi('تم فتح لوحة تحكم الإدارة العليا بنجاح', 'Super Admin dashboard unlocked'));
               renderApp();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
@@ -2421,83 +2478,96 @@
           }
         }
 
-        openModal('التحقق الأمني للإدارة العليا (PIN)', renderPinBody(), mountPinHandlers);
+        openModal(bi('التحقق الأمني للإدارة العليا (PIN)', 'Super Admin Security Check (PIN)'), renderPinBody(), mountPinHandlers);
       }
 
       function openAccountModal(initialAuthTab) {
         ui.versionTapCount = 0;
-        let authMode = initialAuthTab || 'NONE'; // NONE | REGISTER | LOGIN
+        let authMode = initialAuthTab || (!db.account ? 'REGISTER' : 'NONE'); // NONE | REGISTER | LOGIN
 
         function renderAccountBody() {
-          const isVerified = !db.account || db.account.isPhoneVerified !== false;
-          const mHtml = db.familyMembers.map((m) =>
-            '<div class="card" style="padding:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;' +
-              (m.id === db.activeMemberId ? 'border-color:var(--teal);background:var(--teal-soft);' : '') +
-              '" data-pick-mem="' + esc(m.id) + '">' +
-              '<div><strong>' + esc(m.fullName) + '</strong><div style="font-size:0.82rem;color:var(--text-muted);">' + esc(m.relation) + ' • ' + m.age + ' سنة</div></div>' +
-              (m.id === db.activeMemberId ? '<strong style="color:var(--teal);">نشط ✓</strong>' : '') +
-            '</div>'
-          ).join('');
+          const hasAcc = Boolean(db.account);
+          const isVerified = hasAcc && db.account.isPhoneVerified !== false;
 
-          const phoneDigits = String(db.config.supportPhone || '01125002428').replace(/\D/g, '') || '01125002428';
-          const waPhone = phoneDigits.startsWith('2') ? phoneDigits : ('2' + phoneDigits);
-          const waOtpMsg = db.account
-            ? encodeURIComponent('مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ' + db.account.fullName + ' - الرقم: ' + db.account.phone)
+          const mHtml = hasAcc
+            ? db.familyMembers.map((m) =>
+                '<div class="card" style="padding:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;' +
+                  (m.id === db.activeMemberId ? 'border-color:var(--teal);background:var(--teal-soft);' : '') +
+                  '" data-pick-mem="' + esc(m.id) + '">' +
+                  '<div><strong>' + esc(m.fullName) + '</strong><div style="font-size:0.82rem;color:var(--text-muted);">' + esc(m.relation) + ' • ' + m.age + ' ' + esc(bi('سنة', 'yrs')) + '</div></div>' +
+                  (m.id === db.activeMemberId ? '<strong style="color:var(--teal);">' + esc(bi('نشط ✓', 'Active ✓')) + '</strong>' : '') +
+                '</div>'
+              ).join('')
             : '';
 
-          const otpCardHtml = !isVerified
+          const otpCardHtml = (hasAcc && !isVerified)
             ? '<div class="card" style="background:var(--warn-bg);border:1.5px solid var(--warn-border);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                '<div style="font-weight:800;color:var(--warn-text);">🔐 تفعيل الحساب بكود الاستخدام الواحد (Single-Use OTP)</div>' +
-                '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.5;">أدخل كود التفعيل المكون من 6 أرقام المستلم ورقياً من سكرتيرة العيادة أو عبر واتساب، ثم اضغط «تأكيد وتفعيل الحساب» (يحترق الكود تلقائياً فور استخدامه).</div>' +
-                '<a class="btn btn-whatsapp btn-block" id="btnRequestOtpWhatsapp" href="https://wa.me/' + esc(waPhone) + '?text=' + waOtpMsg + '" target="_blank" rel="noopener">💬 اطلب كود التفعيل عبر واتساب</a>' +
-                '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="أدخل كود التفعيل (6 أرقام)" dir="ltr" />' +
-                '<button class="btn btn-primary btn-block" id="btnVerifyOtpSubmit">✓ تأكيد وتفعيل الحساب</button>' +
+                '<div style="font-weight:800;color:var(--warn-text);">🔐 ' + esc(bi('تأكيد رقم الهاتف برمز التحقق (OTP من 6 أرقام)', 'Verify Phone Number (6-digit OTP)')) + '</div>' +
+                '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.5;">' + esc(bi('جاهز للربط مع Firebase Phone Authentication. أدخل الرمز المكون من 6 أرقام لتفعيل حجز المواعيد ومنع الحجوزات الوهمية.', 'Firebase Phone Auth ready. Enter the 6-digit OTP code to activate bookings.')) + '</div>' +
+                (ui.otpChallenge
+                  ? '<div class="alert-banner" style="background:#DCFCE7;border-color:#16A34A;color:#14532D;font-size:0.86rem;">' +
+                      '🧪 <strong>' + esc(bi('إشعار الاختبار الفوري (Test OTP):', 'Test OTP Notification:')) + '</strong> ' +
+                      '<span dir="ltr" style="font-size:1.1rem;font-weight:800;letter-spacing:2px;">' + esc(ui.otpChallenge.testOtpCode) + '</span>' +
+                      ' <span style="font-size:0.78rem;">(' + esc(ui.otpChallenge.formattedE164Phone) + ')</span>' +
+                    '</div>'
+                  : '') +
+                '<button class="btn btn-outline btn-block" id="btnResendOtp" type="button" style="background:#fff;">📩 ' + esc(bi(ui.otpChallenge ? 'إعادة إرسال رمز التحقق (OTP)' : 'إرسال رمز التحقق (OTP)', ui.otpChallenge ? 'Resend Verification Code (OTP)' : 'Send Verification Code (OTP)')) + '</button>' +
+                '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="' + esc(bi('أدخل رمز التحقق (6 أرقام)', 'Enter 6-digit OTP code')) + '" dir="ltr" />' +
+                '<button class="btn btn-primary btn-block" id="btnVerifyOtpSubmit" type="button">✓ ' + esc(bi('تأكيد وتفعيل الحساب', 'Verify & Activate Account')) + '</button>' +
               '</div>'
             : '';
 
           const authTabsHtml =
             '<div style="display:flex;gap:8px;">' +
-              '<button class="chip ' + (authMode === 'REGISTER' ? 'active' : '') + '" id="btnShowRegTab" style="flex:1;">🆕 إنشاء حساب جديد (OTP)</button>' +
-              '<button class="chip ' + (authMode === 'LOGIN' ? 'active' : '') + '" id="btnShowLoginTab" style="flex:1;">🔑 دخول بحساب آخر</button>' +
+              '<button class="chip ' + (authMode === 'REGISTER' ? 'active' : '') + '" id="btnShowRegTab" type="button" style="flex:1;">🆕 ' + esc(bi('إنشاء حساب جديد (OTP)', 'Create Account (OTP)')) + '</button>' +
+              '<button class="chip ' + (authMode === 'LOGIN' ? 'active' : '') + '" id="btnShowLoginTab" type="button" style="flex:1;">🔑 ' + esc(bi('دخول بحساب مسجل', 'Sign In')) + '</button>' +
             '</div>' +
             (authMode === 'REGISTER'
               ? '<div class="card" style="background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                  '<div style="font-weight:700;font-size:0.9rem;">تسجيل مريض جديد (يتطلب كود تفعيل مكون من 6 أرقام)</div>' +
-                  '<input class="input" id="regFullName" placeholder="الاسم الكامل *" />' +
-                  '<input class="input" id="regPhone" type="tel" placeholder="رقم الهاتف (11 رقم) *" dir="ltr" />' +
-                  '<input class="input" id="regNationalId" placeholder="الرقم القومي (اختياري)" dir="ltr" />' +
-                  renderPasswordFieldHtml('regPassword', '', 'كلمة المرور *') +
-                  '<button class="btn btn-primary btn-block" id="btnSubmitRegister">إنشاء الحساب والمتابعة للتفعيل</button>' +
+                  '<div style="font-weight:700;font-size:0.9rem;">' + esc(bi('تسجيل مريض جديد (يتطلب كود تحقق مكون من 6 أرقام)', 'New Patient Registration (6-digit OTP required)')) + '</div>' +
+                  '<input class="input" id="regFullName" placeholder="' + esc(bi('الاسم الكامل *', 'Full Name *')) + '" />' +
+                  '<input class="input" id="regPhone" type="tel" placeholder="' + esc(bi('رقم الهاتف (11 رقم) *', 'Phone Number (11 digits) *')) + '" dir="ltr" />' +
+                  '<input class="input" id="regNationalId" placeholder="' + esc(bi('الرقم القومي (اختياري)', 'National ID (optional)')) + '" dir="ltr" />' +
+                  renderPasswordFieldHtml('regPassword', '', bi('كلمة المرور *', 'Password *')) +
+                  '<button class="btn btn-primary btn-block" id="btnSubmitRegister" type="button">' + esc(bi('إنشاء الحساب وإرسال كود التحقق', 'Register & Send OTP')) + '</button>' +
                 '</div>'
               : (authMode === 'LOGIN'
                   ? '<div class="card" style="background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                      '<input class="input" id="loginPhoneInp" type="tel" placeholder="رقم الهاتف أو الرقم القومي" dir="ltr" />' +
-                      renderPasswordFieldHtml('loginPassInp', '', 'كلمة المرور') +
-                      '<button class="btn btn-primary btn-block" id="btnSubmitLogin">تسجيل الدخول</button>' +
+                      '<input class="input" id="loginPhoneInp" type="tel" placeholder="' + esc(bi('رقم الهاتف أو الرقم القومي', 'Phone or National ID')) + '" dir="ltr" />' +
+                      renderPasswordFieldHtml('loginPassInp', '', bi('كلمة المرور', 'Password')) +
+                      '<button class="btn btn-primary btn-block" id="btnSubmitLogin" type="button">' + esc(bi('تسجيل الدخول', 'Sign In')) + '</button>' +
                     '</div>'
                   : ''));
 
           return (
-            '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
-              '<div>' +
-                '<div><strong>الحساب النشط:</strong> ' + esc(db.account.fullName) + '</div>' +
-                '<div style="font-size:0.84rem;">الهاتف: <span dir="ltr">' + esc(db.account.phone) + '</span>' + (db.account.nationalId ? ' • القومي: ' + esc(db.account.nationalId) : '') + '</div>' +
-              '</div>' +
-              '<span class="badge ' + (isVerified ? 'badge-avail' : 'badge-booked') + '">' + (isVerified ? '✓ موثق بالـ OTP' : '⚠️ غير موثق') + '</span>' +
-            '</div>' +
+            (hasAcc
+              ? '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                  '<div>' +
+                    '<div><strong>' + esc(bi('الحساب النشط:', 'Active Account:')) + '</strong> ' + esc(db.account.fullName) + '</div>' +
+                    '<div style="font-size:0.84rem;">' + esc(bi('الهاتف:', 'Phone:')) + ' <span dir="ltr">' + esc(db.account.phone) + '</span>' + (db.account.nationalId ? ' • ' + esc(db.account.nationalId) : '') + '</div>' +
+                  '</div>' +
+                  '<span class="badge ' + (isVerified ? 'badge-avail' : 'badge-booked') + '">' + esc(isVerified ? bi('✓ موثق بالـ OTP', '✓ OTP Verified') : bi('⚠️ غير موثق', '⚠️ Unverified')) + '</span>' +
+                '</div>'
+              : '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;">' +
+                  '<div style="font-weight:700;color:var(--teal-text);">' + esc(bi('لا يوجد حساب مسجل الدخول حالياً', 'No account signed in yet')) + '</div>' +
+                  '<div style="font-size:0.84rem;color:var(--teal-text);">' + esc(bi('أنشئ حساباً جديداً أو سجّل دخولك لحجز المواعيد وإدارة ملفات الأسرة.', 'Create a new account or sign in to book appointments.')) + '</div>' +
+                '</div>') +
             otpCardHtml +
             authTabsHtml +
-            '<h4>أفراد العائلة المسجلون</h4>' + mHtml +
-            '<h4 style="margin-top:6px;">إضافة فرد جديد من العائلة</h4>' +
-            '<input class="input" id="newMemName" placeholder="الاسم الكامل" />' +
-            '<div style="display:grid;grid-template-columns:1.3fr 0.7fr;gap:8px;">' +
-              '<input class="input" id="newMemRel" value="الابن" placeholder="صلة القرابة" />' +
-              '<input class="input" id="newMemAge" type="number" placeholder="العمر" />' +
-            '</div>' +
-            '<input class="input" id="newMemPhone" value="' + esc(db.account.phone) + '" placeholder="رقم الهاتف" dir="ltr" />' +
-            '<button class="btn btn-primary btn-block" id="btnSubmitFamily">+ إضافة إلى العائلة</button>' +
+            (hasAcc
+              ? '<h4>' + esc(bi('أفراد العائلة المسجلون', 'Registered Family Members')) + '</h4>' + mHtml +
+                '<h4 style="margin-top:6px;">' + esc(bi('إضافة فرد جديد من العائلة', 'Add Family Member')) + '</h4>' +
+                '<input class="input" id="newMemName" placeholder="' + esc(bi('الاسم الكامل', 'Full Name')) + '" />' +
+                '<div style="display:grid;grid-template-columns:1.3fr 0.7fr;gap:8px;">' +
+                  '<input class="input" id="newMemRel" value="' + esc(bi('الابن', 'Child')) + '" placeholder="' + esc(bi('صلة القرابة', 'Relation')) + '" />' +
+                  '<input class="input" id="newMemAge" type="number" placeholder="' + esc(bi('العمر', 'Age')) + '" />' +
+                '</div>' +
+                '<input class="input" id="newMemPhone" value="' + esc(db.account.phone) + '" placeholder="' + esc(bi('رقم الهاتف', 'Phone')) + '" dir="ltr" />' +
+                '<button class="btn btn-primary btn-block" id="btnSubmitFamily" type="button">+ ' + esc(bi('إضافة إلى العائلة', 'Add to Family')) + '</button>' +
+                '<button class="btn btn-danger-outline btn-block" id="btnPatientLogout" type="button" style="min-height:40px;">🚪 ' + esc(bi('تسجيل خروج من الحساب', 'Sign Out')) + '</button>'
+              : '') +
             '<div id="hiddenVersionTrigger" style="text-align:center;color:var(--text-muted);font-size:0.82rem;padding:8px 4px 2px;cursor:pointer;user-select:none;">' +
-              'إصدار التطبيق: ' + esc(db.config.appVersionLabel || 'v1.0.0') +
+              esc(bi('إصدار التطبيق: ', 'App Version: ')) + esc(db.config.appVersionLabel || 'v1.0.0') +
             '</div>'
           );
         }
@@ -2520,16 +2590,41 @@
             };
           });
 
+          const resendBtn = document.getElementById('btnResendOtp');
+          if (resendBtn && db.account) {
+            resendBtn.onclick = function () {
+              const res = FirebaseReadyOtpProvider.sendVerificationCode(db.account.phone);
+              if (!res.ok) {
+                showToast(res.error);
+                return;
+              }
+              ui.otpChallenge = res.challenge;
+              showToast(bi('رمز التحقق التجريبي (Test OTP): ' + res.challenge.testOtpCode, 'Test OTP code: ' + res.challenge.testOtpCode), 6000);
+              refreshAccountModal();
+            };
+          }
+
           const verifyBtn = document.getElementById('btnVerifyOtpSubmit');
-          if (verifyBtn) {
+          if (verifyBtn && db.account) {
             verifyBtn.onclick = function () {
               const code = (document.getElementById('otpCodeInput').value || '').trim();
+              if (ui.otpChallenge) {
+                const fbRes = FirebaseReadyOtpProvider.verifyCode(ui.otpChallenge, code);
+                if (fbRes.ok) {
+                  markAccountVerified(db.account);
+                  saveState(db);
+                  showToast(bi('تم تأكيد رقم الهاتف وتفعيل الحساب بنجاح! يمكنك الآن حجز المواعيد.', 'Phone verified & account activated! You can now book appointments.'));
+                  refreshAccountModal();
+                  renderApp();
+                  return;
+                }
+              }
               const check = verifyAndBurnActivationCode(db.account, code);
               if (!check.ok) {
                 showToast(check.error);
                 return;
               }
-              showToast('تم تفعيل الحساب بنجاح وحرق الكود! يمكنك الآن حجز المواعيد فوراً.');
+              showToast(bi('تم تفعيل الحساب بنجاح! يمكنك الآن حجز المواعيد فوراً.', 'Account activated successfully!'));
               refreshAccountModal();
               renderApp();
             };
@@ -2559,16 +2654,16 @@
               const nationalId = document.getElementById('regNationalId').value.trim();
               const password = document.getElementById('regPassword').value.trim() || '1234';
               if (!fullName || normalizePhoneDigits(phone).length < 10) {
-                showToast('يرجى إدخال الاسم ورقم هاتف صحيح (11 رقم)');
+                showToast(bi('يرجى إدخال الاسم ورقم هاتف صحيح (11 رقم)', 'Enter full name and a valid phone number'));
                 return;
               }
               if (isPhoneBlocked(phone)) {
-                showToast('عذراً، هذا الرقم محظور من التسجيل في المنصة');
+                showToast(bi('عذراً، هذا الرقم محظور من التسجيل في المنصة', 'Sorry, this phone number is blocked'));
                 return;
               }
               const duplicate = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === normalizePhoneDigits(phone));
               if (duplicate) {
-                showToast('رقم الهاتف مسجل بالفعل، يمكنك تسجيل الدخول');
+                showToast(bi('رقم الهاتف مسجل بالفعل، يمكنك تسجيل الدخول', 'Phone number already registered. Sign in instead.'));
                 return;
               }
               const newAccId = 'acc_' + Date.now();
@@ -2592,9 +2687,16 @@
               db.account = newAcc;
               db.familyMembers.push(newSelfMem);
               db.activeMemberId = newSelfMem.id;
+
+              const otpSend = FirebaseReadyOtpProvider.sendVerificationCode(phone);
+              ui.otpChallenge = otpSend.ok ? otpSend.challenge : null;
               saveState(db);
               authMode = 'NONE';
-              showToast('تم إنشاء الحساب! يرجى طلب وإدخال كود التفعيل (6 أرقام) لتفعيل الحجز.');
+              if (otpSend.ok) {
+                showToast(bi('تم إنشاء الحساب! رمز التحقق التجريبي (Test OTP): ' + otpSend.challenge.testOtpCode, 'Account created! Test OTP: ' + otpSend.challenge.testOtpCode), 6000);
+              } else {
+                showToast(bi('تم إنشاء الحساب! يرجى إدخال رمز التحقق لتفعيل الحجز.', 'Account created! Verify OTP to activate booking.'));
+              }
               refreshAccountModal();
               renderApp();
             };
@@ -2606,7 +2708,7 @@
               const ident = document.getElementById('loginPhoneInp').value.trim();
               const pass = document.getElementById('loginPassInp').value.trim();
               if (isPhoneBlocked(ident)) {
-                showToast('عذراً، هذا الرقم محظور من استخدام المنصة');
+                showToast(bi('عذراً، هذا الرقم محظور من استخدام المنصة', 'Sorry, this phone number is blocked'));
                 return;
               }
               const found = (db.accounts || []).find((a) =>
@@ -2614,40 +2716,43 @@
                 (a.nationalId && a.nationalId === ident)
               );
               if (!found) {
-                showToast('لم يتم العثور على حساب بهذا الرقم');
+                showToast(bi('لم يتم العثور على حساب بهذا الرقم', 'No account found with this number'));
                 return;
               }
               if (isPhoneBlocked(found.phone)) {
-                showToast('عذراً، هذا الرقم محظور من استخدام المنصة');
+                showToast(bi('عذراً، هذا الرقم محظور من استخدام المنصة', 'Sorry, this phone number is blocked'));
                 return;
               }
               if (found.password && pass && found.password !== pass) {
-                showToast('كلمة المرور غير صحيحة');
+                showToast(bi('كلمة المرور غير صحيحة', 'Incorrect password'));
                 return;
               }
               db.account = found;
               const ownMember = db.familyMembers.find((m) => m.accountId === found.id || normalizePhoneDigits(m.phone) === normalizePhoneDigits(found.phone));
               if (ownMember) db.activeMemberId = ownMember.id;
+              if (found.isPhoneVerified === false) {
+                const otpSend = FirebaseReadyOtpProvider.sendVerificationCode(found.phone);
+                ui.otpChallenge = otpSend.ok ? otpSend.challenge : null;
+                showToast(bi('الحساب غير مفعّل: يرجى إدخال رمز التحقق المكون من 6 أرقام', 'Unverified account: enter 6-digit OTP'));
+              } else {
+                ui.otpChallenge = null;
+                showToast(bi('تم تسجيل الدخول: ' + found.fullName, 'Signed in: ' + found.fullName));
+              }
               saveState(db);
               authMode = 'NONE';
-              if (found.isPhoneVerified === false) {
-                showToast('الحساب غير مفعّل: يرجى إدخال كود التفعيل المكون من 6 أرقام');
-              } else {
-                showToast('تم تسجيل الدخول: ' + found.fullName);
-              }
               refreshAccountModal();
               renderApp();
             };
           }
 
           const addFamSubmit = document.getElementById('btnSubmitFamily');
-          if (addFamSubmit) {
+          if (addFamSubmit && db.account) {
             addFamSubmit.onclick = function () {
               const name = document.getElementById('newMemName').value.trim();
-              if (!name) { showToast('يرجى كتابة اسم فرد العائلة'); return; }
+              if (!name) { showToast(bi('يرجى كتابة اسم فرد العائلة', 'Enter family member name')); return; }
               const mem = {
                 id: 'mem_' + Date.now(),
-                accountId: db.account ? db.account.id : 'acc_ahmed',
+                accountId: db.account.id,
                 fullName: name,
                 relation: document.getElementById('newMemRel').value.trim() || 'فرد عائلة',
                 age: parseInt(document.getElementById('newMemAge').value, 10) || 25,
@@ -2657,7 +2762,21 @@
               db.activeMemberId = mem.id;
               saveState(db);
               closeModal();
-              showToast('تمت إضافة ' + name + ' إلى قائمة العائلة');
+              showToast(bi('تمت إضافة ' + name + ' إلى قائمة العائلة', 'Added ' + name + ' to family list'));
+              renderApp();
+            };
+          }
+
+          const patientLogoutBtn = document.getElementById('btnPatientLogout');
+          if (patientLogoutBtn) {
+            patientLogoutBtn.onclick = function () {
+              db.account = null;
+              db.activeMemberId = null;
+              ui.otpChallenge = null;
+              saveState(db);
+              authMode = 'LOGIN';
+              showToast(bi('تم تسجيل الخروج من الحساب', 'Signed out successfully'));
+              refreshAccountModal();
               renderApp();
             };
           }
@@ -2675,7 +2794,7 @@
           }
         }
 
-        openModal('الحساب وأفراد العائلة', renderAccountBody(), mountAccountHandlers);
+        openModal(bi('الحساب وأفراد العائلة', 'Account & Family Members'), renderAccountBody(), mountAccountHandlers);
       }
 
       function openAdminDoctorFormModal(editDoc) {
@@ -2685,40 +2804,40 @@
         const dur = editDoc ? editDoc.slotDurationMinutes : 20;
 
         openModal(
-          isEdit ? 'تعديل بيانات الدكتور / العيادة' : 'إضافة دكتور أو عيادة جديدة',
-          '<input class="input" id="admDocName" value="' + esc(editDoc ? editDoc.doctorName : '') + '" placeholder="اسم الدكتور (مثال: د. أحمد السيد)" />' +
+          isEdit ? bi('تعديل بيانات الدكتور / العيادة', 'Edit Doctor / Clinic') : bi('إضافة دكتور أو عيادة جديدة', 'Add New Doctor / Clinic'),
+          '<input class="input" id="admDocName" value="' + esc(editDoc ? editDoc.doctorName : '') + '" placeholder="' + esc(bi('اسم الدكتور بالكامل *', 'Doctor Full Name *')) + '" />' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-            '<input class="input" id="admDocSpec" value="' + esc(editDoc ? editDoc.specialty : '') + '" placeholder="التخصص (مثال: باطنة)" />' +
+            '<input class="input" id="admDocSpec" value="' + esc(editDoc ? editDoc.specialty : '') + '" placeholder="' + esc(bi('التخصص (مثال: باطنة)', 'Specialty *')) + '" />' +
             '<select class="select" id="admDocType">' +
-              '<option value="PRIVATE"' + (!editDoc || editDoc.clinicType === 'PRIVATE' ? ' selected' : '') + '>عيادة خاصة</option>' +
-              '<option value="HOSPITAL"' + (editDoc && editDoc.clinicType === 'HOSPITAL' ? ' selected' : '') + '>المستشفى التخصصي</option>' +
+              '<option value="PRIVATE"' + (!editDoc || editDoc.clinicType === 'PRIVATE' ? ' selected' : '') + '>' + esc(bi('عيادة خاصة', 'Private Clinic')) + '</option>' +
+              '<option value="HOSPITAL"' + (editDoc && editDoc.clinicType === 'HOSPITAL' ? ' selected' : '') + '>' + esc(bi('المستشفى التخصصي', 'Hospital Dept')) + '</option>' +
             '</select>' +
           '</div>' +
-          '<input class="input" id="admClinicName" value="' + esc(editDoc ? editDoc.clinicName : '') + '" placeholder="اسم العيادة أو القسم" />' +
-          '<textarea class="textarea" id="admDocBio" placeholder="نبذة عن الدكتور والخبرات...">' + esc(editDoc ? (editDoc.bio || '') : '') + '</textarea>' +
+          '<input class="input" id="admClinicName" value="' + esc(editDoc ? editDoc.clinicName : '') + '" placeholder="' + esc(bi('اسم العيادة أو القسم', 'Clinic or Department Name')) + '" />' +
+          '<textarea class="textarea" id="admDocBio" placeholder="' + esc(bi('نبذة عن الدكتور والخبرات...', 'Doctor bio & experience...')) + '">' + esc(editDoc ? (editDoc.bio || '') : '') + '</textarea>' +
           '<div style="display:grid;grid-template-columns:1.4fr 0.6fr;gap:8px;">' +
-            '<input class="input" id="admDocLoc" value="' + esc(editDoc ? editDoc.locationLabel : '') + '" placeholder="عنوان العيادة بالتفصيل في الحجايزة أو القرى المجاورة" />' +
-            '<input class="input" id="admDocFee" type="number" value="' + esc(editDoc ? editDoc.feeEgp : 150) + '" placeholder="سعر الكشف" />' +
+            '<input class="input" id="admDocLoc" value="' + esc(editDoc ? editDoc.locationLabel : '') + '" placeholder="' + esc(bi('عنوان العيادة بالتفصيل في الحجايزة أو القرى المجاورة', 'Clinic Address')) + '" />' +
+            '<input class="input" id="admDocFee" type="number" value="' + esc(editDoc ? editDoc.feeEgp : 150) + '" placeholder="' + esc(bi('سعر الكشف', 'Fee')) + '" />' +
           '</div>' +
-          '<input class="input" id="admDocMaps" value="' + esc(editDoc ? (editDoc.mapsUrl || '') : '') + '" placeholder="رابط موقع العيادة على خرائط جوجل (Google Maps)" dir="ltr" />' +
+          '<input class="input" id="admDocMaps" value="' + esc(editDoc ? (editDoc.mapsUrl || '') : '') + '" placeholder="' + esc(bi('رابط موقع العيادة على خرائط جوجل (Google Maps)', 'Google Maps URL')) + '" dir="ltr" />' +
           '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">' +
-            '<div><label style="font-size:0.78rem;color:var(--text-muted);">بداية (ساعة)</label><input class="input" id="admStartHr" type="number" min="8" max="22" value="' + startHr + '" /></div>' +
-            '<div><label style="font-size:0.78rem;color:var(--text-muted);">نهاية (ساعة)</label><input class="input" id="admEndHr" type="number" min="9" max="23" value="' + endHr + '" /></div>' +
-            '<div><label style="font-size:0.78rem;color:var(--text-muted);">مدة الكشف (د)</label>' +
+            '<div><label style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('بداية (ساعة)', 'Start Hr')) + '</label><input class="input" id="admStartHr" type="number" min="8" max="22" value="' + startHr + '" /></div>' +
+            '<div><label style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('نهاية (ساعة)', 'End Hr')) + '</label><input class="input" id="admEndHr" type="number" min="9" max="23" value="' + endHr + '" /></div>' +
+            '<div><label style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('مدة الكشف (د)', 'Duration')) + '</label>' +
               '<select class="select" id="admSlotDur">' +
-                '<option value="15"' + (dur === 15 ? ' selected' : '') + '>15 دقيقة</option>' +
-                '<option value="20"' + (dur === 20 ? ' selected' : '') + '>20 دقيقة</option>' +
-                '<option value="30"' + (dur === 30 ? ' selected' : '') + '>30 دقيقة</option>' +
+                '<option value="15"' + (dur === 15 ? ' selected' : '') + '>15 ' + esc(bi('دقيقة', 'min')) + '</option>' +
+                '<option value="20"' + (dur === 20 ? ' selected' : '') + '>20 ' + esc(bi('دقيقة', 'min')) + '</option>' +
+                '<option value="30"' + (dur === 30 ? ' selected' : '') + '>30 ' + esc(bi('دقيقة', 'min')) + '</option>' +
               '</select>' +
             '</div>' +
           '</div>' +
           '<hr style="border:none;border-top:1px dashed var(--border);margin:4px 0;" />' +
-          '<div style="font-weight:700;font-size:0.88rem;color:var(--teal);">🔐 حساب تسجيل دخول الدكتور للوحة العيادة</div>' +
+          '<div style="font-weight:700;font-size:0.88rem;color:var(--teal);">🔐 ' + esc(bi('حساب تسجيل دخول الدكتور للوحة العيادة', 'Doctor Clinic Login Credentials')) + '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-            '<input class="input" id="admDocUser" value="' + esc(editDoc ? (editDoc.username || '') : '') + '" placeholder="اسم المستخدم أو رقم الهاتف" dir="ltr" />' +
-            renderPasswordFieldHtml('admDocPass', editDoc ? (editDoc.password || '') : '1234', 'كلمة المرور') +
+            '<input class="input" id="admDocUser" value="' + esc(editDoc ? (editDoc.username || '') : '') + '" placeholder="' + esc(bi('اسم المستخدم أو رقم الهاتف *', 'Username or Phone *')) + '" dir="ltr" />' +
+            renderPasswordFieldHtml('admDocPass', editDoc ? (editDoc.password || '') : '', bi('كلمة المرور *', 'Password *')) +
           '</div>' +
-          '<button class="btn btn-primary btn-block" id="btnSaveAdminDoctor">' + (isEdit ? '💾 حفظ التعديلات وتحديث المنصة فوراً' : '➕ إضافة الدكتور ونشره فوراً في المنصة') + '</button>',
+          '<button class="btn btn-primary btn-block" id="btnSaveAdminDoctor" type="button">' + esc(isEdit ? bi('💾 حفظ التعديلات وتحديث المنصة فوراً', '💾 Save & Update Immediately') : bi('➕ إضافة الدكتور ونشره فوراً في المنصة', '➕ Add & Publish Immediately')) + '</button>',
           function () {
             document.getElementById('btnSaveAdminDoctor').onclick = function () {
               const doctorName = document.getElementById('admDocName').value.trim();
@@ -2733,16 +2852,16 @@
               const eHr = Math.min(23, Math.max(sHr + 1, parseInt(document.getElementById('admEndHr').value, 10) || 21));
               const slotDurationMinutes = parseInt(document.getElementById('admSlotDur').value, 10) || 20;
               const username = document.getElementById('admDocUser').value.trim();
-              const password = document.getElementById('admDocPass').value.trim() || '1234';
+              const password = document.getElementById('admDocPass').value.trim();
 
-              if (!doctorName || !specialty || !username) {
-                showToast('يرجى إدخال اسم الدكتور والتخصص واسم المستخدم/الهاتف');
+              if (!doctorName || !specialty || !username || !password) {
+                showToast(bi('يرجى إدخال اسم الدكتور والتخصص واسم المستخدم وكلمة المرور', 'Please fill doctor name, specialty, username, and password'));
                 return;
               }
 
               const duplicateUser = db.doctors.find((d) => d.username === username && (!isEdit || d.id !== editDoc.id));
               if (duplicateUser) {
-                showToast('اسم المستخدم أو الهاتف مستخدم بالفعل لدكتور آخر');
+                showToast(bi('اسم المستخدم أو الهاتف مستخدم بالفعل لدكتور آخر', 'Username/phone already used by another doctor'));
                 return;
               }
 
@@ -2767,11 +2886,11 @@
                 editDoc.password = password;
 
                 if (scheduleChanged) {
-                  db.slots = db.slots.filter((s) => s.doctorId !== editDoc.id).concat(buildDoctorSlots(editDoc, {}));
+                  db.slots = db.slots.filter((s) => s.doctorId !== editDoc.id).concat(buildDoctorSlots(editDoc));
                 }
                 saveState(db);
                 closeModal();
-                showToast('تم تحديث بيانات ' + doctorName + ' في المنصة فوراً');
+                showToast(bi('تم تحديث بيانات ' + doctorName + ' في المنصة فوراً', 'Updated ' + doctorName));
                 renderApp();
               } else {
                 const newDoc = {
@@ -2793,10 +2912,10 @@
                   rating: 4.9
                 };
                 db.doctors.unshift(newDoc);
-                db.slots = db.slots.concat(buildDoctorSlots(newDoc, {}));
+                db.slots = db.slots.concat(buildDoctorSlots(newDoc));
                 saveState(db);
                 closeModal();
-                showToast('تمت إضافة ' + doctorName + ' ونشر عيادته في المنصة فوراً');
+                showToast(bi('تمت إضافة ' + doctorName + ' ونشر عيادته في المنصة فوراً', 'Added & published ' + doctorName));
                 renderApp();
               }
             };
@@ -2810,25 +2929,25 @@
         updateHeader();
 
         const listHtml = db.notifications.length === 0
-          ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">لا توجد تنبيهات تأخير حالياً. جميع العيادات تعمل في مواعيدها.</div>'
+          ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد تنبيهات تأخير حالياً. جميع العيادات تعمل في مواعيدها.', 'No delay alerts right now. All clinics are on schedule.')) + '</div>'
           : db.notifications.map((n) => '<div class="alert-banner">⚠️ ' + esc(n.message) + '</div>').join('');
 
-        openModal('تنبيهات تأخير المواعيد', listHtml);
+        openModal(bi('تنبيهات تأخير المواعيد', 'Delay Notifications'), listHtml);
       }
 
       function openManualPhoneModal(slotId) {
         const slot = db.slots.find((s) => s.id === slotId);
         const doc = db.doctors.find((d) => d.id === slot.doctorId);
-        openModal('تسجيل حجز هاتفي / حضور مباشر',
-          '<div style="color:var(--teal);font-weight:700;">' + esc(doc.doctorName) + ' • الساعة ' + formatMinutesAr(slot.startMinutes + slot.delayMinutes) + '</div>' +
-          '<input class="input" id="manName" placeholder="اسم المريض ثلاثي" />' +
-          '<input class="input" id="manPhone" type="tel" placeholder="رقم الهاتف" />' +
-          '<button class="btn btn-green btn-block" id="btnConfirmManual">✓ تأكيد وإغلاق الموعد فوراً</button>',
+        openModal(bi('تسجيل حجز هاتفي / حضور مباشر', 'Phone / Walk-In Booking'),
+          '<div style="color:var(--teal);font-weight:700;">' + esc(doc.doctorName) + ' • ' + formatMinutesAr(slot.startMinutes + slot.delayMinutes) + '</div>' +
+          '<input class="input" id="manName" placeholder="' + esc(bi('اسم المريض ثلاثي', 'Patient Full Name')) + '" />' +
+          '<input class="input" id="manPhone" type="tel" placeholder="' + esc(bi('رقم الهاتف', 'Phone Number')) + '" dir="ltr" />' +
+          '<button class="btn btn-green btn-block" id="btnConfirmManual" type="button">✓ ' + esc(bi('تأكيد وإغلاق الموعد فوراً', 'Confirm & Lock Slot')) + '</button>',
           function () {
             document.getElementById('btnConfirmManual').onclick = function () {
               const name = document.getElementById('manName').value.trim();
               const phone = document.getElementById('manPhone').value.trim();
-              if (!name || !phone) { showToast('يرجى إدخال اسم المريض ورقم الهاتف'); return; }
+              if (!name || !phone) { showToast(bi('يرجى إدخال اسم المريض ورقم الهاتف', 'Enter patient name and phone')); return; }
               slot.status = 'BOOKED';
               slot.patientName = name;
               slot.patientPhone = phone;
@@ -2836,7 +2955,7 @@
               slot.bookingSource = 'PHONE_WALKIN';
               saveState(db);
               closeModal();
-              showToast('تم تسجيل الحجز الهاتفي وإغلاق الموعد باللون الأحمر');
+              showToast(bi('تم تسجيل الحجز الهاتفي وإغلاق الموعد باللون الأحمر', 'Walk-in booking confirmed'));
               renderApp();
             };
           }
@@ -2844,26 +2963,26 @@
       }
 
       function openScheduleGenModal(doc) {
-        openModal('توليد جدول المواعيد التلقائي',
-          '<label>بداية العيادة (ساعة 24): <input class="input" id="schedStart" type="number" min="8" max="22" value="' + Math.floor(doc.workStartMinutes / 60) + '" /></label>' +
-          '<label>نهاية العيادة (ساعة 24): <input class="input" id="schedEnd" type="number" min="10" max="24" value="' + Math.floor(doc.workEndMinutes / 60) + '" /></label>' +
-          '<label>مدة الكشف بالدقائق:<select class="select" id="schedDur"><option value="15">كل 15 دقيقة</option><option value="20" selected>كل 20 دقيقة</option><option value="30">كل 30 دقيقة</option></select></label>' +
-          '<button class="btn btn-primary btn-block" id="btnRunSchedGen">توليد المواعيد الجديدة</button>',
+        openModal(bi('توليد جدول المواعيد التلقائي', 'Auto-Generate Clinic Schedule'),
+          '<label>' + esc(bi('بداية العيادة (ساعة 24): ', 'Start Hour (24h): ')) + '<input class="input" id="schedStart" type="number" min="8" max="22" value="' + Math.floor(doc.workStartMinutes / 60) + '" /></label>' +
+          '<label>' + esc(bi('نهاية العيادة (ساعة 24): ', 'End Hour (24h): ')) + '<input class="input" id="schedEnd" type="number" min="10" max="24" value="' + Math.floor(doc.workEndMinutes / 60) + '" /></label>' +
+          '<label>' + esc(bi('مدة الكشف بالدقائق:', 'Slot Duration:')) + '<select class="select" id="schedDur"><option value="15">15 ' + esc(bi('دقيقة', 'min')) + '</option><option value="20" selected>20 ' + esc(bi('دقيقة', 'min')) + '</option><option value="30">30 ' + esc(bi('دقيقة', 'min')) + '</option></select></label>' +
+          '<button class="btn btn-primary btn-block" id="btnRunSchedGen" type="button">' + esc(bi('توليد المواعيد الجديدة', 'Generate New Slots')) + '</button>',
           function () {
             document.getElementById('schedDur').value = String(doc.slotDurationMinutes);
             document.getElementById('btnRunSchedGen').onclick = function () {
               const sH = parseInt(document.getElementById('schedStart').value, 10) || 17;
               const eH = parseInt(document.getElementById('schedEnd').value, 10) || 21;
               const dur = parseInt(document.getElementById('schedDur').value, 10) || 20;
-              if (eH <= sH) { showToast('وقت النهاية يجب أن يكون بعد البداية'); return; }
+              if (eH <= sH) { showToast(bi('وقت النهاية يجب أن يكون بعد البداية', 'End hour must be after start hour')); return; }
               doc.workStartMinutes = sH * 60;
               doc.workEndMinutes = eH * 60;
               doc.slotDurationMinutes = dur;
               doc.currentDelayMinutes = 0;
-              db.slots = db.slots.filter((s) => s.doctorId !== doc.id).concat(buildDoctorSlots(doc, {}));
+              db.slots = db.slots.filter((s) => s.doctorId !== doc.id).concat(buildDoctorSlots(doc));
               saveState(db);
               closeModal();
-              showToast('تم توليد جدول المواعيد بنجاح');
+              showToast(bi('تم توليد جدول المواعيد بنجاح', 'Schedule generated successfully'));
               renderApp();
             };
           }
@@ -2873,7 +2992,7 @@
       function openSmartPrescriptionModal(slotId) {
         const slot = db.slots.find((s) => s.id === slotId);
         const doc = db.doctors.find((d) => d.id === slot.doctorId);
-        let filterMode = 'SPECIALTY'; // SPECIALTY | FAV | ALL
+        let filterMode = 'SPECIALTY';
         let medQuery = '';
         let selectedRx = [];
         let rxAttachmentUrl = '';
@@ -2893,42 +3012,41 @@
           });
 
           document.getElementById('rxCatalogContainer').innerHTML = filteredMeds.length === 0
-            ? '<div style="text-align:center;padding:16px;color:var(--text-muted);">لا توجد أدوية مطابقة</div>'
+            ? '<div style="text-align:center;padding:16px;color:var(--text-muted);">' + esc(bi('لا توجد أدوية مطابقة', 'No matching medications')) + '</div>'
             : filteredMeds.map((m) => {
                 const isFav = favSet.has(m.id);
                 const isAdded = selectedRx.some((x) => x.id === m.id);
                 return '<div class="med-item-row">' +
                   '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">' +
-                    '<button class="chip" data-fav-med="' + esc(m.id) + '" style="min-height:36px;padding:4px 8px;">' + (isFav ? '⭐' : '☆') + '</button>' +
+                    '<button class="chip" type="button" data-fav-med="' + esc(m.id) + '" style="min-height:36px;padding:4px 8px;">' + (isFav ? '⭐' : '☆') + '</button>' +
                     '<div style="min-width:0;">' +
                       '<div style="font-weight:700;font-size:0.92rem;">' + esc(m.tradeName) + '</div>' +
                       '<div style="font-size:0.8rem;color:var(--teal);font-weight:600;">' + esc(m.activeIngredient) + ' • ' + esc(m.strength) + '</div>' +
                     '</div>' +
                   '</div>' +
-                  '<button class="btn ' + (isAdded ? 'btn-green' : 'btn-primary') + '" data-add-med="' + esc(m.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.84rem;" ' + (isAdded ? 'disabled' : '') + '>' +
-                    (isAdded ? '✓ مضاف' : '+ إضافة') +
+                  '<button class="btn ' + (isAdded ? 'btn-green' : 'btn-primary') + '" type="button" data-add-med="' + esc(m.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.84rem;" ' + (isAdded ? 'disabled' : '') + '>' +
+                    (isAdded ? '✓' : '+ ' + esc(bi('إضافة', 'Add'))) +
                   '</button>' +
                 '</div>';
               }).join('');
 
           document.getElementById('rxSelectedContainer').innerHTML = selectedRx.length === 0
-            ? '<div style="font-size:0.86rem;color:var(--text-muted);">اضغط (+ إضافة) بجانب أي دواء أعلاه لإدراجه في الروشتة.</div>'
+            ? '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(bi('اضغط (+ إضافة) بجانب أي دواء أعلاه لإدراجه في الروشتة.', 'Tap (+ Add) next to any medicine above to include it.')) + '</div>'
             : selectedRx.map((item, idx) =>
                 '<div class="card" style="padding:10px;background:rgba(217,242,242,0.3);">' +
                   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
                     '<strong>' + (idx + 1) + '. ' + esc(item.tradeName) + ' ' + esc(item.strength) + '</strong>' +
-                    '<button class="chip" data-del-rx="' + idx + '" style="min-height:30px;padding:2px 8px;color:var(--booked-border);">حذف</button>' +
+                    '<button class="chip" type="button" data-del-rx="' + idx + '" style="min-height:30px;padding:2px 8px;color:var(--booked-border);">' + esc(bi('حذف', 'Remove')) + '</button>' +
                   '</div>' +
-                  '<input class="input" data-edit-dose="' + idx + '" value="' + esc(item.dosage) + '" placeholder="الجرعة وطريقة الاستخدام" />' +
+                  '<input class="input" data-edit-dose="' + idx + '" value="' + esc(item.dosage) + '" placeholder="' + esc(bi('الجرعة وطريقة الاستخدام', 'Dosage instructions')) + '" />' +
                   '<div class="chips-row" style="margin-top:6px;">' +
                     DOSAGE_PRESETS.map((p) =>
-                      '<button class="chip" data-preset-idx="' + idx + '" data-preset-val="' + esc(p) + '" style="min-height:30px;padding:4px 8px;font-size:0.78rem;">' + esc(p) + '</button>'
+                      '<button class="chip" type="button" data-preset-idx="' + idx + '" data-preset-val="' + esc(p) + '" style="min-height:30px;padding:4px 8px;font-size:0.78rem;">' + esc(p) + '</button>'
                     ).join('') +
                   '</div>' +
                 '</div>'
               ).join('');
 
-          // Bind catalog & selected handlers
           document.querySelectorAll('[data-fav-med]').forEach((btn) => {
             btn.onclick = function () {
               const medId = btn.getAttribute('data-fav-med');
@@ -2973,30 +3091,30 @@
           return selectedRx.map((x) => '• ' + x.tradeName + (x.strength ? ' ' + x.strength : '') + ' — ' + (x.dosage || 'حسب إرشادات الطبيب')).join('\n');
         }
 
-        openModal('الروشتة الإلكترونية الذكية — ' + slot.patientName,
+        openModal(bi('الروشتة الإلكترونية الذكية — ', 'Smart E-Prescription — ') + slot.patientName,
           '<div class="badge ' + (ui.isLiveMedsApi ? 'badge-avail' : '') + '" style="background:var(--teal-soft);color:var(--teal-text);">' +
-            (ui.isLiveMedsApi ? '☁️ متصل بقاعدة الأدوية المصرية (' + ui.medications.length + ' دواء)' : '💊 قاعدة الأدوية المصرية المدمجة Offline (' + ui.medications.length + ' دواء)') +
+            (ui.isLiveMedsApi ? '☁️ متصل بقاعدة الأدوية المصرية (' + ui.medications.length + ' دواء)' : '💊 ' + esc(bi('قاعدة الأدوية المصرية المدمجة Offline (' + ui.medications.length + ' دواء)', 'Egyptian Drugs Offline DB (' + ui.medications.length + ' items)'))) +
           '</div>' +
-          '<input class="input" id="rxDiagnosis" placeholder="التشخيص الطبي *" />' +
-          '<input class="input" id="rxMedSearch" type="search" placeholder="ابحث بالاسم التجاري أو المادة الفعالة أو التركيز..." />' +
+          '<input class="input" id="rxDiagnosis" placeholder="' + esc(bi('التشخيص الطبي *', 'Diagnosis *')) + '" />' +
+          '<input class="input" id="rxMedSearch" type="search" placeholder="' + esc(bi('ابحث بالاسم التجاري أو المادة الفعالة أو التركيز...', 'Search trade name or active ingredient...')) + '" />' +
           '<div class="chips-row">' +
-            '<button class="chip active" id="rxTabSpec">تخصص العيادة</button>' +
-            '<button class="chip" id="rxTabFav">المفضلة ⭐</button>' +
-            '<button class="chip" id="rxTabAll">كل الأدوية</button>' +
+            '<button class="chip active" id="rxTabSpec" type="button">' + esc(bi('تخصص العيادة', 'Specialty')) + '</button>' +
+            '<button class="chip" id="rxTabFav" type="button">' + esc(bi('المفضلة ⭐', 'Favorites ⭐')) + '</button>' +
+            '<button class="chip" id="rxTabAll" type="button">' + esc(bi('كل الأدوية', 'All Drugs')) + '</button>' +
           '</div>' +
           '<div class="med-catalog-list" id="rxCatalogContainer"></div>' +
-          '<h4>الأدوية المختارة بالروشتة</h4>' +
+          '<h4>' + esc(bi('الأدوية المختارة بالروشتة', 'Selected Medications')) + '</h4>' +
           '<div id="rxSelectedContainer" style="display:flex;flex-direction:column;gap:8px;"></div>' +
           '<div style="display:grid;grid-template-columns:1.2fr 1fr auto;gap:6px;">' +
-            '<input class="input" id="customMedName" placeholder="دواء خارج القائمة (اختياري)" />' +
-            '<input class="input" id="customMedDose" value="قرص كل 12 ساعة" placeholder="الجرعة" />' +
-            '<button class="btn btn-outline" id="btnAddCustomMed">+</button>' +
+            '<input class="input" id="customMedName" placeholder="' + esc(bi('دواء خارج القائمة (اختياري)', 'Custom medicine (optional)')) + '" />' +
+            '<input class="input" id="customMedDose" value="قرص كل 12 ساعة" placeholder="' + esc(bi('الجرعة', 'Dosage')) + '" />' +
+            '<button class="btn btn-outline" id="btnAddCustomMed" type="button">+</button>' +
           '</div>' +
-          '<textarea class="textarea" id="rxNotes" placeholder="تعليمات وملاحظات إضافية للمريض (اختياري)"></textarea>' +
-          '<label class="btn btn-outline btn-block" style="cursor:pointer;">📷 إرفاق صورة روشتة ورقية (اختياري)<input type="file" id="rxPhotoInput" accept="image/*" style="display:none;" /></label>' +
+          '<textarea class="textarea" id="rxNotes" placeholder="' + esc(bi('تعليمات وملاحظات إضافية للمريض (اختياري)', 'Additional notes for patient (optional)')) + '"></textarea>' +
+          '<label class="btn btn-outline btn-block" style="cursor:pointer;">📷 ' + esc(bi('إرفاق صورة روشتة ورقية (اختياري)', 'Attach paper Rx photo (optional)')) + '<input type="file" id="rxPhotoInput" accept="image/*" style="display:none;" /></label>' +
           '<div id="rxPhotoPreview"></div>' +
-          '<button class="btn btn-outline btn-block" id="btnPrintRxModal">🖨️ طباعة الروشتة (Print / PDF)</button>' +
-          '<button class="btn btn-primary btn-block" id="btnSaveCompleteRx">✓ إرسال لملف المريض وإنهاء الكشف</button>',
+          '<button class="btn btn-outline btn-block" id="btnPrintRxModal" type="button">🖨️ ' + esc(bi('طباعة الروشتة (Print / PDF)', 'Print Prescription (PDF)')) + '</button>' +
+          '<button class="btn btn-primary btn-block" id="btnSaveCompleteRx" type="button">✓ ' + esc(bi('إرسال لملف المريض وإنهاء الكشف', 'Save & Send to Patient Record')) + '</button>',
           function () {
             renderRxModalBody();
 
@@ -3051,7 +3169,7 @@
 
             document.getElementById('btnSaveCompleteRx').onclick = function () {
               const diag = document.getElementById('rxDiagnosis').value.trim();
-              if (!diag) { showToast('يرجى كتابة التشخيص الطبي'); return; }
+              if (!diag) { showToast(bi('يرجى كتابة التشخيص الطبي', 'Please enter a diagnosis')); return; }
               slot.status = 'COMPLETED';
               db.records.unshift({
                 id: 'rec_' + Date.now(),
@@ -3071,7 +3189,7 @@
               });
               saveState(db);
               closeModal();
-              showToast('تم حفظ الروشتة وإرسالها فوراً إلى ملف المريض');
+              showToast(bi('تم حفظ الروشتة وإرسالها فوراً إلى ملف المريض', 'Prescription saved & sent to patient EMR'));
               renderApp();
             };
           }
@@ -3085,9 +3203,9 @@
           (slot.patientName && r.patientName === slot.patientName)
         ).sort((a, b) => b.createdAtMillis - a.createdAtMillis);
 
-        openModal('الملف الطبي: ' + slot.patientName,
+        openModal(bi('الملف الطبي: ', 'Medical Record: ') + slot.patientName,
           recs.length === 0
-            ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">لا توجد زيارات سابقة لهذا المريض.</div>'
+            ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد زيارات سابقة لهذا المريض.', 'No previous visits recorded for this patient.')) + '</div>'
             : recs.map(renderMedicalRecordCardHtml).join(''),
           bindSharedRecordActions
         );
@@ -3107,7 +3225,7 @@
           img.onclick = function () {
             const rec = db.records.find((r) => r.id === img.getAttribute('data-preview-img'));
             if (rec && rec.attachmentDataUrl) {
-              openModal(rec.diagnosis || 'معاينة الصورة', '<img src="' + esc(rec.attachmentDataUrl) + '" style="width:100%;border-radius:14px;" />');
+              openModal(rec.diagnosis || bi('معاينة الصورة', 'Image Preview'), '<img src="' + esc(rec.attachmentDataUrl) + '" style="width:100%;border-radius:14px;" />');
             }
           };
         });
@@ -3138,7 +3256,7 @@
               slot.familyMemberId = '';
               slot.bookingSource = '';
               saveState(db);
-              showToast('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر');
+              showToast(bi('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر', 'Booking cancelled; slot is available again'));
               renderApp();
             }
           };
@@ -3151,6 +3269,18 @@
 
         const addFamBtn = document.getElementById('btnAddFamilyQuick');
         if (addFamBtn) addFamBtn.onclick = function () { openAccountModal(); };
+
+        const heroRegBtn = document.getElementById('btnHeroRegister');
+        if (heroRegBtn) heroRegBtn.onclick = function () { openAccountModal('REGISTER'); };
+
+        const heroLogBtn = document.getElementById('btnHeroLogin');
+        if (heroLogBtn) heroLogBtn.onclick = function () { openAccountModal('LOGIN'); };
+
+        const emrRegBtn = document.getElementById('btnEmrRegister');
+        if (emrRegBtn) emrRegBtn.onclick = function () { openAccountModal('REGISTER'); };
+
+        const emrLogBtn = document.getElementById('btnEmrLogin');
+        if (emrLogBtn) emrLogBtn.onclick = function () { openAccountModal('LOGIN'); };
 
         const otpBannerBtn = document.getElementById('btnHomeOtpWarning');
         if (otpBannerBtn) {
@@ -3196,7 +3326,8 @@
             const file = e.target.files[0];
             if (!file) return;
             const member = getActiveMember();
-            const title = (document.getElementById('uploadLabTitle').value || '').trim() || 'صورة تحليل / أشعة';
+            if (!member) return;
+            const title = (document.getElementById('uploadLabTitle').value || '').trim() || bi('صورة تحليل / أشعة', 'Lab / Scan Upload');
             const notes = (document.getElementById('uploadLabNotes').value || '').trim();
             const reader = new FileReader();
             reader.onload = function () {
@@ -3206,8 +3337,8 @@
                 patientName: member.fullName,
                 patientPhone: member.phone,
                 doctorId: '',
-                doctorName: 'رفع شخصي من المريض',
-                specialty: 'تحاليل وأشعة',
+                doctorName: bi('رفع شخصي من المريض', 'Patient Upload'),
+                specialty: bi('تحاليل وأشعة', 'Labs & Scans'),
                 visitDateLabel: formatTodayAr(),
                 diagnosis: title,
                 medications: '',
@@ -3217,7 +3348,7 @@
                 createdAtMillis: Date.now()
               });
               saveState(db);
-              showToast('تم حفظ صورة التحليل/الأشعة في ملف ' + member.fullName);
+              showToast(bi('تم حفظ صورة التحليل/الأشعة في ملف ' + member.fullName, 'Saved upload to ' + member.fullName + '\'s record'));
               renderApp();
             };
             reader.readAsDataURL(file);
@@ -3247,12 +3378,12 @@
             (d.username && d.username === ident) && (d.password || '1234') === pass
           );
           if (!found) {
-            errEl.textContent = 'بيانات الدخول غير صحيحة. تأكد من اسم المستخدم وكلمة المرور من الإدارة.';
+            errEl.textContent = bi('بيانات الدخول غير صحيحة. تأكد من اسم المستخدم وكلمة المرور من الإدارة.', 'Invalid credentials. Verify username and password.');
             errEl.style.display = 'block';
             return;
           }
           ui.loggedInDoctorId = found.id;
-          showToast('مرحباً ' + found.doctorName);
+          showToast(bi('مرحباً ' + found.doctorName, 'Welcome, ' + found.doctorName));
           renderApp();
         }
 
@@ -3294,7 +3425,7 @@
           logoutBtn.onclick = function () {
             ui.isAdminLoggedIn = false;
             ui.roleMode = 'PATIENT';
-            showToast('تم تأمين وإغلاق لوحة الإدارة العليا');
+            showToast(bi('تم تأمين وإغلاق لوحة الإدارة العليا', 'Super Admin dashboard locked'));
             renderApp();
           };
         }
@@ -3324,11 +3455,11 @@
           btn.onclick = function () {
             const doc = db.doctors.find((d) => d.id === btn.getAttribute('data-admin-delete-doc'));
             if (!doc) return;
-            openModal('تأكيد حذف الدكتور من المنصة',
-              '<div>هل أنت متأكد من حذف <strong>' + esc(doc.doctorName) + '</strong> (' + esc(doc.clinicName) + ') نهائياً؟ سيتم حذف جميع مواعيده أيضاً.</div>' +
+            openModal(bi('تأكيد حذف الدكتور من المنصة', 'Confirm Doctor Deletion'),
+              '<div>' + esc(bi('هل أنت متأكد من حذف ', 'Are you sure you want to permanently delete ')) + '<strong>' + esc(doc.doctorName) + '</strong> (' + esc(doc.clinicName) + ')?</div>' +
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">' +
-                '<button class="btn btn-outline" id="btnCancelDeleteDoc">تراجع</button>' +
-                '<button class="btn btn-danger-outline" id="btnConfirmDeleteDoc">🗑️ حذف نهائي</button>' +
+                '<button class="btn btn-outline" id="btnCancelDeleteDoc" type="button">' + esc(bi('تراجع', 'Cancel')) + '</button>' +
+                '<button class="btn btn-danger-outline" id="btnConfirmDeleteDoc" type="button">🗑️ ' + esc(bi('حذف نهائي', 'Delete')) + '</button>' +
               '</div>',
               function () {
                 document.getElementById('btnCancelDeleteDoc').onclick = closeModal;
@@ -3340,7 +3471,7 @@
                   if (ui.bookingDoctorId === doc.id) ui.bookingDoctorId = null;
                   saveState(db);
                   closeModal();
-                  showToast('تم حذف ' + doc.doctorName + ' من المنصة نهائياً');
+                  showToast(bi('تم حذف ' + doc.doctorName + ' من المنصة نهائياً', 'Deleted ' + doc.doctorName));
                   renderApp();
                 };
               }
@@ -3351,13 +3482,13 @@
         function blockPhoneAndCancel(rawPhone, reason) {
           const digits = normalizePhoneDigits(rawPhone);
           if (digits.length < 8) {
-            showToast('يرجى إدخال رقم هاتف صحيح للحظر');
+            showToast(bi('يرجى إدخال رقم هاتف صحيح للحظر', 'Enter a valid phone number'));
             return;
           }
           if (!isPhoneBlocked(rawPhone)) {
             db.blockedPhones = (db.blockedPhones || []).concat([{
               phone: rawPhone.trim(),
-              reason: (reason || '').trim() || 'حظر إداري بسبب حجز وهمي',
+              reason: (reason || '').trim() || bi('حظر إداري بسبب حجز وهمي', 'Blocked for fake booking'),
               blockedAtMillis: Date.now()
             }]);
           }
@@ -3371,7 +3502,7 @@
             }
           });
           saveState(db);
-          showToast('تم حظر الرقم ' + rawPhone.trim() + ' وإلغاء حجوزاته النشطة');
+          showToast(bi('تم حظر الرقم ' + rawPhone.trim() + ' وإلغاء حجوزاته النشطة', 'Blocked ' + rawPhone.trim()));
           renderApp();
         }
 
@@ -3386,7 +3517,7 @@
 
         document.querySelectorAll('[data-admin-quick-block]').forEach((btn) => {
           btn.onclick = function () {
-            blockPhoneAndCancel(btn.getAttribute('data-admin-quick-block'), 'حجز وهمي / مخالفة مواعيد');
+            blockPhoneAndCancel(btn.getAttribute('data-admin-quick-block'), bi('حجز وهمي / مخالفة مواعيد', 'Fake booking violation'));
           };
         });
 
@@ -3395,7 +3526,7 @@
             const target = normalizePhoneDigits(btn.getAttribute('data-admin-unblock-phone'));
             db.blockedPhones = (db.blockedPhones || []).filter((b) => normalizePhoneDigits(b.phone) !== target);
             saveState(db);
-            showToast('تم رفع الحظر عن الرقم بنجاح');
+            showToast(bi('تم رفع الحظر عن الرقم بنجاح', 'Phone unblocked'));
             renderApp();
           };
         });
@@ -3410,7 +3541,7 @@
               slot.familyMemberId = '';
               slot.bookingSource = '';
               saveState(db);
-              showToast('تم إلغاء الحجز وإعادة الموعد متاحاً');
+              showToast(bi('تم إلغاء الحجز وإعادة الموعد متاحاً', 'Booking cancelled'));
               renderApp();
             }
           };
@@ -3421,7 +3552,7 @@
           saveAdmCfgBtn.onclick = async function () {
             const newPin = document.getElementById('admSetPin').value.trim();
             if (newPin && newPin.length < 4) {
-              showToast('الرقم السري (PIN) يجب أن يكون 4 أرقام على الأقل');
+              showToast(bi('الرقم السري (PIN) يجب أن يكون 4 أرقام على الأقل', 'PIN must be at least 4 digits'));
               return;
             }
             db.config.platformNameAr = document.getElementById('admSetPlatform').value.trim() || DEFAULT_CONFIG.platformNameAr;
@@ -3434,7 +3565,7 @@
             if (newPin.length >= 4) db.config.adminPin = newPin;
             saveState(db);
             await refreshMedicationsFromApi();
-            showToast('تم حفظ جميع إعدادات المنصة والـ PIN بنجاح');
+            showToast(bi('تم حفظ جميع إعدادات المنصة والـ PIN بنجاح', 'All platform settings & PIN saved'));
             renderApp();
           };
         }
@@ -3445,7 +3576,7 @@
             db.config = Object.assign({}, DEFAULT_CONFIG);
             saveState(db);
             await refreshMedicationsFromApi();
-            showToast('تمت استعادة الإعدادات الافتراضية للمنصة');
+            showToast(bi('تمت استعادة الإعدادات الافتراضية للمنصة', 'Restored default settings'));
             renderApp();
           };
         }
@@ -3469,7 +3600,7 @@
         if (logoutBtn) {
           logoutBtn.onclick = function () {
             ui.loggedInDoctorId = null;
-            showToast('تم تسجيل خروج الطبيب');
+            showToast(bi('تم تسجيل خروج الطبيب', 'Doctor signed out'));
             renderApp();
           };
         }
@@ -3485,7 +3616,7 @@
             isRead: false
           });
           saveState(db);
-          showToast('تم تأخير المواعيد ' + mins + ' دقيقة وإرسال تنبيه فوري للمرضى');
+          showToast(bi('تم تأخير المواعيد ' + mins + ' دقيقة وإرسال تنبيه فوري للمرضى', 'Delayed slots by ' + mins + ' min'));
           renderApp();
         }
 
@@ -3515,7 +3646,7 @@
               slot.familyMemberId = '';
               slot.bookingSource = '';
               saveState(db);
-              showToast('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر');
+              showToast(bi('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر', 'Booking cancelled'));
               renderApp();
             }
           };
@@ -3525,6 +3656,11 @@
       }
 
       // Top Header & Nav Global Listeners
+      document.getElementById('btnLangToggle').onclick = function () {
+        ui.lang = ui.lang === 'ar' ? 'en' : 'ar';
+        try { localStorage.setItem(LANG_KEY, ui.lang); } catch (e) {}
+        renderApp();
+      };
       document.getElementById('rolePatientBtn').onclick = function () {
         ui.roleMode = 'PATIENT';
         renderApp();
@@ -3557,7 +3693,9 @@
       // Service Worker Registration for PWA Installability
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('./sw.js').catch(function () {});
+          navigator.serviceWorker.register('./sw.js').then(function (reg) {
+            if (reg && reg.update) reg.update();
+          }).catch(function () {});
         });
       }
 
