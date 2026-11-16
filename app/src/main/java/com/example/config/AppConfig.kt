@@ -26,9 +26,9 @@ data class PlatformBrandConfig(
     val adminUsername: String = "admin",
     val adminPassword: String = "teb2026",
     val adminPin: String = "202600",
-    @DrawableRes val logoRes: Int = R.drawable.app_icon_fg,
-    @DrawableRes val heroBannerRes: Int = R.drawable.img_hospital_banner,
-    @DrawableRes val medicalRecordIllustRes: Int = R.drawable.img_medical_record,
+    @param:DrawableRes val logoRes: Int = R.drawable.app_icon_fg,
+    @param:DrawableRes val heroBannerRes: Int = R.drawable.img_hospital_banner,
+    @param:DrawableRes val medicalRecordIllustRes: Int = R.drawable.img_medical_record,
 )
 
 object AppConfig {
