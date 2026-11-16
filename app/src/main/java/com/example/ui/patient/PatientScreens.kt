@@ -1162,6 +1162,7 @@ fun DoctorBookingScreen(
     slots: List<AppointmentSlotEntity>,
     familyMembers: List<FamilyMemberEntity>,
     activeMember: FamilyMemberEntity?,
+    isBookingSubmitting: Boolean = false,
     onSelectFamilyMember: (String) -> Unit,
     onBookSlot: (slotId: String, member: FamilyMemberEntity) -> Unit,
     onCancelSlot: (slotId: String) -> Unit,
@@ -1448,14 +1449,25 @@ fun DoctorBookingScreen(
             },
             confirmButton = {
                 Button(
+                    enabled = !isBookingSubmitting,
                     onClick = {
-                        onBookSlot(pendingSlot.id, activeMember)
-                        slotPendingConfirm = null
+                        if (!isBookingSubmitting) {
+                            onBookSlot(pendingSlot.id, activeMember)
+                            slotPendingConfirm = null
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = SlotAvailableBorder),
                     modifier = Modifier.testTag("confirm_booking_button"),
                 ) {
-                    Text("تأكيد الحجز الآن")
+                    if (isBookingSubmitting) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(if (isBookingSubmitting) "جاري الحجز..." else "تأكيد الحجز الآن")
                 }
             },
             dismissButton = {

@@ -149,6 +149,8 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                     roleMode = state.roleMode,
                     unreadAlertsCount = state.unreadAlertsCount,
                     activeAccount = state.activeAccount,
+                    isRefreshing = state.isRefreshing,
+                    onRefresh = viewModel::smartRefreshData,
                     onSwitchRole = viewModel::switchRoleMode,
                     onOpenNotifications = {
                         viewModel.markNotificationsRead()
@@ -219,6 +221,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         slots = state.slotsForDoctor(bookingDoctor.id),
                                         familyMembers = state.familyMembers,
                                         activeMember = state.activeMember,
+                                        isBookingSubmitting = state.isBookingSubmitting,
                                         onSelectFamilyMember = viewModel::selectActiveFamilyMember,
                                         onBookSlot = viewModel::bookAppointmentAsPatient,
                                         onCancelSlot = viewModel::cancelAppointment,
@@ -358,6 +361,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             activeMemberId = state.activeMemberId,
             activeOtpChallenge = state.activeOtpChallenge,
             supportPhone = state.brandConfig.supportPhone,
+            otpWhatsappPhone = state.brandConfig.otpWhatsappPhone,
             appVersionLabel = state.brandConfig.appVersionLabel,
             onSelectMember = viewModel::selectActiveFamilyMember,
             onAddFamilyMember = { name, relation, age, phone ->

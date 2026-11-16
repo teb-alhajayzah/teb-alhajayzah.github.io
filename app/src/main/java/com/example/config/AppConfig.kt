@@ -15,6 +15,7 @@ data class PlatformBrandConfig(
     val taglineAr: String = "منصتك الطبية لحجز العيادات والملف الصحي الموحد",
     val homeAnnouncementAr: String = "",
     val supportPhone: String = "01125002428",
+    val otpWhatsappPhone: String = "01141271027",
     val currencyLabelAr: String = "ج.م",
     val defaultSlotMinutes: Int = 20,
     val appVersionLabel: String = "v1.0.0",

@@ -48,6 +48,11 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
     body {
       margin: 0;
       background: var(--bg);
@@ -128,6 +133,8 @@
       align-items: center;
       gap: 6px;
       flex-shrink: 0;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     .icon-btn {
@@ -141,14 +148,30 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       position: relative;
       padding: 0 10px;
-      transition: background 0.15s;
+      transition: background 0.15s, transform 0.1s;
     }
 
     .icon-btn:hover {
       background: rgba(255,255,255,0.24);
+    }
+
+    .icon-btn:active {
+      transform: scale(0.96);
+    }
+
+    .refresh-btn {
+      font-size: 0.82rem;
+      font-weight: 800;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .refresh-btn.spinning .refresh-ico {
+      display: inline-block;
+      animation: tebSpin 0.8s linear infinite;
     }
 
     .lang-toggle-btn {
@@ -256,6 +279,8 @@
       border-radius: var(--radius);
       padding: 16px;
       box-shadow: var(--shadow);
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .alert-banner {
@@ -435,7 +460,7 @@
     /* Doctor Directory Card */
     .doctors-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
       gap: 12px;
     }
 
@@ -448,6 +473,8 @@
       flex-direction: column;
       gap: 10px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .badge {
@@ -681,7 +708,7 @@
       gap: 8px;
     }
 
-    /* Toast */
+    /* Toast & Loading Spinner */
     .toast {
       position: fixed;
       bottom: 82px;
@@ -696,6 +723,57 @@
       box-shadow: 0 8px 24px rgba(0,0,0,0.25);
       max-width: 90%;
       text-align: center;
+    }
+
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(2px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 250;
+    }
+
+    .loading-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.22);
+      max-width: 300px;
+      text-align: center;
+    }
+
+    .spinner-ring {
+      width: 36px;
+      height: 36px;
+      border: 3.5px solid var(--teal-soft);
+      border-top-color: var(--teal);
+      border-radius: 50%;
+      animation: tebSpin 0.8s linear infinite;
+    }
+
+    .btn-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: tebSpin 0.75s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes tebSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
 
     /* Print Area */
@@ -821,6 +899,15 @@
       font-weight: 600;
     }
 
+    @media (max-width: 460px) {
+      .header-row { gap: 6px; }
+      .brand-title { font-size: 1.05rem; }
+      .brand-sub { font-size: 0.72rem; }
+      .icon-btn { min-width: 38px; height: 38px; padding: 0 8px; font-size: 0.95rem; }
+      .refresh-btn .refresh-lbl { display: none; }
+      .footer-quick-links { grid-template-columns: 1fr; }
+    }
+
     @media (min-width: 720px) {
       .sections-grid { grid-template-columns: repeat(4, 1fr); }
       .footer-grid { grid-template-columns: 1.2fr 1fr 1fr; }
@@ -841,6 +928,9 @@
           </div>
         </div>
         <div class="header-actions">
+          <button class="icon-btn refresh-btn" id="btnSmartRefresh" type="button" title="تحديث المواعيد وتنظيف الذاكرة المؤقتة / Smart Refresh" aria-label="تحديث">
+            <span class="refresh-ico" aria-hidden="true">🔄</span><span class="refresh-lbl" id="refreshBtnLabel">تحديث</span>
+          </button>
           <button class="icon-btn lang-toggle-btn" id="btnLangToggle" type="button" title="تبديل اللغة / Switch Language" aria-label="تبديل اللغة AR / EN">
             🌐 <span class="lang-pill-active" id="langArBadge">AR</span><span style="opacity:0.6;">/</span><span class="lang-pill-dim" id="langEnBadge">EN</span>
           </button>
@@ -871,6 +961,12 @@
   </nav>
 
   <div id="modalRoot"></div>
+  <div id="loadingOverlay" class="loading-overlay" role="status" aria-live="polite">
+    <div class="loading-card">
+      <div class="spinner-ring" aria-hidden="true"></div>
+      <div id="loadingOverlayText" style="font-weight:700;color:var(--teal-text);">جاري التحديث...</div>
+    </div>
+  </div>
   <div id="toast" class="toast" style="display:none" role="status" aria-live="polite"></div>
   <iframe id="apkDownloadFrame" title="تحميل تطبيق طب الحجايزة" aria-hidden="true" tabindex="-1" style="display:none;width:0;height:0;border:0;position:absolute;left:-9999px;"></iframe>
   <div id="printSheet"></div>
@@ -893,6 +989,7 @@
         taglineEn: 'Your medical platform for clinic bookings and unified health records',
         homeAnnouncementAr: '',
         supportPhone: '01125002428',
+        otpWhatsappPhone: '01141271027',
         appVersionLabel: 'v1.0.0',
         apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
         medicationsApiUrl: '',
@@ -1408,6 +1505,48 @@
         toastTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs || 3400);
       }
 
+      function setGlobalLoading(show, text) {
+        const overlay = document.getElementById('loadingOverlay');
+        const label = document.getElementById('loadingOverlayText');
+        if (!overlay) return;
+        if (label && text) label.textContent = text;
+        overlay.style.display = show ? 'flex' : 'none';
+      }
+
+      async function performSmartHardRefresh() {
+        const btn = document.getElementById('btnSmartRefresh');
+        if (btn) btn.classList.add('spinning');
+        setGlobalLoading(
+          true,
+          bi(
+            'جاري تنظيف الذاكرة المؤقتة وجلب أحدث المواعيد والبيانات...',
+            'Clearing cache & loading the latest slots...'
+          )
+        );
+        try {
+          // Clear Service Worker & HTTP caches ONLY; preserve user login & saved state in localStorage
+          if ('caches' in window && caches.keys) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+          if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => (r && r.update ? r.update().catch(() => {}) : Promise.resolve())));
+          }
+          await refreshMedicationsFromApi();
+          db = loadState();
+          renderApp();
+        } catch (e) { /* safe fallback */ }
+        showToast(bi('تم تحديث البيانات ومسح الذاكرة المؤقتة بنجاح', 'Cache cleared & data refreshed'));
+        setTimeout(function () {
+          setGlobalLoading(false);
+          if (btn) btn.classList.remove('spinning');
+          try {
+            window.location.reload();
+          } catch (e) { /* ignore reload error */ }
+        }, 350);
+      }
+
       let apkNoticeTimer = null;
       function startBackgroundApkDownload(customUrl) {
         const downloadUrl = (customUrl && String(customUrl).trim()) || DEFAULT_CONFIG.apkDownloadUrl;
@@ -1553,6 +1692,14 @@
         if (arBadge && enBadge) {
           arBadge.className = isEn ? 'lang-pill-dim' : 'lang-pill-active';
           enBadge.className = isEn ? 'lang-pill-active' : 'lang-pill-dim';
+        }
+        const refreshLbl = document.getElementById('refreshBtnLabel');
+        if (refreshLbl) {
+          refreshLbl.textContent = bi('تحديث', 'Refresh');
+        }
+        const refreshBtn = document.getElementById('btnSmartRefresh');
+        if (refreshBtn) {
+          refreshBtn.title = bi('تحديث المواعيد وتنظيف الذاكرة المؤقتة', 'Smart Refresh & Clear Cache');
         }
 
         const pBtn = document.getElementById('rolePatientBtn');
@@ -2378,21 +2525,41 @@
           '<div style="color:var(--text-muted);font-size:0.86rem;">' + esc(bi('سيتم إغلاق الموعد فوراً باللون الأحمر عند تأكيد الحجز لمنع التضارب.', 'This slot will immediately turn red once confirmed to prevent conflicts.')) + '</div>' +
           '<button class="btn btn-green btn-block" id="btnConfirmBook" type="button">✓ ' + esc(bi('تأكيد الحجز الآن', 'Confirm Booking')) + '</button>',
           function () {
-            document.getElementById('btnConfirmBook').onclick = function () {
-              if (isPhoneBlocked(db.account.phone) || isPhoneBlocked(member.phone)) {
+            let isSubmittingBook = false;
+            const confirmBtn = document.getElementById('btnConfirmBook');
+            confirmBtn.onclick = function () {
+              if (isSubmittingBook) return;
+              isSubmittingBook = true;
+              confirmBtn.disabled = true;
+              confirmBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> ' + esc(bi('جاري تأكيد الحجز...', 'Booking...'));
+
+              setTimeout(function () {
+                db = loadState();
+                const latestSlot = db.slots.find((s) => s.id === slot.id);
+                if (!latestSlot || latestSlot.status !== 'AVAILABLE') {
+                  isSubmittingBook = false;
+                  closeModal();
+                  showToast(bi('عذراً، تم حجز هذا الموعد للتو', 'Sorry, this slot was just booked'));
+                  renderApp();
+                  return;
+                }
+                if (isPhoneBlocked(db.account.phone) || isPhoneBlocked(member.phone)) {
+                  isSubmittingBook = false;
+                  closeModal();
+                  showToast(bi('عذراً، هذا الرقم محظور من الحجز عبر المنصة', 'Sorry, this phone number is blocked'));
+                  return;
+                }
+                latestSlot.status = 'BOOKED';
+                latestSlot.patientName = member.fullName;
+                latestSlot.patientPhone = member.phone;
+                latestSlot.familyMemberId = member.id;
+                latestSlot.bookingSource = 'APP';
+                saveState(db);
+                isSubmittingBook = false;
                 closeModal();
-                showToast(bi('عذراً، هذا الرقم محظور من الحجز عبر المنصة', 'Sorry, this phone number is blocked'));
-                return;
-              }
-              slot.status = 'BOOKED';
-              slot.patientName = member.fullName;
-              slot.patientPhone = member.phone;
-              slot.familyMemberId = member.id;
-              slot.bookingSource = 'APP';
-              saveState(db);
-              closeModal();
-              showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
-              renderApp();
+                showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
+                renderApp();
+              }, 160);
             };
           }
         );
@@ -2500,10 +2667,16 @@
               ).join('')
             : '';
 
+          const otpPhoneDigits = normalizePhoneDigits((db.config && db.config.otpWhatsappPhone) || DEFAULT_CONFIG.otpWhatsappPhone || '01141271027');
+          const otpWaPhone = otpPhoneDigits.startsWith('2') ? otpPhoneDigits : ('2' + otpPhoneDigits);
+          const otpWaText = hasAcc
+            ? encodeURIComponent('مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ' + db.account.fullName + ' - الرقم: ' + db.account.phone)
+            : '';
+
           const otpCardHtml = (hasAcc && !isVerified)
             ? '<div class="card" style="background:var(--warn-bg);border:1.5px solid var(--warn-border);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
                 '<div style="font-weight:800;color:var(--warn-text);">🔐 ' + esc(bi('تأكيد رقم الهاتف برمز التحقق (OTP من 6 أرقام)', 'Verify Phone Number (6-digit OTP)')) + '</div>' +
-                '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.5;">' + esc(bi('جاهز للربط مع Firebase Phone Authentication. أدخل الرمز المكون من 6 أرقام لتفعيل حجز المواعيد ومنع الحجوزات الوهمية.', 'Firebase Phone Auth ready. Enter the 6-digit OTP code to activate bookings.')) + '</div>' +
+                '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.5;">' + esc(bi('جاهز للربط مع Firebase Phone Authentication. اطلب الكود عبر واتساب التفعيل (' + ((db.config && db.config.otpWhatsappPhone) || '01141271027') + ') أو جرب الإرسال الفوري، ثم أدخل الأرقام الستة لتفعيل حجز المواعيد.', 'Request your 6-digit OTP via Activation WhatsApp (' + ((db.config && db.config.otpWhatsappPhone) || '01141271027') + ') or test OTP, then enter the 6 digits to unlock bookings.')) + '</div>' +
                 (ui.otpChallenge
                   ? '<div class="alert-banner" style="background:#DCFCE7;border-color:#16A34A;color:#14532D;font-size:0.86rem;">' +
                       '🧪 <strong>' + esc(bi('إشعار الاختبار الفوري (Test OTP):', 'Test OTP Notification:')) + '</strong> ' +
@@ -2511,7 +2684,8 @@
                       ' <span style="font-size:0.78rem;">(' + esc(ui.otpChallenge.formattedE164Phone) + ')</span>' +
                     '</div>'
                   : '') +
-                '<button class="btn btn-outline btn-block" id="btnResendOtp" type="button" style="background:#fff;">📩 ' + esc(bi(ui.otpChallenge ? 'إعادة إرسال رمز التحقق (OTP)' : 'إرسال رمز التحقق (OTP)', ui.otpChallenge ? 'Resend Verification Code (OTP)' : 'Send Verification Code (OTP)')) + '</button>' +
+                '<a class="btn btn-whatsapp btn-block" id="btnOtpWhatsappRequest" href="https://wa.me/' + esc(otpWaPhone) + '?text=' + otpWaText + '" target="_blank" rel="noopener">💬 ' + esc(bi('اطلب كود التفعيل (OTP) عبر واتساب', 'Request OTP via WhatsApp')) + '</a>' +
+                '<button class="btn btn-outline btn-block" id="btnResendOtp" type="button" style="background:#fff;">📩 ' + esc(bi(ui.otpChallenge ? 'إعادة إرسال رمز التحقق التجريبي (Test OTP)' : 'إرسال رمز التحقق التجريبي (Test OTP)', ui.otpChallenge ? 'Resend Test OTP' : 'Send Test OTP')) + '</button>' +
                 '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="' + esc(bi('أدخل رمز التحقق (6 أرقام)', 'Enter 6-digit OTP code')) + '" dir="ltr" />' +
                 '<button class="btn btn-primary btn-block" id="btnVerifyOtpSubmit" type="button">✓ ' + esc(bi('تأكيد وتفعيل الحساب', 'Verify & Activate Account')) + '</button>' +
               '</div>'
@@ -3656,6 +3830,7 @@
       }
 
       // Top Header & Nav Global Listeners
+      document.getElementById('btnSmartRefresh').onclick = performSmartHardRefresh;
       document.getElementById('btnLangToggle').onclick = function () {
         ui.lang = ui.lang === 'ar' ? 'en' : 'ar';
         try { localStorage.setItem(LANG_KEY, ui.lang); } catch (e) {}
@@ -3682,6 +3857,16 @@
         };
       });
 
+      // Smooth Escape Key Modal Closing
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          const modalRoot = document.getElementById('modalRoot');
+          if (modalRoot && modalRoot.innerHTML.trim() !== '') {
+            closeModal();
+          }
+        }
+      });
+
       // Instant Cross-Tab Real-Time Sync via LocalStorage events
       window.addEventListener('storage', function (e) {
         if (e.key === STORAGE_KEY) {
@@ -3689,6 +3874,21 @@
           renderApp();
         }
       });
+
+      // 30-Second Background Auto-Refresh for Appointment Slots (non-disruptive)
+      setInterval(function () {
+        const modalRoot = document.getElementById('modalRoot');
+        const hasOpenModal = modalRoot && modalRoot.innerHTML.trim() !== '';
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+        if (hasOpenModal || isTyping) return;
+        const latestDb = loadState();
+        if (JSON.stringify(latestDb.slots) !== JSON.stringify(db.slots) ||
+            JSON.stringify(latestDb.doctors) !== JSON.stringify(db.doctors)) {
+          db = latestDb;
+          renderApp();
+        }
+      }, 30000);
 
       // Service Worker Registration for PWA Installability
       if ('serviceWorker' in navigator) {
@@ -3699,9 +3899,13 @@
         });
       }
 
-      // Initialize App
-      refreshMedicationsFromApi().then(renderApp);
+      // Initialize App with brief spinner while loading medications catalog
+      setGlobalLoading(true, bi('جاري تجهيز منصة طب الحجايزة...', 'Loading Teb Al-Hajayzah...'));
       renderApp();
+      refreshMedicationsFromApi().finally(function () {
+        setGlobalLoading(false);
+        renderApp();
+      });
     })();
   </script>
 </body>

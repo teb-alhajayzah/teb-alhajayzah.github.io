@@ -23,6 +23,7 @@ import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
 import com.example.data.repository.TebRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 enum class AppRoleMode(val labelAr: String) {
@@ -75,6 +77,8 @@ data class TebUiState(
     val isLiveMedicationsApi: Boolean = false,
     val favoriteMedsByDoctor: Map<String, Set<String>> = emptyMap(),
     val activationCodes: List<ActivationOtpCodeEntity> = emptyList(),
+    val isRefreshing: Boolean = false,
+    val isBookingSubmitting: Boolean = false,
 ) {
     val activeMember: FamilyMemberEntity?
         get() = familyMembers.firstOrNull { it.id == activeMemberId } ?: familyMembers.firstOrNull()
@@ -141,6 +145,8 @@ class TebViewModel(
     private val _activeOtpChallenge = MutableStateFlow<OtpChallenge?>(null)
     private val _medications = MutableStateFlow(MedicationCatalog.builtInMedications)
     private val _isLiveMedicationsApi = MutableStateFlow(false)
+    private val _isRefreshing = MutableStateFlow(false)
+    private val _isBookingSubmitting = MutableStateFlow(false)
 
     private val _snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarMessages = _snackbarMessages.asSharedFlow()
@@ -154,6 +160,17 @@ class TebViewModel(
             _isSeeded.value = true
         }
         refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
+        viewModelScope.launch {
+            while (isActive) {
+                delay(30_000L)
+                val apiUrl = uiState.value.brandConfig.medicationsApiUrl
+                if (apiUrl.isNotBlank()) {
+                    val result = repository.loadEgyptianMedications(apiUrl)
+                    _medications.value = result.medications
+                    _isLiveMedicationsApi.value = result.isLiveRemote
+                }
+            }
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -196,6 +213,8 @@ class TebViewModel(
         val medications: List<EgyptianMedication>,
         val isLiveRemote: Boolean,
         val favorites: List<DoctorFavoriteMedEntity>,
+        val isRefreshing: Boolean,
+        val isBookingSubmitting: Boolean,
     )
 
     private val selectionFlow = combine(
@@ -267,8 +286,10 @@ class TebViewModel(
         _medications,
         _isLiveMedicationsApi,
         repository.allDoctorFavoritesFlow,
-    ) { meds, isLive, favs ->
-        MedicationBundle(meds, isLive, favs)
+        _isRefreshing,
+        _isBookingSubmitting,
+    ) { meds, isLive, favs, isRefreshing, isBookingSubmitting ->
+        MedicationBundle(meds, isLive, favs, isRefreshing, isBookingSubmitting)
     }
 
     val uiState: StateFlow<TebUiState> = combine(
@@ -313,12 +334,30 @@ class TebViewModel(
             isLiveMedicationsApi = medBundle.isLiveRemote,
             favoriteMedsByDoctor = favMap,
             activationCodes = activationCodes,
+            isRefreshing = medBundle.isRefreshing,
+            isBookingSubmitting = medBundle.isBookingSubmitting,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000L),
         initialValue = TebUiState(),
     )
+
+    fun smartRefreshData() {
+        if (_isRefreshing.value) return
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                val apiUrl = uiState.value.brandConfig.medicationsApiUrl
+                val result = repository.loadEgyptianMedications(apiUrl)
+                _medications.value = result.medications
+                _isLiveMedicationsApi.value = result.isLiveRemote
+                _snackbarMessages.tryEmit("تم تحديث المواعيد والبيانات بنجاح دون تسجيل الخروج")
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
+    }
 
     fun refreshEgyptianMedications(apiUrl: String) {
         viewModelScope.launch {
@@ -585,6 +624,7 @@ class TebViewModel(
     }
 
     fun bookAppointmentAsPatient(slotId: String, member: FamilyMemberEntity) {
+        if (_isBookingSubmitting.value) return
         val account = uiState.value.activeAccount
         if (account != null && !account.isPhoneVerified) {
             _openAccountForOtpEvents.tryEmit(Unit)
@@ -592,17 +632,22 @@ class TebViewModel(
             return
         }
         viewModelScope.launch {
-            val result = repository.bookSlot(
-                slotId = slotId,
-                patientName = member.fullName,
-                patientPhone = account?.phone?.ifBlank { member.phone } ?: member.phone,
-                familyMemberId = member.id,
-                source = BookingSource.APP,
-            )
-            result.onSuccess {
-                _snackbarMessages.tryEmit("تم تأكيد الحجز باسم ${member.fullName} بنجاح")
-            }.onFailure { err ->
-                _snackbarMessages.tryEmit(err.message ?: "تعذر إتمام الحجز")
+            _isBookingSubmitting.value = true
+            try {
+                val result = repository.bookSlot(
+                    slotId = slotId,
+                    patientName = member.fullName,
+                    patientPhone = account?.phone?.ifBlank { member.phone } ?: member.phone,
+                    familyMemberId = member.id,
+                    source = BookingSource.APP,
+                )
+                result.onSuccess {
+                    _snackbarMessages.tryEmit("تم تأكيد الحجز باسم ${member.fullName} بنجاح")
+                }.onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إتمام الحجز")
+                }
+            } finally {
+                _isBookingSubmitting.value = false
             }
         }
     }

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
@@ -46,6 +47,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -108,6 +110,8 @@ fun TebTopHeader(
     roleMode: AppRoleMode,
     unreadAlertsCount: Int,
     activeAccount: PatientAccountEntity?,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
     onSwitchRole: (AppRoleMode) -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenAccount: () -> Unit,
@@ -165,6 +169,28 @@ fun TebTopHeader(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isRefreshing,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("refresh_button"),
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = "تحديث البيانات والمواعيد",
+                                tint = Color.White,
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = onOpenNotifications,
                         modifier = Modifier
@@ -287,6 +313,7 @@ fun AccountAndFamilyDialog(
     activeMemberId: String,
     activeOtpChallenge: OtpChallenge?,
     supportPhone: String = "01125002428",
+    otpWhatsappPhone: String = "01141271027",
     appVersionLabel: String,
     onSelectMember: (String) -> Unit,
     onAddFamilyMember: (name: String, relation: String, age: Int, phone: String) -> Unit,
@@ -409,8 +436,8 @@ fun AccountAndFamilyDialog(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
 
-                                        val cleanDigits = supportPhone.filter { it.isDigit() }.ifBlank { "01125002428" }
-                                        val waPhone = if (cleanDigits.startsWith("2")) cleanDigits else "2$cleanDigits"
+                                        val cleanOtpDigits = otpWhatsappPhone.filter { it.isDigit() }.ifBlank { "01141271027" }
+                                        val waOtpPhone = if (cleanOtpDigits.startsWith("2")) cleanOtpDigits else "2$cleanOtpDigits"
                                         val waMessage = "مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ${activeAccount.fullName} - الرقم: ${activeAccount.phone}"
 
                                         Button(
@@ -418,7 +445,7 @@ fun AccountAndFamilyDialog(
                                                 val encoded = URLEncoder.encode(waMessage, "UTF-8")
                                                 val intent = Intent(
                                                     Intent.ACTION_VIEW,
-                                                    Uri.parse("https://wa.me/$waPhone?text=$encoded"),
+                                                    Uri.parse("https://wa.me/$waOtpPhone?text=$encoded"),
                                                 )
                                                 context.startActivity(intent)
                                             },

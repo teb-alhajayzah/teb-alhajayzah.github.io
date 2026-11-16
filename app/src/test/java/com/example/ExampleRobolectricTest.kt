@@ -49,6 +49,7 @@ class ExampleRobolectricTest {
         assertEquals("v1.0.0", AppConfig.defaultBrand.appVersionLabel)
         assertTrue(AppConfig.defaultBrand.apkDownloadUrl.endsWith("teb-alhajayzah.apk"))
         assertEquals("01125002428", AppConfig.defaultBrand.supportPhone)
+        assertEquals("01141271027", AppConfig.defaultBrand.otpWhatsappPhone)
     }
 
     @Test
