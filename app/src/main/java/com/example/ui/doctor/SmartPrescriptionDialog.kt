@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarOutline
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -54,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -83,8 +86,10 @@ import com.example.ui.theme.SlotAvailableBorder
 import com.example.ui.theme.SlotAvailableText
 import com.example.ui.theme.SlotBookedBorder
 import com.example.ui.theme.TealPrimary
+import com.example.util.BilingualMedicalTranslator
 import com.example.util.ImageStorageHelper
 import com.example.util.PrescriptionPrintHelper
+import com.example.util.SpecialtyCatalog
 import com.example.util.TimeUtils
 import java.io.File
 
@@ -93,6 +98,7 @@ private data class SelectedRxItem(
     val tradeName: String,
     val strength: String,
     val dosage: String,
+    val dosageEn: String,
 )
 
 @Composable
@@ -110,6 +116,11 @@ fun SmartPrescriptionDialog(
         medicationsText: String,
         notes: String,
         attachmentPath: String,
+        diagnosisEn: String,
+        medicationsEn: String,
+        notesEn: String,
+        aiReportAr: String,
+        aiReportEn: String,
     ) -> Unit,
     onShowMessage: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -117,7 +128,14 @@ fun SmartPrescriptionDialog(
     val context = LocalContext.current
 
     var diagnosis by remember { mutableStateOf("") }
+    var diagnosisEn by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    var notesEn by remember { mutableStateOf("") }
+    var aiReportAr by remember { mutableStateOf("") }
+    var aiReportEn by remember { mutableStateOf("") }
+    var showBilingualSection by remember { mutableStateOf(false) }
+    var printAsEnglish by remember { mutableStateOf(isEn) }
+
     var searchQuery by remember { mutableStateOf("") }
     // 0 = تخصص العيادة, 1 = المفضلة, 2 = الكل
     var medFilterMode by remember { mutableIntStateOf(0) }
@@ -128,6 +146,10 @@ fun SmartPrescriptionDialog(
     var tempCameraFile by remember { mutableStateOf<File?>(null) }
 
     val selectedItems = remember { mutableStateListOf<SelectedRxItem>() }
+
+    val doctorMedCatalogKeys = remember(doctor.specialty, doctor.additionalSpecialties) {
+        SpecialtyCatalog.medicationCatalogKeysForDoctor(doctor)
+    }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
@@ -162,12 +184,12 @@ fun SmartPrescriptionDialog(
         medFilterMode,
         selectedSpecialtyChip,
         favoriteMedIds,
-        doctor.specialty,
+        doctorMedCatalogKeys,
     ) {
         val q = searchQuery.trim()
         medications.filter { med ->
             val matchesMode = when (medFilterMode) {
-                0 -> med.specialty == doctor.specialty
+                0 -> doctorMedCatalogKeys.isEmpty() || med.specialty in doctorMedCatalogKeys
                 1 -> med.id in favoriteMedIds
                 else -> selectedSpecialtyChip == null || med.specialty == selectedSpecialtyChip
             }
@@ -176,8 +198,6 @@ fun SmartPrescriptionDialog(
                 med.activeIngredient.contains(q, ignoreCase = true) ||
                 med.strength.contains(q, ignoreCase = true) ||
                 med.specialty.contains(q, ignoreCase = true)
-            // When user types a search query, search across all meds if desired or keep mode?
-            // Searching across all specialties when query is non-empty makes finding any med instant!
             if (q.isNotEmpty() && medFilterMode != 1) matchesSearch else (matchesMode && matchesSearch)
         }
     }
@@ -185,8 +205,50 @@ fun SmartPrescriptionDialog(
     fun buildMedicationsText(): String {
         return selectedItems.joinToString("\n") { item ->
             val strengthPart = if (item.strength.isNotBlank()) " ${item.strength}" else ""
-            "• ${item.tradeName}$strengthPart — ${item.dosage.ifBlank { bi(isEn, "حسب إرشادات الطبيب", "As directed") }}"
+            val arDose = BilingualMedicalTranslator.toArabicDosage(item.dosage.ifBlank { "حسب إرشادات الطبيب" })
+            "• ${item.tradeName}$strengthPart — $arDose"
         }
+    }
+
+    fun buildMedicationsTextEn(): String {
+        return selectedItems.joinToString("\n") { item ->
+            val strengthPart = if (item.strength.isNotBlank()) " ${item.strength}" else ""
+            val rawLine = "• ${item.tradeName}$strengthPart — ${item.dosageEn.ifBlank { BilingualMedicalTranslator.toEnglishDosage(item.dosage) }}"
+            BilingualMedicalTranslator.translateMedicationsLineToEnglish(rawLine)
+        }
+    }
+
+    fun generateBilingualDraft() {
+        val medsAr = buildMedicationsText()
+        val bundle = BilingualMedicalTranslator.buildBilingualBundle(
+            patientName = slot.patientName,
+            doctorName = doctor.doctorName,
+            specialty = doctor.specialty,
+            diagnosisInput = diagnosis.ifBlank { diagnosisEn },
+            medicationsInput = medsAr,
+            notesInput = notes.ifBlank { notesEn },
+            existingDiagnosisEn = diagnosisEn,
+            existingMedicationsEn = "",
+            existingNotesEn = notesEn,
+        )
+        if (diagnosis.isBlank()) diagnosis = bundle.diagnosisAr
+        diagnosisEn = bundle.diagnosisEn
+        if (notes.isBlank() && bundle.notesAr.isNotBlank()) notes = bundle.notesAr
+        if (notesEn.isBlank() && bundle.notesEn.isNotBlank()) notesEn = bundle.notesEn
+        aiReportAr = bundle.aiReportAr
+        aiReportEn = bundle.aiReportEn
+        selectedItems.forEachIndexed { idx, item ->
+            val translatedEn = BilingualMedicalTranslator.toEnglishDosage(item.dosage)
+            selectedItems[idx] = item.copy(dosageEn = translatedEn)
+        }
+        showBilingualSection = true
+        onShowMessage(
+            bi(
+                isEn,
+                "تم توليد الروشتة والتقرير الطبي باللغتين (AR + EN) بنجاح — يمكنك مراجعتهما قبل الإرسال",
+                "Bilingual AR + EN Rx and Medical Report generated — review or edit before sending",
+            )
+        )
     }
 
     fun addMedicationToRx(med: EgyptianMedication) {
@@ -201,6 +263,7 @@ fun SmartPrescriptionDialog(
                 tradeName = med.tradeName,
                 strength = med.strength,
                 dosage = med.defaultDosage,
+                dosageEn = BilingualMedicalTranslator.toEnglishDosage(med.defaultDosage),
             )
         )
     }
@@ -230,7 +293,7 @@ fun SmartPrescriptionDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = bi(isEn, "الروشتة الإلكترونية الذكية", "Smart Electronic Prescription"),
+                            text = bi(isEn, "الروشتة الإلكترونية الذكية (AR / EN)", "Smart Bilingual Prescription (AR / EN)"),
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
@@ -284,12 +347,12 @@ fun SmartPrescriptionDialog(
                     }
                 }
 
-                // Diagnosis Field
+                // Diagnosis Field (Arabic or English)
                 OutlinedTextField(
                     value = diagnosis,
                     onValueChange = { diagnosis = it },
-                    label = { Text(bi(isEn, "التشخيص الطبي *", "Medical Diagnosis *")) },
-                    placeholder = { Text(bi(isEn, "مثال: التهاب بالحلق / ارتجاع مريئي / تسوس ضرس...", "e.g., Acute pharyngitis / GERD...")) },
+                    label = { Text(bi(isEn, "التشخيص الطبي (بالعربية أو الإنجليزية) *", "Medical Diagnosis (AR or EN) *")) },
+                    placeholder = { Text(bi(isEn, "مثال: التهاب بالحلق / Acute Tonsillitis / متابعة حمل...", "e.g., Acute pharyngitis / GERD...")) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -379,7 +442,7 @@ fun SmartPrescriptionDialog(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 230.dp),
+                        .heightIn(min = 120.dp, max = 220.dp),
                 ) {
                     if (filteredMedications.isEmpty()) {
                         Column(
@@ -535,7 +598,10 @@ fun SmartPrescriptionDialog(
                                     OutlinedTextField(
                                         value = rxItem.dosage,
                                         onValueChange = { updated ->
-                                            selectedItems[index] = rxItem.copy(dosage = updated)
+                                            selectedItems[index] = rxItem.copy(
+                                                dosage = updated,
+                                                dosageEn = BilingualMedicalTranslator.toEnglishDosage(updated),
+                                            )
                                         },
                                         label = { Text(bi(isEn, "الجرعة وطريقة الاستخدام", "Dosage & Instructions")) },
                                         singleLine = true,
@@ -545,7 +611,10 @@ fun SmartPrescriptionDialog(
                                         items(MedicationCatalog.dosagePresets) { preset ->
                                             AssistChip(
                                                 onClick = {
-                                                    selectedItems[index] = rxItem.copy(dosage = preset)
+                                                    selectedItems[index] = rxItem.copy(
+                                                        dosage = preset,
+                                                        dosageEn = BilingualMedicalTranslator.toEnglishDosage(preset),
+                                                    )
                                                 },
                                                 label = { Text(preset) },
                                             )
@@ -593,12 +662,14 @@ fun SmartPrescriptionDialog(
                             IconButton(
                                 onClick = {
                                     if (customMedName.isNotBlank()) {
+                                        val finalDosage = customMedDosage.trim().ifBlank { bi(isEn, "حسب إرشادات الطبيب", "As directed") }
                                         selectedItems.add(
                                             SelectedRxItem(
                                                 uid = "custom_${System.currentTimeMillis()}",
                                                 tradeName = customMedName.trim(),
                                                 strength = "",
-                                                dosage = customMedDosage.trim().ifBlank { bi(isEn, "حسب إرشادات الطبيب", "As directed") },
+                                                dosage = finalDosage,
+                                                dosageEn = BilingualMedicalTranslator.toEnglishDosage(finalDosage),
                                             )
                                         )
                                         customMedName = ""
@@ -618,6 +689,79 @@ fun SmartPrescriptionDialog(
                     label = { Text(bi(isEn, "تعليمات وملاحظات للمريض (اختياري)", "Notes for Patient (optional)")) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                // Bilingual AI Generator Banner & Editable AR/EN Section
+                Button(
+                    onClick = { generateBilingualDraft() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("rx_generate_bilingual_ai"),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        bi(
+                            isEn,
+                            "توليد الروشتة والتقرير باللغتين (AR + EN)",
+                            "Auto-Generate Bilingual AR + EN Rx & Report",
+                        )
+                    )
+                }
+
+                if (showBilingualSection) {
+                    Surface(
+                        color = TealPrimary.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = bi(
+                                    isEn,
+                                    "مراجعة النسخة الثنائية اللغة (عربي مبسط للمريض / إنجليزي دقيق للصيدلي):",
+                                    "Review Bilingual Output (Simplified Arabic / Clinical English):",
+                                ),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = TealPrimary,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            OutlinedTextField(
+                                value = diagnosisEn,
+                                onValueChange = { diagnosisEn = it },
+                                label = { Text("Clinical Diagnosis (EN)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            OutlinedTextField(
+                                value = notesEn,
+                                onValueChange = { notesEn = it },
+                                label = { Text("Clinical Notes (EN)") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            OutlinedTextField(
+                                value = aiReportAr,
+                                onValueChange = { aiReportAr = it },
+                                label = { Text("التقرير الطبي المبسط للمريض (AR)") },
+                                minLines = 3,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            OutlinedTextField(
+                                value = aiReportEn,
+                                onValueChange = { aiReportEn = it },
+                                label = { Text("Clinical Medical Report (EN)") },
+                                minLines = 3,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
 
                 // Optional Paper Rx Camera / Gallery Attachment
                 Row(
@@ -674,9 +818,39 @@ fun SmartPrescriptionDialog(
 
                 HorizontalDivider()
 
-                // Print / PDF Action Button
+                // Print language toggle + Print / PDF Action Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip(
+                        selected = !printAsEnglish,
+                        onClick = { printAsEnglish = false },
+                        label = { Text("طباعة (AR)") },
+                    )
+                    FilterChip(
+                        selected = printAsEnglish,
+                        onClick = { printAsEnglish = true },
+                        label = { Text("Print (EN)") },
+                    )
+                }
+
                 OutlinedButton(
                     onClick = {
+                        val medsAr = buildMedicationsText()
+                        val medsEn = buildMedicationsTextEn()
+                        val bundle = BilingualMedicalTranslator.buildBilingualBundle(
+                            patientName = slot.patientName,
+                            doctorName = doctor.doctorName,
+                            specialty = doctor.specialty,
+                            diagnosisInput = diagnosis.ifBlank { diagnosisEn.ifBlank { "كشف طبي عام" } },
+                            medicationsInput = medsAr,
+                            notesInput = notes,
+                            existingDiagnosisEn = diagnosisEn,
+                            existingMedicationsEn = medsEn,
+                            existingNotesEn = notesEn,
+                        )
                         val draftRecord = MedicalRecordEntity(
                             id = "preview_${System.currentTimeMillis()}",
                             familyMemberId = slot.familyMemberId,
@@ -685,17 +859,23 @@ fun SmartPrescriptionDialog(
                             doctorId = doctor.id,
                             doctorName = doctor.doctorName,
                             specialty = doctor.specialty,
-                            visitDateLabel = TimeUtils.formatTodayLabelAr(isEn),
-                            diagnosis = diagnosis.ifBlank { bi(isEn, "كشف طبي عام", "General Consultation") },
-                            medications = buildMedicationsText(),
-                            notes = notes,
+                            visitDateLabel = TimeUtils.formatTodayLabelAr(printAsEnglish),
+                            diagnosis = bundle.diagnosisAr,
+                            medications = bundle.medicationsAr.ifBlank { medsAr },
+                            notes = bundle.notesAr,
                             attachmentPath = attachmentPath,
                             recordType = MedicalRecordType.PRESCRIPTION,
+                            diagnosisEn = bundle.diagnosisEn,
+                            medicationsEn = bundle.medicationsEn,
+                            notesEn = bundle.notesEn,
+                            aiReportAr = aiReportAr.ifBlank { bundle.aiReportAr },
+                            aiReportEn = aiReportEn.ifBlank { bundle.aiReportEn },
                         )
                         PrescriptionPrintHelper.printPrescription(
                             context = context,
                             brandConfig = brandConfig,
                             record = draftRecord,
+                            isEnglish = printAsEnglish,
                             onError = onShowMessage,
                         )
                     },
@@ -707,17 +887,27 @@ fun SmartPrescriptionDialog(
                 ) {
                     Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(bi(isEn, "طباعة الروشتة (Print / PDF)", "Print Prescription (PDF)"))
+                    Text(
+                        if (printAsEnglish) "Print Prescription & Report (EN PDF)"
+                        else "طباعة الروشتة والتقرير (AR Print / PDF)"
+                    )
                 }
 
                 // Save and Send to Patient EMR Button
                 Button(
                     onClick = {
+                        val medsAr = buildMedicationsText()
+                        val medsEn = buildMedicationsTextEn()
                         onSaveAndComplete(
                             diagnosis,
-                            buildMedicationsText(),
+                            medsAr,
                             notes,
                             attachmentPath,
+                            diagnosisEn,
+                            medsEn,
+                            notesEn,
+                            aiReportAr,
+                            aiReportEn,
                         )
                     },
                     modifier = Modifier

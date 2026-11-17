@@ -16,15 +16,21 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.MedicalInformation
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,8 +51,9 @@ fun AiMedicalSummaryCard(
     isEn: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val summary = remember(patientName, records, isEn) {
-        MedicalSummaryAnalyzer.summarize(patientName, records, isEn = isEn)
+    var cardIsEn by remember(isEn) { mutableStateOf(isEn) }
+    val summary = remember(patientName, records, cardIsEn) {
+        MedicalSummaryAnalyzer.summarize(patientName, records, isEn = cardIsEn)
     }
 
     Card(
@@ -78,7 +85,7 @@ fun AiMedicalSummaryCard(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = if (isEn) "AI Medical Summary" else "الملخص الطبي الذكي",
+                            contentDescription = if (cardIsEn) "AI Medical Summary" else "الملخص الطبي الذكي",
                             tint = TealPrimary,
                             modifier = Modifier
                                 .padding(7.dp)
@@ -87,18 +94,43 @@ fun AiMedicalSummaryCard(
                     }
                     Column {
                         Text(
-                            text = if (isEn) "AI Medical Summary" else "الملخص الطبي المختصر (AI Summary)",
+                            text = if (cardIsEn) "AI Medical Summary" else "الملخص الطبي المختصر (AI Summary)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TealPrimary,
                         )
                         Text(
-                            text = if (isEn) "Auto-generated from visits, prescriptions & lab reports" else "تحليل تلقائي للزيارات والأدوية ونتائج التحاليل",
+                            text = if (cardIsEn) "Auto-generated from visits, prescriptions & lab reports" else "تحليل تلقائي للزيارات والأدوية ونتائج التحاليل",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(6.dp))
+                FilterChip(
+                    selected = cardIsEn,
+                    onClick = { cardIsEn = !cardIsEn },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Translate,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = if (cardIsEn) "AR عرض بالعربية" else "EN English",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = TealPrimary,
+                        selectedLabelColor = Color.White,
+                        selectedLeadingIconColor = Color.White,
+                    ),
+                    modifier = Modifier.testTag("ai_summary_lang_toggle"),
+                )
             }
 
             if (summary.totalRecords > 0) {
@@ -107,19 +139,19 @@ fun AiMedicalSummaryCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     SummaryMiniPill(
-                        label = if (isEn) "Clinics" else "عيادات",
+                        label = if (cardIsEn) "Clinics" else "عيادات",
                         value = summary.platformPrescriptionsCount.toString(),
                         color = TealPrimary,
                         modifier = Modifier.weight(1f),
                     )
                     SummaryMiniPill(
-                        label = if (isEn) "External" else "خارجية",
+                        label = if (cardIsEn) "External" else "خارجية",
                         value = summary.externalVisitsCount.toString(),
                         color = Color(0xFFD97706),
                         modifier = Modifier.weight(1f),
                     )
                     SummaryMiniPill(
-                        label = if (isEn) "Labs/Files" else "معامل وأشعة",
+                        label = if (cardIsEn) "Labs/Files" else "معامل وأشعة",
                         value = summary.labAndImagingCount.toString(),
                         color = Color(0xFF0284C7),
                         modifier = Modifier.weight(1f),
@@ -132,7 +164,7 @@ fun AiMedicalSummaryCard(
                             Icon(Icons.Filled.MedicalInformation, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                if (isEn) "Key Diagnoses & History:" else "أبرز التشخيصات والحالة:",
+                                if (cardIsEn) "Key Diagnoses & History:" else "أبرز التشخيصات والحالة:",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -153,7 +185,7 @@ fun AiMedicalSummaryCard(
                             Icon(Icons.Filled.LocalPharmacy, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                if (isEn) "Current & Logged Medications:" else "الأدوية الحالية والمسجلة:",
+                                if (cardIsEn) "Current & Logged Medications:" else "الأدوية الحالية والمسجلة:",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -174,7 +206,7 @@ fun AiMedicalSummaryCard(
                             Icon(Icons.Filled.Science, contentDescription = null, tint = Color(0xFF0284C7), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                if (isEn) "Recent Labs & Imaging:" else "أحدث التحاليل والأشعة:",
+                                if (cardIsEn) "Recent Labs & Imaging:" else "أحدث التحاليل والأشعة:",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                             )

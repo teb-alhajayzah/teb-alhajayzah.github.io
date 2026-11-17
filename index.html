@@ -904,6 +904,10 @@
         color: #132226;
         direction: rtl;
       }
+      #printSheet.rx-print-ltr {
+        direction: ltr;
+        text-align: left;
+      }
       .rx-print-header {
         border-bottom: 3px solid #0D7377;
         padding-bottom: 12px;
@@ -920,6 +924,10 @@
         border: 1px solid #CBD5E1;
         padding: 10px;
         text-align: right;
+      }
+      #printSheet.rx-print-ltr .rx-table th,
+      #printSheet.rx-print-ltr .rx-table td {
+        text-align: left;
       }
       .rx-table th {
         background: #E0F2F1;
@@ -938,6 +946,43 @@
         background: #F8FCFC;
         page-break-inside: avoid;
       }
+    }
+
+    .rx-lang-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 32px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--teal);
+      background: var(--teal-soft);
+      color: var(--teal-text);
+      font-size: 0.78rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .rx-lang-pill:hover {
+      background: var(--teal);
+      color: #fff;
+    }
+
+    .rx-ai-report-box {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(13, 115, 119, 0.06);
+      border: 1px solid rgba(13, 115, 119, 0.25);
+      font-size: 0.84rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .spec-multi-chip {
+      min-height: 34px;
+      padding: 5px 10px;
+      font-size: 0.8rem;
     }
 
     /* Site Footer */
@@ -1264,8 +1309,530 @@
         return created;
       }
 
-      function createCleanProductionState() {
+      const SPECIALTIES_CATALOG = [
+        { id: 'pediatrics', ar: 'طب الأطفال وحديثي الولادة', en: 'Pediatrics & Neonatology', medKey: 'أطفال وحديثي الولادة', aliases: ['أطفال', 'طب الأطفال', 'أطفال وحديثي الولادة', 'pediatrics'] },
+        { id: 'obgyn', ar: 'النساء والتوليد وتأخر الإنجاب', en: 'Obstetrics & Gynecology', medKey: 'نساء وتوليد', aliases: ['نساء وتوليد', 'النساء والتوليد', 'obgyn', 'ob/gyn'] },
+        { id: 'internal_medicine', ar: 'الباطنة العامة والجهاز الهضمي والكبد', en: 'Internal Medicine & Gastroenterology', medKey: 'باطنة وجهاز هضمي', aliases: ['باطنة', 'الباطنة', 'باطنة وجهاز هضمي', 'internal medicine'] },
+        { id: 'cardiology', ar: 'القلب والأوعية الدموية', en: 'Cardiology', medKey: 'قلب وأوعية دموية', aliases: ['قلب وأوعية دموية', 'قلب', 'cardiology'] },
+        { id: 'general_surgery', ar: 'الجراحة العامة والمناظير', en: 'General Surgery', medKey: 'باطنة وجهاز هضمي', aliases: ['جراحة', 'الجراحة العامة', 'general surgery'] },
+        { id: 'orthopedics', ar: 'العظام والمفاصل والعمود الفقري', en: 'Orthopedics', medKey: 'عظام ومفاصل', aliases: ['عظام', 'عظام ومفاصل', 'orthopedics'] },
+        { id: 'dermatology', ar: 'الجلدية والتناسلية والليزر', en: 'Dermatology', medKey: 'جلدية وتجميل', aliases: ['جلدية', 'جلدية وتجميل', 'dermatology'] },
+        { id: 'ent', ar: 'الأنف والأذن والحنجرة', en: 'ENT', medKey: 'أنف وأذن وحنجرة', aliases: ['أنف وأذن وحنجرة', 'ent'] },
+        { id: 'ophthalmology', ar: 'طب وجراحة العيون', en: 'Ophthalmology', medKey: 'رمد وجراحة عيون', aliases: ['عيون', 'رمد وجراحة عيون', 'ophthalmology'] },
+        { id: 'dentistry', ar: 'طب وجراحة الأسنان', en: 'Dentistry', medKey: 'أسنان', aliases: ['أسنان', 'dentistry'] },
+        { id: 'neurology', ar: 'المخ والأعصاب', en: 'Neurology', medKey: 'باطنة وجهاز هضمي', aliases: ['مخ وأعصاب', 'neurology'] },
+        { id: 'urology', ar: 'المسالك البولية والتناسلية', en: 'Urology', medKey: 'باطنة وجهاز هضمي', aliases: ['مسالك بولية', 'urology'] },
+        { id: 'pulmonology', ar: 'الصدر والجهاز التنفسي', en: 'Pulmonology', medKey: 'باطنة وجهاز هضمي', aliases: ['صدر', 'الجهاز التنفسي', 'pulmonology'] },
+        { id: 'eye_care', ar: 'الرمد', en: 'Eye Care', medKey: 'رمد وجراحة عيون', aliases: ['الرمد', 'eye care'] },
+        { id: 'physical_therapy', ar: 'العلاج الطبيعي', en: 'Physical Therapy', medKey: 'عظام ومفاصل', aliases: ['علاج طبيعي', 'physical therapy'] },
+        { id: 'medical_lab', ar: 'التحاليل الطبية', en: 'Medical Laboratory', medKey: 'باطنة وجهاز هضمي', aliases: ['تحاليل', 'معامل', 'medical laboratory'] },
+        { id: 'radiology', ar: 'الأشعة التشخيصية', en: 'Diagnostic Radiology', medKey: 'عظام ومفاصل', aliases: ['أشعة', 'radiology'] },
+        { id: 'other', ar: 'تخصصات أخرى', en: 'Other Specialties', medKey: '', aliases: ['تخصصات أخرى', 'other', 'other specialties'] }
+      ];
+
+      function findSpecialtyByNameOrAlias(raw) {
+        const clean = String(raw || '').trim().toLowerCase();
+        if (!clean) return null;
+        return SPECIALTIES_CATALOG.find((s) =>
+          s.ar.toLowerCase() === clean ||
+          s.en.toLowerCase() === clean ||
+          (s.aliases || []).some((a) => a.toLowerCase() === clean)
+        ) || null;
+      }
+
+      function normalizeSpecialty(raw) {
+        const found = findSpecialtyByNameOrAlias(raw);
+        return found ? found.ar : String(raw || '').trim();
+      }
+
+      function displaySpecialty(raw, isEnOverride) {
+        const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
+        const clean = String(raw || '').trim();
+        if (!clean) return '';
+        const extSuffix = ' (زيارة خارجية)';
+        const hasExt = clean.endsWith(extSuffix);
+        const baseClean = hasExt ? clean.slice(0, -extSuffix.length).trim() : clean;
+        const found = findSpecialtyByNameOrAlias(baseClean);
+        const base = found ? (isEn ? found.en : found.ar) : baseClean;
+        return hasExt ? (base + (isEn ? ' (External Visit)' : ' (زيارة خارجية)')) : base;
+      }
+
+      function parseAdditionalSpecialties(raw) {
+        if (Array.isArray(raw)) {
+          return raw.map((x) => String(x || '').trim()).filter(Boolean);
+        }
+        return String(raw || '').split(/[|،,]/).map((x) => x.trim()).filter(Boolean);
+      }
+
+      function allDoctorSpecialties(doc) {
+        if (!doc) return [];
+        const list = [];
+        const addUnique = (val) => {
+          const v = String(val || '').trim();
+          if (v && !list.some((x) => x.toLowerCase() === v.toLowerCase())) list.push(v);
+        };
+        addUnique(doc.specialty);
+        parseAdditionalSpecialties(doc.additionalSpecialties).forEach(addUnique);
+        return list;
+      }
+
+      function formatDoctorSpecialties(doc, isEnOverride) {
+        const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
+        return allDoctorSpecialties(doc).map((s) => displaySpecialty(s, isEn)).join(' • ');
+      }
+
+      function doctorMatchesSpecialty(doc, filterSpec) {
+        if (!filterSpec) return true;
+        const targetNorm = normalizeSpecialty(filterSpec).toLowerCase();
+        return allDoctorSpecialties(doc).some((s) =>
+          s.toLowerCase() === String(filterSpec).trim().toLowerCase() ||
+          normalizeSpecialty(s).toLowerCase() === targetNorm
+        );
+      }
+
+      function medicationCatalogKeysForDoctor(doc) {
+        const keys = new Set();
+        allDoctorSpecialties(doc).forEach((spec) => {
+          const item = findSpecialtyByNameOrAlias(spec);
+          if (item && item.medKey) keys.add(item.medKey);
+          else if (spec) keys.add(spec);
+        });
+        return keys;
+      }
+
+      function getDoctorDisplayName(doc, isEnOverride) {
+        const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
+        if (!doc) return '';
+        return (isEn && doc.doctorNameEn) ? doc.doctorNameEn : doc.doctorName;
+      }
+
+      function getClinicDisplayName(doc, isEnOverride) {
+        const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
+        if (!doc) return '';
+        return (isEn && doc.clinicNameEn) ? doc.clinicNameEn : doc.clinicName;
+      }
+
+      function getDoctorLocationDisplay(doc, isEnOverride) {
+        const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
+        if (!doc) return '';
+        if (isEn && doc.locationLabelEn) return doc.locationLabelEn;
+        if (isEn && doc.locationLabel === 'قرية الحجايزة') return 'Al-Hajayzah Village';
+        return doc.locationLabel;
+      }
+
+      const DEFAULT_REAL_DOCTORS = [
+        {
+          id: 'doc_fekry_hajayzah',
+          doctorName: 'د. محمد فكري',
+          doctorNameEn: 'Dr. Mohamed Fekry',
+          specialty: 'النساء والتوليد وتأخر الإنجاب',
+          additionalSpecialties: [],
+          clinicName: 'عيادة د. محمد فكري للنساء والتوليد',
+          clinicNameEn: 'Dr. Mohamed Fekry OB/GYN Clinic',
+          clinicType: 'PRIVATE',
+          locationLabel: 'قرية الحجايزة',
+          locationLabelEn: 'Al-Hajayzah Village',
+          bio: 'أخصائي النساء والتوليد وتأخر الإنجاب ومتابعة الحمل',
+          mapsUrl: '',
+          username: 'dr_fekry',
+          password: '1234',
+          feeEgp: 150,
+          workStartMinutes: 17 * 60,
+          workEndMinutes: 21 * 60,
+          slotDurationMinutes: 20,
+          currentDelayMinutes: 0,
+          rating: 4.9
+        },
+        {
+          id: 'doc_shady_hajayzah',
+          doctorName: 'د. شادي',
+          doctorNameEn: 'Dr. Shady',
+          specialty: 'طب الأطفال وحديثي الولادة',
+          additionalSpecialties: [],
+          clinicName: 'عيادة د. شادي لطب الأطفال',
+          clinicNameEn: 'Dr. Shady Pediatrics Clinic',
+          clinicType: 'PRIVATE',
+          locationLabel: 'قرية الحجايزة',
+          locationLabelEn: 'Al-Hajayzah Village',
+          bio: 'أخصائي طب الأطفال وحديثي الولادة ومتابعة النمو',
+          mapsUrl: '',
+          username: 'dr_shady',
+          password: '1234',
+          feeEgp: 150,
+          workStartMinutes: 17 * 60,
+          workEndMinutes: 21 * 60,
+          slotDurationMinutes: 20,
+          currentDelayMinutes: 0,
+          rating: 4.9
+        }
+      ];
+
+      function seedBaselineRealDoctorsOnce(state) {
+        if (!state || state.seededRealDoctorsV1 === true) return false;
+        let changed = false;
+        DEFAULT_REAL_DOCTORS.forEach((baseDoc) => {
+          const exists = (state.doctors || []).some((d) => d.id === baseDoc.id || d.username === baseDoc.username);
+          if (!exists) {
+            const copyDoc = Object.assign({}, baseDoc, { additionalSpecialties: baseDoc.additionalSpecialties.slice() });
+            state.doctors.push(copyDoc);
+            state.slots = (state.slots || []).concat(buildDoctorSlots(copyDoc));
+            changed = true;
+          }
+        });
+        state.seededRealDoctorsV1 = true;
+        return changed || true;
+      }
+
+      const BilingualMedicalTranslator = (function () {
+        const diagnosisPairs = [
+          ['التهاب حاد باللوزتين', 'Acute Tonsillitis'],
+          ['التهاب بالحلق', 'Acute Pharyngitis (Sore Throat)'],
+          ['نزلة برد', 'Common Cold / Upper Respiratory Tract Infection'],
+          ['انفلونزا', 'Seasonal Influenza'],
+          ['التهاب شعبي', 'Acute Bronchitis'],
+          ['حساسية صدر', 'Bronchial Asthma / Allergic Airway Disease'],
+          ['نزلة معوية بسيطة', 'Mild Acute Gastroenteritis'],
+          ['نزلة معوية', 'Acute Gastroenteritis'],
+          ['ارتجاع مريئي', 'Gastroesophageal Reflux Disease (GERD)'],
+          ['التهاب بالمعدة', 'Gastritis'],
+          ['قولون عصبي', 'Irritable Bowel Syndrome (IBS)'],
+          ['متابعة حمل', 'Routine Antenatal Follow-up'],
+          ['متابعة الحمل', 'Antenatal Care Follow-up'],
+          ['تأخر إنجاب', 'Infertility / Fertility Evaluation'],
+          ['تكيس مبايض', 'Polycystic Ovary Syndrome (PCOS)'],
+          ['أنيميا', 'Iron Deficiency Anemia'],
+          ['فقر دم', 'Anemia'],
+          ['ارتفاع ضغط الدم', 'Hypertension'],
+          ['ضغط دم مرتفع', 'Essential Hypertension'],
+          ['مرض السكري', 'Diabetes Mellitus'],
+          ['السكري', 'Diabetes Mellitus Follow-up'],
+          ['التهاب مسالك بولية', 'Urinary Tract Infection (UTI)'],
+          ['خشونة بالركبة', 'Knee Osteoarthritis'],
+          ['ألم أسفل الظهر', 'Low Back Pain / Lumbar Strain'],
+          ['التهاب مفاصل', 'Arthritis'],
+          ['تسوس أسنان', 'Dental Caries'],
+          ['تسوس ضرس', 'Molar Dental Caries'],
+          ['التهاب اللثة', 'Gingivitis'],
+          ['حساسية جلدية', 'Allergic Dermatitis'],
+          ['إكزيما', 'Eczema / Atopic Dermatitis'],
+          ['التهاب بالعين', 'Conjunctivitis'],
+          ['التهاب بالأذن الوسطى', 'Acute Otitis Media'],
+          ['التهاب الجيوب الأنفية', 'Acute Sinusitis'],
+          ['كشف طبي عام', 'General Medical Consultation'],
+          ['متابعة لدى طبيب خارجي', 'External Specialist Follow-up'],
+          ['متابعة دورية', 'Routine Clinical Follow-up']
+        ];
+
+        const phrasePairs = [
+          ['كيس على نصف كوب ماء عند اللزوم', '1 sachet in half glass of water as needed'],
+          ['قرص قبل الفطار بنصف ساعة', '1 tablet 30 min before breakfast'],
+          ['قرص قبل الأكل بنصف ساعة 3 مرات', '1 tablet 30 min before meals 3 times daily'],
+          ['قرص بعد الأكل كل 12 ساعة لمدة 5 أيام', '1 tablet after meals every 12 hours for 5 days'],
+          ['قرص كل 12 ساعة لمدة 7 أيام', '1 tablet every 12 hours for 7 days'],
+          ['قرص كل 12 ساعة لمدة 5 أيام', '1 tablet every 12 hours for 5 days'],
+          ['قرص كل 8 ساعات بعد الأكل لمدة 5 أيام', '1 tablet every 8 hours after meals for 5 days'],
+          ['قرص كل 8 ساعات بعد الأكل عند اللزوم', '1 tablet every 8 hours after meals as needed'],
+          ['قرص كل 8 ساعات بعد الأكل', '1 tablet every 8 hours after meals'],
+          ['قرص كل 8 ساعات', '1 tablet every 8 hours'],
+          ['قرص كل 12 ساعة', '1 tablet every 12 hours'],
+          ['قرص كل 6 ساعات', '1 tablet every 6 hours'],
+          ['قرص صباحاً يومياً', '1 tablet once daily in the morning'],
+          ['قرص مساءً يومياً', '1 tablet once daily in the evening'],
+          ['قرص بعد الغداء يومياً', '1 tablet daily after lunch'],
+          ['قرص بعد وجبة الغداء يومياً', '1 tablet daily after lunch'],
+          ['قرص قبل الفطار يومياً', '1 tablet daily before breakfast'],
+          ['قرص يومياً في نفس الموعد', '1 tablet once daily at the same time'],
+          ['قرص واحد يومياً لمدة 7 أيام', '1 tablet once daily for 7 days'],
+          ['كبسولة كل 6 ساعات لمدة 5 أيام', '1 capsule every 6 hours for 5 days'],
+          ['كبسولة كل 8 ساعات لمدة 5 أيام', '1 capsule every 8 hours for 5 days'],
+          ['كبسولة كل 8 ساعات بعد الأكل', '1 capsule every 8 hours after meals'],
+          ['كبسولة بعد الغداء بساعتين يومياً', '1 capsule daily 2 hours after lunch'],
+          ['كبسولة بعد الوجبة الرئيسية يومياً', '1 capsule daily after main meal'],
+          ['كبسولة مساءً يومياً', '1 capsule once daily in the evening'],
+          ['5 سم كل 12 ساعة لمدة 7 أيام', '5 ml every 12 hours for 7 days'],
+          ['5 سم كل 8 ساعات بعد الأكل لخفض الحرارة', '5 ml every 8 hours after meals for fever'],
+          ['5 سم كل 6 ساعات عند اللزوم', '5 ml every 6 hours as needed'],
+          ['5 سم 3 مرات يومياً', '5 ml 3 times daily'],
+          ['5 سم كل 12 ساعة', '5 ml every 12 hours'],
+          ['5 سم كل 8 ساعات', '5 ml every 8 hours'],
+          ['5 نقط مساءً يومياً', '5 drops once daily in the evening'],
+          ['جلسة بخار صباحاً ومساءً', 'Nebulizer session morning and evening'],
+          ['قطرة في العين المصابة 3 مرات يومياً', '1 drop in affected eye 3 times daily'],
+          ['قطرة كل 6 ساعات لترطيب العين', '1 drop every 6 hours for eye lubrication'],
+          ['قطرة 3 مرات يومياً لمدة 7 أيام', '1 drop 3 times daily for 7 days'],
+          ['قطرة 3 مرات يومياً', '1 drop 3 times daily'],
+          ['بختان في كل فتحة أنف مرة يومياً', '2 sprays in each nostril once daily'],
+          ['دهان موضعي مرتين يومياً على موضع الألم', 'Apply topically twice daily to painful area'],
+          ['دهان موضعي مرتين يومياً لمدة 5 أيام', 'Apply topically twice daily for 5 days'],
+          ['دهان موضعي 3 مرات يومياً', 'Apply topically 3 times daily'],
+          ['دهان موضعي مرتين يومياً', 'Apply topically twice daily'],
+          ['مضمضة مرتين يومياً بعد غسل الأسنان', 'Mouthwash twice daily after brushing'],
+          ['ملعقة كبيرة بعد الأكل وعند اللزوم', '1 tablespoon after meals and as needed'],
+          ['مرة واحدة مساءً لمدة 3 أيام', 'Once nightly for 3 days'],
+          ['مرة واحدة يومياً بعد وجبة دسمة', 'Once daily after a main meal'],
+          ['قبل الفطار بنصف ساعة', '30 minutes before breakfast'],
+          ['بعد الأكل مباشرة', 'Immediately after meals'],
+          ['لمدة 5 أيام', 'for 5 days'],
+          ['لمدة 7 أيام', 'for 7 days'],
+          ['لمدة أسبوعين', 'for 2 weeks'],
+          ['عند اللزوم', 'as needed'],
+          ['حسب إرشادات الطبيب', 'As directed by physician'],
+          ['حسب الإرشادات', 'As directed']
+        ];
+
+        const notePairs = [
+          ['الراحة التامة وشرب سوائل دافئة', 'Complete rest and adequate warm fluids.'],
+          ['الراحة وشرب سوائل دافئة', 'Adequate rest and warm fluids.'],
+          ['شرب سوائل بكثرة', 'Maintain good oral hydration with plenty of fluids.'],
+          ['الالتزام بمواعيد الدواء ومراجعة الطبيب عند اللزوم', 'Adhere strictly to medication schedule and follow up if symptoms persist.'],
+          ['متابعة بعد أسبوع', 'Follow-up visit in 1 week.'],
+          ['تجنب الأطعمة الدسمة والحارة', 'Avoid spicy, fried, and fatty foods.'],
+          ['الالتزام بالراحة وتجنب المجهود', 'Rest and avoid strenuous physical activity.'],
+          ['قياس ضغط الدم يومياً', 'Monitor blood pressure daily.']
+        ];
+
+        function containsArabic(text) {
+          return /[\u0600-\u06FF]/.test(String(text || ''));
+        }
+
+        function toEnglishDiagnosis(input) {
+          const clean = String(input || '').trim();
+          if (!clean) return '';
+          if (!containsArabic(clean)) return clean;
+          const exact = diagnosisPairs.find((p) => p[0].toLowerCase() === clean.toLowerCase());
+          if (exact) return exact[1];
+          const partial = diagnosisPairs.find((p) => clean.toLowerCase().includes(p[0].toLowerCase()));
+          if (partial) {
+            const rest = clean.replace(partial[0], '').replace(/^[\s\-،,]+|[\s\-،,]+$/g, '');
+            return rest ? (partial[1] + ' (' + rest + ')') : partial[1];
+          }
+          return 'Clinical Assessment: ' + clean;
+        }
+
+        function toArabicDiagnosis(input) {
+          const clean = String(input || '').trim();
+          if (!clean) return '';
+          if (containsArabic(clean)) return clean;
+          const exact = diagnosisPairs.find((p) => p[1].toLowerCase() === clean.toLowerCase());
+          if (exact) return exact[0];
+          const partial = diagnosisPairs.find((p) => clean.toLowerCase().includes(p[1].toLowerCase()));
+          if (partial) return partial[0];
+          return 'تقييم طبي: ' + clean;
+        }
+
+        function toEnglishDosage(dosage) {
+          const clean = String(dosage || '').trim();
+          if (!clean) return 'As directed by physician';
+          if (!containsArabic(clean)) return clean;
+          let t = clean;
+          phrasePairs.forEach((p) => {
+            if (t.includes(p[0])) t = t.split(p[0]).join(p[1]);
+          });
+          t = t
+            .replace(/مجم/g, 'mg')
+            .replace(/مكجم/g, 'mcg')
+            .replace(/جم/g, 'g')
+            .replace(/سم/g, 'ml')
+            .replace(/مل/g, 'ml')
+            .replace(/قرص/g, 'tablet')
+            .replace(/كبسولة/g, 'capsule')
+            .replace(/شراب/g, 'syrup')
+            .replace(/قطرة/g, 'drops')
+            .replace(/ساعات/g, 'hours')
+            .replace(/ساعة/g, 'hour')
+            .replace(/أيام/g, 'days')
+            .replace(/يومياً/g, 'daily')
+            .replace(/صباحاً/g, 'morning')
+            .replace(/مساءً/g, 'evening')
+            .replace(/بعد الأكل/g, 'after meals')
+            .replace(/قبل الأكل/g, 'before meals');
+          return t.trim();
+        }
+
+        function toArabicDosage(dosage) {
+          const clean = String(dosage || '').trim();
+          if (!clean) return 'حسب إرشادات الطبيب';
+          if (containsArabic(clean)) return clean;
+          let t = clean;
+          phrasePairs.forEach((p) => {
+            const re = new RegExp(p[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            t = t.replace(re, p[0]);
+          });
+          t = t
+            .replace(/every 12 hours/gi, 'كل 12 ساعة')
+            .replace(/every 8 hours/gi, 'كل 8 ساعات')
+            .replace(/every 6 hours/gi, 'كل 6 ساعات')
+            .replace(/1 tablet/gi, 'قرص')
+            .replace(/1 capsule/gi, 'كبسولة')
+            .replace(/after meals/gi, 'بعد الأكل')
+            .replace(/before breakfast/gi, 'قبل الفطار')
+            .replace(/as needed/gi, 'عند اللزوم');
+          return t.trim();
+        }
+
+        function translateMedicationsLineToEnglish(line) {
+          const stripped = String(line || '').trim().replace(/^[•\-\*]\s*/, '');
+          if (!stripped) return '';
+          const sepIdx = stripped.indexOf('—');
+          const rawDrug = (sepIdx >= 0 ? stripped.slice(0, sepIdx) : stripped).trim();
+          const rawDose = (sepIdx >= 0 ? stripped.slice(sepIdx + 1) : '').trim();
+
+          const parenMatch = rawDrug.match(/\(([A-Za-z0-9\s\-]+)\)/);
+          let cleanDrugEn;
+          if (parenMatch) {
+            const enBrand = parenMatch[1].trim();
+            const after = rawDrug.slice(parenMatch.index + parenMatch[0].length).trim()
+              .replace(/مجم\/5\s*مل/g, 'mg/5ml')
+              .replace(/مجم\/مل/g, 'mg/ml')
+              .replace(/مجم/g, 'mg')
+              .replace(/مكجم/g, 'mcg')
+              .replace(/جم/g, 'g')
+              .replace(/وحدة/g, 'IU');
+            cleanDrugEn = (enBrand + ' ' + after).trim();
+          } else {
+            cleanDrugEn = rawDrug
+              .replace(/شراب/g, 'Syrup')
+              .replace(/أقراص/g, 'Tablets')
+              .replace(/كبسول/g, 'Capsules')
+              .replace(/كريم/g, 'Cream')
+              .replace(/قطرة/g, 'Drops')
+              .replace(/مجم/g, 'mg')
+              .replace(/جم/g, 'g')
+              .replace(/مل/g, 'ml');
+          }
+          const doseEn = toEnglishDosage(rawDose || 'حسب إرشادات الطبيب');
+          return '• ' + cleanDrugEn + ' — ' + doseEn;
+        }
+
+        function translateMedicationsText(raw, toEnglish) {
+          const clean = String(raw || '').trim();
+          if (!clean) return '';
+          return clean.split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+            if (toEnglish) return translateMedicationsLineToEnglish(line);
+            const stripped = line.replace(/^[•\-\*]\s*/, '');
+            const sepIdx = stripped.indexOf('—');
+            const drugPart = (sepIdx >= 0 ? stripped.slice(0, sepIdx) : stripped).trim();
+            const dosePart = (sepIdx >= 0 ? stripped.slice(sepIdx + 1) : '').trim();
+            return dosePart ? ('• ' + drugPart + ' — ' + toArabicDosage(dosePart)) : ('• ' + drugPart);
+          }).join('\n');
+        }
+
+        function toEnglishNotes(notes) {
+          const clean = String(notes || '').trim();
+          if (!clean) return '';
+          if (!containsArabic(clean)) return clean;
+          const exact = notePairs.find((p) => p[0].toLowerCase() === clean.toLowerCase());
+          if (exact) return exact[1];
+          let res = clean;
+          notePairs.forEach((p) => { res = res.split(p[0]).join(p[1]); });
+          return containsArabic(res) ? ('Clinical Note: ' + res) : res;
+        }
+
+        function toArabicNotes(notes) {
+          const clean = String(notes || '').trim();
+          if (!clean) return '';
+          if (containsArabic(clean)) return clean;
+          const exact = notePairs.find((p) => p[1].toLowerCase() === clean.toLowerCase());
+          if (exact) return exact[0];
+          return 'ملاحظات الطبيب: ' + clean;
+        }
+
+        function buildBilingualBundle(opts) {
+          const cleanDiag = String(opts.diagnosisInput || '').trim() || 'كشف طبي عام';
+          const diagAr = toArabicDiagnosis(cleanDiag);
+          const diagEn = String(opts.existingDiagnosisEn || '').trim() || toEnglishDiagnosis(cleanDiag);
+          const medsInput = String(opts.medicationsInput || '').trim();
+          const medsAr = translateMedicationsText(medsInput, false) || medsInput;
+          const medsEn = String(opts.existingMedicationsEn || '').trim() || translateMedicationsText(medsInput, true);
+          const notesInput = String(opts.notesInput || '').trim();
+          const notesAr = toArabicNotes(notesInput);
+          const notesEn = String(opts.existingNotesEn || '').trim() || toEnglishNotes(notesInput);
+          const specAr = displaySpecialty(opts.specialty || '', false);
+          const specEn = displaySpecialty(opts.specialty || '', true);
+          const medCount = medsAr ? medsAr.split('\n').filter((l) => l.trim()).length : 0;
+          const pAr = opts.patientName || 'المريض';
+          const pEn = opts.patientName || 'Patient';
+          const dName = opts.doctorName || '';
+
+          const aiReportAr = [
+            'التقرير الطبي المبسط للمريض (' + pAr + '):',
+            '• الطبيب المعالج: ' + dName + (specAr ? ' (' + specAr + ')' : ''),
+            '• التشخيص الطبي: ' + diagAr,
+            medCount > 0
+              ? '• الخطة العلاجية: تم وصف ' + medCount + ' صنف دوائي بالجرعات المحددة بالروشتة.'
+              : '• الخطة العلاجية: متابعة إكلينيكية بدون أدوية مضافة حالياً.',
+            notesAr ? ('• إرشادات مهمة: ' + notesAr) : '',
+            '• تنبيه: يرجى الالتزام بالجرعات وعدم إيقاف العلاج قبل استشارة الطبيب.'
+          ].filter(Boolean).join('\n');
+
+          const aiReportEn = [
+            'Clinical Medical Report (' + pEn + '):',
+            '• Attending Physician: ' + dName + (specEn ? ' (' + specEn + ')' : ''),
+            '• Assessment / Diagnosis: ' + diagEn,
+            medCount > 0
+              ? '• Therapeutic Plan: ' + medCount + ' prescribed medication(s) as detailed in Rx.'
+              : '• Therapeutic Plan: Clinical observation / conservative management.',
+            notesEn ? ('• Patient Instructions: ' + notesEn) : '',
+            '• Clinical Note: Adhere to prescribed regimen and seek review if symptoms worsen.'
+          ].filter(Boolean).join('\n');
+
+          return {
+            diagnosisAr: diagAr,
+            diagnosisEn: diagEn,
+            medicationsAr: medsAr,
+            medicationsEn: medsEn,
+            notesAr: notesAr,
+            notesEn: notesEn,
+            aiReportAr: aiReportAr,
+            aiReportEn: aiReportEn
+          };
+        }
+
+        function resolveForDisplay(rec, showEnglish) {
+          const b = buildBilingualBundle({
+            patientName: rec.patientName,
+            doctorName: rec.doctorName,
+            specialty: rec.specialty,
+            diagnosisInput: rec.diagnosis,
+            medicationsInput: rec.medications,
+            notesInput: rec.notes,
+            existingDiagnosisEn: rec.diagnosisEn,
+            existingMedicationsEn: rec.medicationsEn,
+            existingNotesEn: rec.notesEn
+          });
+          if (showEnglish) {
+            return {
+              diagnosis: (rec.diagnosisEn && rec.diagnosisEn.trim()) ? rec.diagnosisEn : b.diagnosisEn,
+              medications: (rec.medicationsEn && rec.medicationsEn.trim()) ? rec.medicationsEn : b.medicationsEn,
+              notes: (rec.notesEn && rec.notesEn.trim()) ? rec.notesEn : b.notesEn,
+              aiReport: (rec.aiReportEn && rec.aiReportEn.trim()) ? rec.aiReportEn : b.aiReportEn,
+              specialty: displaySpecialty(rec.specialty, true)
+            };
+          }
+          return {
+            diagnosis: b.diagnosisAr,
+            medications: b.medicationsAr || rec.medications || '',
+            notes: b.notesAr || rec.notes || '',
+            aiReport: (rec.aiReportAr && rec.aiReportAr.trim()) ? rec.aiReportAr : b.aiReportAr,
+            specialty: displaySpecialty(rec.specialty, false)
+          };
+        }
+
         return {
+          toEnglishDiagnosis: toEnglishDiagnosis,
+          toArabicDiagnosis: toArabicDiagnosis,
+          toEnglishDosage: toEnglishDosage,
+          toArabicDosage: toArabicDosage,
+          translateMedicationsText: translateMedicationsText,
+          toEnglishNotes: toEnglishNotes,
+          toArabicNotes: toArabicNotes,
+          buildBilingualBundle: buildBilingualBundle,
+          resolveForDisplay: resolveForDisplay
+        };
+      })();
+
+      function createCleanProductionState() {
+        const clean = {
           config: Object.assign({}, DEFAULT_CONFIG),
           account: null,
           accounts: [],
@@ -1279,8 +1846,11 @@
           records: [],
           notifications: [],
           activationCodes: generateUniqueCodeList(5, [], 'SYSTEM'),
-          doctorFavorites: {}
+          doctorFavorites: {},
+          seededRealDoctorsV1: false
         };
+        seedBaselineRealDoctorsOnce(clean);
+        return clean;
       }
 
       function containsLegacyDummyData(rawText) {
@@ -1311,6 +1881,9 @@
                 if (!Array.isArray(parsed.activationCodes)) parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
                 if (!parsed.doctorFavorites || typeof parsed.doctorFavorites !== 'object') parsed.doctorFavorites = {};
                 parsed.adminSecurity = Object.assign({ failedAttempts: 0, lockoutUntilMillis: 0 }, parsed.adminSecurity || {});
+                if (seedBaselineRealDoctorsOnce(parsed)) {
+                  saveState(parsed);
+                }
                 return parsed;
               }
             }
@@ -1361,23 +1934,13 @@
         adminSearchQuery: '',
         versionTapCount: 0,
         medications: BUILTIN_MEDICATIONS.slice(),
-        isLiveMedsApi: false
+        isLiveMedsApi: false,
+        cardLangOverrides: {}, // { [recordId]: 'ar' | 'en' }
+        aiSummaryLang: null, // null | 'ar' | 'en'
+        lastAiSummaryContext: null // { memberName, records }
       };
 
-      const EXTERNAL_SPECIALTIES = [
-        { ar: 'جلدية', en: 'Dermatology' },
-        { ar: 'نساء وتوليد', en: 'Obstetrics & Gynecology' },
-        { ar: 'قلب وأوعية دموية', en: 'Cardiology' },
-        { ar: 'أسنان', en: 'Dentistry' },
-        { ar: 'أطفال', en: 'Pediatrics' },
-        { ar: 'باطنة', en: 'Internal Medicine' },
-        { ar: 'عظام', en: 'Orthopedics' },
-        { ar: 'أنف وأذن وحنجرة', en: 'ENT' },
-        { ar: 'عيون', en: 'Ophthalmology' },
-        { ar: 'جراحة', en: 'General Surgery' },
-        { ar: 'مسالك بولية', en: 'Urology' },
-        { ar: 'تخصصات أخرى', en: 'Other Specialties' }
-      ];
+      const EXTERNAL_SPECIALTIES = SPECIALTIES_CATALOG;
 
       function bi(arText, enText) {
         return ui.lang === 'en' ? enText : arText;
@@ -1456,7 +2019,8 @@
         reader.readAsDataURL(file);
       }
 
-      function buildMedicalSummary(memberName, records) {
+      function buildMedicalSummary(memberName, records, isEnOverride) {
+        const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
         const sorted = (records || []).slice().sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
         const clinicVisitsCount = sorted.filter((r) => !r.recordType || r.recordType === 'PRESCRIPTION').length;
         const externalVisitsCount = sorted.filter((r) => r.recordType === 'EXTERNAL_VISIT').length;
@@ -1467,15 +2031,16 @@
         const labsSet = new Set();
 
         sorted.forEach((rec) => {
+          const localized = BilingualMedicalTranslator.resolveForDisplay(rec, isEn);
           if (rec.recordType === 'LAB_RESULT' || rec.recordType === 'PATIENT_UPLOAD') {
-            if (rec.diagnosis && labsSet.size < 4) {
-              labsSet.add(rec.diagnosis + (rec.visitDateLabel ? ' (' + rec.visitDateLabel + ')' : ''));
+            if (localized.diagnosis && labsSet.size < 4) {
+              labsSet.add(localized.diagnosis + (rec.visitDateLabel ? ' (' + rec.visitDateLabel + ')' : ''));
             }
           } else {
-            if (rec.diagnosis && diagnosesSet.size < 5) {
-              diagnosesSet.add(rec.diagnosis + (rec.visitDateLabel ? ' — ' + rec.visitDateLabel : ''));
+            if (localized.diagnosis && diagnosesSet.size < 5) {
+              diagnosesSet.add(localized.diagnosis + (rec.visitDateLabel ? ' — ' + rec.visitDateLabel : ''));
             }
-            String(rec.medications || '')
+            String(localized.medications || '')
               .split('\n')
               .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
               .filter(Boolean)
@@ -1486,7 +2051,7 @@
         });
 
         return {
-          memberName: memberName || bi('المريض', 'Patient'),
+          memberName: memberName || (isEn ? 'Patient' : 'المريض'),
           totalRecords: sorted.length,
           clinicVisitsCount: clinicVisitsCount,
           externalVisitsCount: externalVisitsCount,
@@ -1494,45 +2059,52 @@
           diagnoses: Array.from(diagnosesSet),
           medications: Array.from(medsSet),
           labs: Array.from(labsSet),
-          disclaimer: bi(
-            'تنبيه طبي قياسي: هذا الملخص مولّد آلياً للاستئناس الطبي فقط بناءً على السجلات المضافة ولا يُغني عن التقييم السريري الكامل للطبيب المعالج.',
-            'Standard Medical Disclaimer: This summary is auto-generated for clinical reference only and does not replace a full medical evaluation by the treating physician.'
-          )
+          disclaimer: isEn
+            ? 'Standard Medical Disclaimer: This summary is auto-generated for clinical reference only and does not replace a full medical evaluation by the treating physician.'
+            : 'تنبيه طبي قياسي: هذا الملخص مولّد آلياً للاستئناس الطبي فقط بناءً على السجلات المضافة ولا يُغني عن التقييم السريري الكامل للطبيب المعالج.'
         };
       }
 
       function renderAiMedicalSummaryCardHtml(memberName, records) {
-        const s = buildMedicalSummary(memberName, records);
-        return '<section class="ai-summary-card" id="aiMedicalSummaryCard">' +
+        ui.lastAiSummaryContext = { memberName: memberName, records: records || [] };
+        const cardIsEn = ui.aiSummaryLang ? (ui.aiSummaryLang === 'en') : (ui.lang === 'en');
+        const t = (ar, en) => (cardIsEn ? en : ar);
+        const s = buildMedicalSummary(memberName, records, cardIsEn);
+        return '<section class="ai-summary-card" id="aiMedicalSummaryCard" dir="' + (cardIsEn ? 'ltr' : 'rtl') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
             '<div style="display:flex;align-items:center;gap:8px;">' +
               '<span style="font-size:1.3rem;">🧠</span>' +
               '<div>' +
-                '<div style="font-weight:800;font-size:1rem;color:var(--teal-text);">' + esc(bi('الملخص الطبي المختصر (AI Summary)', 'AI Medical Summary')) + '</div>' +
-                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(bi('تحليل فوري لملف ', 'Instant clinical summary for ')) + esc(s.memberName) + '</div>' +
+                '<div style="font-weight:800;font-size:1rem;color:var(--teal-text);">' + esc(t('التقرير الطبي الذكي الشامل (AI Summary)', 'AI Comprehensive Medical Summary')) + '</div>' +
+                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(t('تحليل فوري لملف ', 'Instant clinical summary for ')) + esc(s.memberName) + '</div>' +
               '</div>' +
             '</div>' +
-            '<span class="badge" style="background:#fff;border:1px solid var(--border);color:var(--teal-text);">' +
-              esc(bi(s.totalRecords + ' سجل', s.totalRecords + ' records')) +
-            '</span>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+              '<button class="rx-lang-pill" type="button" data-toggle-ai-summary-lang="1">' +
+                '🌐 ' + esc(cardIsEn ? 'عرض بالعربية (AR)' : 'عرض بالإنجليزية (EN)') +
+              '</button>' +
+              '<span class="badge" style="background:#fff;border:1px solid var(--border);color:var(--teal-text);">' +
+                esc(t(s.totalRecords + ' سجل', s.totalRecords + ' records')) +
+              '</span>' +
+            '</div>' +
           '</div>' +
           (s.totalRecords === 0
-            ? '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(bi('لا توجد بيانات كافية بعد. سيتحدث الملخص تلقائياً فور إضافة روشتة أو زيارة خارجية أو نتيجة تحليل.', 'No records yet. The AI summary updates automatically when visits or lab results are added.')) + '</div>'
+            ? '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(t('لا توجد بيانات كافية بعد. سيتحدث التقرير تلقائياً فور إضافة روشتة أو زيارة خارجية أو نتيجة تحليل.', 'No records yet. The AI summary updates automatically when visits or lab results are added.')) + '</div>'
             : '<div class="stats-row">' +
-                '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:var(--teal);font-size:1.15rem;">' + s.clinicVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(bi('كشوفات المنصة', 'Clinic Visits')) + '</div></div>' +
-                '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#C2410C;font-size:1.15rem;">' + s.externalVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(bi('زيارات خارجية', 'External Visits')) + '</div></div>' +
-                '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#3730A3;font-size:1.15rem;">' + s.labReportsCount + '</div><div style="font-size:0.74rem;">' + esc(bi('تحاليل وأشعة', 'Lab Reports')) + '</div></div>' +
+                '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:var(--teal);font-size:1.15rem;">' + s.clinicVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(t('كشوفات المنصة', 'Clinic Visits')) + '</div></div>' +
+                '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#C2410C;font-size:1.15rem;">' + s.externalVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(t('زيارات خارجية', 'External Visits')) + '</div></div>' +
+                '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#3730A3;font-size:1.15rem;">' + s.labReportsCount + '</div><div style="font-size:0.74rem;">' + esc(t('تحاليل وأشعة', 'Lab Reports')) + '</div></div>' +
               '</div>' +
               (s.diagnoses.length > 0
-                ? '<div><strong style="font-size:0.84rem;color:var(--teal-text);">🩺 ' + esc(bi('أبرز التشخيصات المسجلة:', 'Key Recorded Diagnoses:')) + '</strong>' +
+                ? '<div><strong style="font-size:0.84rem;color:var(--teal-text);">🩺 ' + esc(t('أبرز التشخيصات المسجلة:', 'Key Recorded Diagnoses:')) + '</strong>' +
                     '<div style="font-size:0.84rem;margin-top:3px;">' + s.diagnoses.map((d) => '• ' + esc(d)).join('<br/>') + '</div></div>'
                 : '') +
               (s.medications.length > 0
-                ? '<div><strong style="font-size:0.84rem;color:var(--teal-text);">💊 ' + esc(bi('الأدوية الحالية / الحديثة:', 'Current / Recent Medications:')) + '</strong>' +
+                ? '<div><strong style="font-size:0.84rem;color:var(--teal-text);">💊 ' + esc(t('الأدوية الحالية / الحديثة:', 'Current / Recent Medications:')) + '</strong>' +
                     '<div style="font-size:0.84rem;margin-top:3px;">' + s.medications.map((m) => '• ' + esc(m)).join('<br/>') + '</div></div>'
                 : '') +
               (s.labs.length > 0
-                ? '<div><strong style="font-size:0.84rem;color:#3730A3;">🧪 ' + esc(bi('أحدث نتائج التحاليل والأشعة:', 'Latest Labs & Imaging:')) + '</strong>' +
+                ? '<div><strong style="font-size:0.84rem;color:#3730A3;">🧪 ' + esc(t('أحدث نتائج التحاليل والأشعة:', 'Latest Labs & Imaging:')) + '</strong>' +
                     '<div style="font-size:0.84rem;margin-top:3px;">' + s.labs.map((l) => '• ' + esc(l)).join('<br/>') + '</div></div>'
                 : '')) +
           '<div class="disclaimer-banner">⚠️ ' + esc(s.disclaimer) + '</div>' +
@@ -1880,50 +2452,70 @@
         return db.familyMembers.find((m) => m.id === db.activeMemberId) || db.familyMembers[0];
       }
 
-      function printPrescription(record) {
+      function printPrescription(record, isEnOverride) {
         const cfg = db.config;
-        const lines = String(record.medications || '')
+        const isEn = typeof isEnOverride === 'boolean'
+          ? isEnOverride
+          : (record && record.id && ui.cardLangOverrides[record.id] ? (ui.cardLangOverrides[record.id] === 'en') : (ui.lang === 'en'));
+        const localized = BilingualMedicalTranslator.resolveForDisplay(record, isEn);
+
+        const lines = String(localized.medications || '')
           .split('\n')
-          .map((l) => l.replace(/^•\s*/, '').trim())
+          .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
           .filter(Boolean);
 
         const rowsHtml = lines.length
           ? lines.map((line, i) => {
               const parts = line.split('—');
               const name = esc((parts[0] || '').trim());
-              const dose = esc((parts.slice(1).join('—') || 'حسب إرشادات الطبيب').trim());
+              const dose = esc((parts.slice(1).join('—') || (isEn ? 'As directed by physician' : 'حسب إرشادات الطبيب')).trim());
               return '<tr><td>' + (i + 1) + '. <strong>' + name + '</strong></td><td>' + dose + '</td></tr>';
             }).join('')
-          : '<tr><td colspan="2">لا توجد أدوية نصية مسجلة</td></tr>';
+          : '<tr><td colspan="2">' + esc(isEn ? 'No medications recorded' : 'لا توجد أدوية نصية مسجلة') + '</td></tr>';
 
-        const notesHtml = record.notes
-          ? '<div style="margin-top:14px;padding:10px;background:#FFFBEB;border:1px solid #F59E0B;border-radius:10px;"><strong>تعليمات وملاحظات:</strong> ' + esc(record.notes) + '</div>'
+        const notesHtml = localized.notes
+          ? '<div style="margin-top:12px;padding:10px;background:#FFFBEB;border:1px solid #F59E0B;border-radius:10px;"><strong>' +
+              esc(isEn ? 'Doctor Notes & Instructions:' : 'تعليمات وملاحظات:') + '</strong> ' + esc(localized.notes) +
+            '</div>'
           : '';
 
-        document.getElementById('printSheet').innerHTML =
+        const reportHtml = localized.aiReport
+          ? '<div style="margin-top:12px;padding:10px 12px;background:#F0FDFD;border:1px solid #0D7377;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.55;">' +
+              '<strong style="color:#0D7377;">' + esc(isEn ? 'Clinical Medical Report (AI):' : 'التقرير الطبي المبسط:') + '</strong>\n' +
+              esc(localized.aiReport) +
+            '</div>'
+          : '';
+
+        const sheet = document.getElementById('printSheet');
+        sheet.classList.toggle('rx-print-ltr', isEn);
+        sheet.innerHTML =
           '<div class="rx-print-header">' +
             '<div>' +
-              '<h2 style="color:#0D7377;margin:0;">' + esc(cfg.platformNameAr) + '</h2>' +
-              '<div style="font-size:13px;color:#4F646B;">' + esc(cfg.villageNameAr) + ' • هاتف: ' + esc(cfg.supportPhone) + '</div>' +
+              '<h2 style="color:#0D7377;margin:0;">' + esc(isEn ? (cfg.platformNameEn || 'Teb Al-Hajayzah') : cfg.platformNameAr) + '</h2>' +
+              '<div style="font-size:13px;color:#4F646B;">' +
+                esc(isEn ? (cfg.villageNameEn || DEFAULT_CONFIG.villageNameEn) : cfg.villageNameAr) +
+                ' • ' + esc(isEn ? 'Phone: ' : 'هاتف: ') + esc(cfg.supportPhone) +
+              '</div>' +
             '</div>' +
-            '<div style="text-align:left;">' +
+            '<div style="text-align:' + (isEn ? 'right' : 'left') + ';">' +
               '<div><strong>' + esc(record.doctorName) + '</strong></div>' +
-              '<div style="font-size:13px;color:#4F646B;">' + esc(record.specialty) + '</div>' +
+              '<div style="font-size:13px;color:#4F646B;">' + esc(localized.specialty) + '</div>' +
             '</div>' +
           '</div>' +
           '<div style="margin:14px 0;padding:12px;background:#F4F8F9;border:1px solid #D0DCE0;border-radius:10px;">' +
-            '<div><strong>اسم المريض:</strong> ' + esc(record.patientName) + ' &nbsp;|&nbsp; <strong>التاريخ:</strong> ' + esc(record.visitDateLabel) + '</div>' +
-            '<div><strong>التشخيص:</strong> ' + esc(record.diagnosis) + '</div>' +
+            '<div><strong>' + esc(isEn ? 'Patient:' : 'اسم المريض:') + '</strong> ' + esc(record.patientName) + ' &nbsp;|&nbsp; <strong>' + esc(isEn ? 'Date:' : 'التاريخ:') + '</strong> ' + esc(record.visitDateLabel) + '</div>' +
+            '<div><strong>' + esc(isEn ? 'Diagnosis:' : 'التشخيص:') + '</strong> ' + esc(localized.diagnosis) + '</div>' +
           '</div>' +
-          '<h3 style="color:#0D7377;margin:10px 0 6px;">℞ الروشتة الطبية</h3>' +
+          '<h3 style="color:#0D7377;margin:10px 0 6px;">℞ ' + esc(isEn ? 'E-Prescription' : 'الروشتة الطبية') + '</h3>' +
           '<table class="rx-table">' +
-            '<thead><tr><th>الدواء والتركيز</th><th>الجرعة وطريقة الاستخدام</th></tr></thead>' +
+            '<thead><tr><th>' + esc(isEn ? 'Medication & Strength' : 'الدواء والتركيز') + '</th><th>' + esc(isEn ? 'Dosage & Instructions' : 'الجرعة وطريقة الاستخدام') + '</th></tr></thead>' +
             '<tbody>' + rowsHtml + '</tbody>' +
           '</table>' +
           notesHtml +
-          '<div style="margin-top:34px;border-top:1px dashed #94A3B8;padding-top:10px;display:flex;justify-content:space-between;font-size:12px;color:#4F646B;">' +
-            '<span>صدرت إلكترونياً عبر منصة ' + esc(cfg.platformNameAr) + ' (' + esc(cfg.appVersionLabel) + ')</span>' +
-            '<span>توقيع الطبيب: ____________________</span>' +
+          reportHtml +
+          '<div style="margin-top:28px;border-top:1px dashed #94A3B8;padding-top:10px;display:flex;justify-content:space-between;font-size:12px;color:#4F646B;">' +
+            '<span>' + esc(isEn ? ('Issued electronically via ' + (cfg.platformNameEn || 'Teb Al-Hajayzah') + ' (' + cfg.appVersionLabel + ')') : ('صدرت إلكترونياً عبر منصة ' + cfg.platformNameAr + ' (' + cfg.appVersionLabel + ')')) + '</span>' +
+            '<span>' + esc(isEn ? 'Doctor Signature: ____________________' : 'توقيع الطبيب: ____________________') + '</span>' +
           '</div>';
 
         window.print();
@@ -2027,18 +2619,22 @@
         const docSlots = db.slots.filter((s) => s.doctorId === doc.id);
         const avail = docSlots.filter((s) => s.status === 'AVAILABLE').length;
         const booked = docSlots.filter((s) => s.status === 'BOOKED').length;
+        const docName = getDoctorDisplayName(doc);
+        const specsText = formatDoctorSpecialties(doc);
+        const clinicLabel = getClinicDisplayName(doc);
+        const locLabel = getDoctorLocationDisplay(doc);
         return '<div class="doctor-card">' +
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">' +
             '<div>' +
-              '<div style="font-weight:800;font-size:1.05rem;">' + esc(doc.doctorName) + '</div>' +
-              '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(doc.specialty) + '</div>' +
-              '<div style="color:var(--text-muted);font-size:0.84rem;">' + esc(doc.clinicName) + '</div>' +
+              '<div style="font-weight:800;font-size:1.05rem;">' + esc(docName) + '</div>' +
+              '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(specsText) + '</div>' +
+              '<div style="color:var(--text-muted);font-size:0.84rem;">' + esc(clinicLabel) + '</div>' +
             '</div>' +
             '<span class="badge badge-rating">⭐ ' + esc(doc.rating) + '</span>' +
           '</div>' +
           (doc.bio ? '<div style="font-size:0.84rem;color:var(--text-muted);line-height:1.45;">' + esc(doc.bio) + '</div>' : '') +
           '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.86rem;color:var(--text-muted);gap:8px;">' +
-            '<span>📍 ' + esc(doc.locationLabel) + '</span>' +
+            '<span>📍 ' + esc(locLabel) + '</span>' +
             '<strong style="color:var(--teal);white-space:nowrap;">' + esc(bi('الكشف: ', 'Fee: ')) + esc(doc.feeEgp) + ' ' + esc(bi('ج.م', 'EGP')) + '</strong>' +
           '</div>' +
           (doc.mapsUrl
@@ -2120,6 +2716,12 @@
         const isExternal = recType === 'EXTERNAL_VISIT';
         const isLab = recType === 'LAB_RESULT';
         const isUpload = recType === 'PATIENT_UPLOAD';
+        const cardIsEn = ui.cardLangOverrides[rec.id]
+          ? (ui.cardLangOverrides[rec.id] === 'en')
+          : (ui.lang === 'en');
+        const t = (ar, en) => (cardIsEn ? en : ar);
+        const localized = BilingualMedicalTranslator.resolveForDisplay(rec, cardIsEn);
+
         const isPdfAttach = Boolean(
           rec.attachmentDataUrl &&
           (rec.attachmentMimeType === 'application/pdf' ||
@@ -2129,54 +2731,66 @@
 
         let borderColor = 'rgba(13,115,119,0.35)';
         let typeIcon = '🩺 ';
-        let typeBadgeHtml = '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + esc(bi('كشف المنصة', 'Platform Clinic')) + '</span>';
+        let typeBadgeHtml = '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + esc(t('كشف المنصة', 'Platform Clinic')) + '</span>';
         if (isExternal) {
           borderColor = '#F97316';
           typeIcon = '🏥 ';
-          typeBadgeHtml = '<span class="badge badge-ext">' + esc(bi('زيارة طبيب خارجي', 'External Doctor')) + '</span>';
+          typeBadgeHtml = '<span class="badge badge-ext">' + esc(t('زيارة طبيب خارجي', 'External Doctor')) + '</span>';
         } else if (isLab) {
           borderColor = '#4F46E5';
           typeIcon = '🧪 ';
-          typeBadgeHtml = '<span class="badge badge-lab">' + esc(bi('نتيجة معمل تحاليل', 'Medical Lab')) + '</span>';
+          typeBadgeHtml = '<span class="badge badge-lab">' + esc(t('نتيجة معمل تحاليل', 'Medical Lab')) + '</span>';
         } else if (isUpload) {
           borderColor = '#0284C7';
           typeIcon = '📄 ';
-          typeBadgeHtml = '<span class="badge" style="background:#E0F2FE;color:#075985;">' + esc(bi('مرفق المريض', 'Patient Upload')) + '</span>';
+          typeBadgeHtml = '<span class="badge" style="background:#E0F2FE;color:#075985;">' + esc(t('مرفق المريض', 'Patient Upload')) + '</span>';
         }
 
         let attachHtml = '';
         if (rec.attachmentDataUrl) {
           if (isPdfAttach) {
             attachHtml = '<div class="pdf-attach-card" style="margin-top:10px;">' +
-              '<span>📑 ' + esc(rec.attachmentName || bi('تقرير تحليل طبي (PDF)', 'Medical Lab Report (PDF)')) + '</span>' +
-              '<button class="btn btn-outline" type="button" data-open-pdf="' + esc(rec.id) + '" style="min-height:36px;padding:4px 12px;">👁️ ' + esc(bi('فتح / تحميل PDF', 'Open / Download PDF')) + '</button>' +
+              '<span>📑 ' + esc(rec.attachmentName || t('تقرير تحليل طبي (PDF)', 'Medical Lab Report (PDF)')) + '</span>' +
+              '<button class="btn btn-outline" type="button" data-open-pdf="' + esc(rec.id) + '" style="min-height:36px;padding:4px 12px;">👁️ ' + esc(t('فتح / تحميل PDF', 'Open / Download PDF')) + '</button>' +
             '</div>';
           } else {
             attachHtml = '<div style="margin-top:10px;"><img class="attach-img" src="' + esc(rec.attachmentDataUrl) + '" alt="مرفق طبي" data-preview-img="' + esc(rec.id) + '" /></div>';
           }
         }
 
-        const diagLabel = (isLab || isUpload) ? bi('اسم التحليل / الأشعة: ', 'Test / Scan Title: ') : bi('التشخيص الطبي: ', 'Diagnosis: ');
+        const diagLabel = (isLab || isUpload) ? t('اسم التحليل / الأشعة: ', 'Test / Scan Title: ') : t('التشخيص الطبي: ', 'Diagnosis: ');
+        const canBilingual = !isLab && !isUpload;
 
-        return '<article class="card" style="border-color:' + borderColor + ';">' +
+        return '<article class="card" data-record-card="' + esc(rec.id) + '" dir="' + (cardIsEn ? 'ltr' : 'rtl') + '" style="border-color:' + borderColor + ';">' +
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
             '<div>' +
               '<div style="font-weight:800;font-size:1.02rem;">' + typeIcon + esc(rec.doctorName) + '</div>' +
-              '<div style="color:var(--teal);font-weight:700;font-size:0.86rem;">' + esc(rec.specialty) + '</div>' +
+              '<div style="color:var(--teal);font-weight:700;font-size:0.86rem;">' + esc(localized.specialty) + '</div>' +
             '</div>' +
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+              (canBilingual
+                ? '<button class="rx-lang-pill" type="button" data-toggle-rec-lang="' + esc(rec.id) + '">' +
+                    '🌐 ' + esc(cardIsEn ? 'عرض بالعربية (AR)' : 'عرض بالإنجليزية (EN)') +
+                  '</button>'
+                : '') +
               typeBadgeHtml +
               '<span class="badge" style="background:var(--surface-soft);color:var(--text-muted);">' + esc(rec.visitDateLabel) + '</span>' +
             '</div>' +
           '</div>' +
           '<div class="med-box">' +
-            '<div><strong>' + esc(diagLabel) + '</strong>' + esc(rec.diagnosis) + '</div>' +
-            (rec.medications ? '<div style="margin-top:6px;"><strong>💊 ' + esc(bi('الأدوية:', 'Medications:')) + '</strong>\n' + esc(rec.medications) + '</div>' : '') +
-            (rec.notes ? '<div style="margin-top:6px;color:var(--text-muted);"><strong>' + esc(bi('ملاحظات:', 'Notes:')) + '</strong> ' + esc(rec.notes) + '</div>' : '') +
+            '<div><strong>' + esc(diagLabel) + '</strong>' + esc(localized.diagnosis) + '</div>' +
+            (localized.medications ? '<div style="margin-top:6px;"><strong>💊 ' + esc(t('الأدوية:', 'Medications:')) + '</strong>\n' + esc(localized.medications) + '</div>' : '') +
+            (localized.notes ? '<div style="margin-top:6px;color:var(--text-muted);"><strong>' + esc(t('ملاحظات:', 'Notes:')) + '</strong> ' + esc(localized.notes) + '</div>' : '') +
           '</div>' +
+          ((canBilingual && localized.aiReport)
+            ? '<div class="rx-ai-report-box">' +
+                '<div style="font-weight:800;color:var(--teal-text);margin-bottom:3px;">🧠 ' + esc(t('التقرير الطبي المبسط (AR)', 'Clinical Medical Report (EN)')) + '</div>' +
+                esc(localized.aiReport) +
+              '</div>'
+            : '') +
           attachHtml +
-          ((!isUpload && !isLab)
-            ? '<div style="margin-top:10px;"><button class="btn btn-outline btn-block" type="button" data-print-rec="' + esc(rec.id) + '">🖨️ ' + esc(bi('طباعة الروشتة (Print / PDF)', 'Print Prescription (PDF)')) + '</button></div>'
+          (canBilingual
+            ? '<div style="margin-top:10px;"><button class="btn btn-outline btn-block" type="button" data-print-rec="' + esc(rec.id) + '">🖨️ ' + esc(t('طباعة الروشتة والتقرير (AR PDF)', 'Print Prescription & Report (EN PDF)')) + '</button></div>'
             : '') +
         '</article>';
       }
@@ -2195,7 +2809,9 @@
         const latestDelay = db.notifications[0];
         const privateCount = db.doctors.filter((d) => d.clinicType === 'PRIVATE').length;
         const hospitalCount = db.doctors.filter((d) => d.clinicType === 'HOSPITAL').length;
-        const specsCount = new Set(db.doctors.map((d) => d.specialty)).size;
+        const specsSet = new Set();
+        db.doctors.forEach((d) => allDoctorSpecialties(d).forEach((s) => specsSet.add(normalizeSpecialty(s))));
+        const specsCount = Math.max(specsSet.size, SPECIALTIES_CATALOG.length);
 
         const announcement = (db.config.homeAnnouncementAr || '').trim();
         const needsOtp = db.account && db.account.isPhoneVerified === false;
@@ -2282,8 +2898,8 @@
                   return '<div class="card" style="border-color:rgba(13,115,119,0.4);">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
                       '<div>' +
-                        '<strong>' + esc(doc.doctorName) + '</strong>' +
-                        '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(doc.specialty) + ' • ' + esc(doc.clinicName) + '</div>' +
+                        '<strong>' + esc(getDoctorDisplayName(doc)) + '</strong>' +
+                        '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(formatDoctorSpecialties(doc)) + ' • ' + esc(getClinicDisplayName(doc)) + '</div>' +
                       '</div>' +
                       '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);font-size:0.98rem;">' + formatMinutesAr(eff) + '</span>' +
                     '</div>' +
@@ -2313,15 +2929,20 @@
       }
 
       function renderDirectory(title, clinicTypeFilter, showSpecChips) {
-        const specs = Array.from(new Set(db.doctors.map((d) => d.specialty)));
         const q = ui.searchQuery.trim().toLowerCase();
         const filtered = db.doctors.filter((doc) => {
           const matchType = !clinicTypeFilter || doc.clinicType === clinicTypeFilter;
-          const matchSpec = !showSpecChips || !ui.selectedSpecialty || doc.specialty === ui.selectedSpecialty;
+          const matchSpec = !showSpecChips || !ui.selectedSpecialty || doctorMatchesSpecialty(doc, ui.selectedSpecialty);
+          const allSpecsCombined = allDoctorSpecialties(doc)
+            .map((s) => displaySpecialty(s, false) + ' ' + displaySpecialty(s, true))
+            .join(' ')
+            .toLowerCase();
           const matchQ = !q ||
             doc.doctorName.toLowerCase().includes(q) ||
-            doc.specialty.toLowerCase().includes(q) ||
-            doc.clinicName.toLowerCase().includes(q);
+            (doc.doctorNameEn || '').toLowerCase().includes(q) ||
+            doc.clinicName.toLowerCase().includes(q) ||
+            (doc.clinicNameEn || '').toLowerCase().includes(q) ||
+            allSpecsCombined.includes(q);
           return matchType && matchSpec && matchQ;
         });
 
@@ -2332,7 +2953,11 @@
           (showSpecChips
             ? '<div class="chips-row">' +
                 '<button class="chip ' + (!ui.selectedSpecialty ? 'active' : '') + '" type="button" data-spec="">' + esc(bi('كل التخصصات', 'All Specialties')) + '</button>' +
-                specs.map((s) => '<button class="chip ' + (ui.selectedSpecialty === s ? 'active' : '') + '" type="button" data-spec="' + esc(s) + '">' + esc(s) + '</button>').join('') +
+                SPECIALTIES_CATALOG.map((s) => {
+                  const chipLbl = ui.lang === 'en' ? s.en : s.ar;
+                  const active = ui.selectedSpecialty === s.ar;
+                  return '<button class="chip ' + (active ? 'active' : '') + '" type="button" data-spec="' + esc(s.ar) + '">' + esc(chipLbl) + '</button>';
+                }).join('') +
               '</div>'
             : '') +
           (filtered.length === 0
@@ -2354,10 +2979,10 @@
           '</div>' +
 
           '<section class="card">' +
-            '<h3 style="font-size:1.2rem;">' + esc(doc.doctorName) + '</h3>' +
-            '<div style="color:var(--teal);font-weight:700;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
+            '<h3 style="font-size:1.2rem;">' + esc(getDoctorDisplayName(doc)) + '</h3>' +
+            '<div style="color:var(--teal);font-weight:700;">' + esc(formatDoctorSpecialties(doc)) + ' — ' + esc(getClinicDisplayName(doc)) + '</div>' +
             (doc.bio ? '<div style="font-size:0.9rem;color:var(--text-muted);margin-top:4px;">' + esc(doc.bio) + '</div>' : '') +
-            '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:4px;">📍 ' + esc(doc.locationLabel) + ' • ' + esc(bi('سعر الكشف: ', 'Fee: ')) + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
+            '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:4px;">📍 ' + esc(getDoctorLocationDisplay(doc)) + ' • ' + esc(bi('سعر الكشف: ', 'Fee: ')) + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
             '<div style="font-size:0.88rem;margin-top:4px;">🕒 ' + esc(bi('مواعيد العمل: ', 'Working Hours: ')) + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (' + esc(bi('كل ' + doc.slotDurationMinutes + ' دقيقة', 'Every ' + doc.slotDurationMinutes + ' min')) + ')</div>' +
             (doc.mapsUrl
               ? '<div style="margin-top:8px;"><a class="btn btn-outline" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:40px;padding:6px 14px;display:inline-flex;">🗺️ ' + esc(bi('فتح موقع العيادة على خرائط جوجل', 'Open Clinic on Google Maps')) + '</a></div>'
@@ -2493,8 +3118,8 @@
           : '<section class="card">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
                 '<div>' +
-                  '<h3 style="font-size:1.15rem;">' + esc(doc.clinicName) + ' (' + esc(doc.specialty) + ')</h3>' +
-                  '<div style="font-size:0.86rem;color:var(--text-muted);">📍 ' + esc(doc.locationLabel) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' • ' + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
+                  '<h3 style="font-size:1.15rem;">' + esc(getClinicDisplayName(doc)) + ' (' + esc(formatDoctorSpecialties(doc)) + ')</h3>' +
+                  '<div style="font-size:0.86rem;color:var(--text-muted);">📍 ' + esc(getDoctorLocationDisplay(doc)) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' • ' + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
                 '</div>' +
                 (doc.currentDelayMinutes > 0
                   ? '<span class="badge" style="background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);">+' + doc.currentDelayMinutes + ' ' + esc(bi('د', 'm')) + '</span>'
@@ -2548,7 +3173,7 @@
 
         return '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
             '<div>' +
-              '<h2>' + esc(bi('لوحة تحكم عيادة ' + doc.doctorName, 'Clinic Dashboard — ' + doc.doctorName)) + '</h2>' +
+              '<h2>' + esc(bi('لوحة تحكم عيادة ' + getDoctorDisplayName(doc, false), 'Clinic Dashboard — ' + getDoctorDisplayName(doc, true))) + '</h2>' +
               '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وأكواد التفعيل.', 'Manage clinic schedule, walk-in bookings, delays, and OTP codes.')) + '</div>' +
             '</div>' +
             '<button class="btn btn-danger-outline" id="btnDoctorLogout" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
@@ -2661,7 +3286,9 @@
           const filtered = list.filter((d) =>
             !q ||
             d.doctorName.toLowerCase().includes(q) ||
-            d.specialty.toLowerCase().includes(q) ||
+            (d.doctorNameEn || '').toLowerCase().includes(q) ||
+            formatDoctorSpecialties(d, false).toLowerCase().includes(q) ||
+            formatDoctorSpecialties(d, true).toLowerCase().includes(q) ||
             d.clinicName.toLowerCase().includes(q) ||
             (d.username || '').toLowerCase().includes(q)
           );
@@ -2673,14 +3300,14 @@
             return '<div class="card">' +
               '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
                 '<div>' +
-                  '<div style="font-weight:800;font-size:1.08rem;">' + esc(doc.doctorName) + '</div>' +
-                  '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(doc.specialty) + ' — ' + esc(doc.clinicName) + '</div>' +
+                  '<div style="font-weight:800;font-size:1.08rem;">' + esc(getDoctorDisplayName(doc)) + (doc.doctorNameEn && ui.lang !== 'en' ? ' <span style="font-size:0.82rem;color:var(--text-muted);">(' + esc(doc.doctorNameEn) + ')</span>' : '') + '</div>' +
+                  '<div style="color:var(--teal);font-weight:700;font-size:0.9rem;">' + esc(formatDoctorSpecialties(doc)) + ' — ' + esc(getClinicDisplayName(doc)) + '</div>' +
                 '</div>' +
                 '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + esc(typeLabel) + '</span>' +
               '</div>' +
               (doc.bio ? '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' + esc(doc.bio) + '</div>' : '') +
               '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">' +
-                '📍 ' + esc(doc.locationLabel) + ' • 💰 ' + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (' + doc.slotDurationMinutes + ' ' + esc(bi('د', 'm')) + ')' +
+                '📍 ' + esc(getDoctorLocationDisplay(doc)) + ' • 💰 ' + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + ' • 🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (' + doc.slotDurationMinutes + ' ' + esc(bi('د', 'm')) + ')' +
               '</div>' +
               '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:0.84rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
                 '<span>🔐 ' + esc(bi('دخول الدكتور:', 'Doctor Login:')) + ' <strong dir="ltr">' + esc(doc.username || doc.id) + '</strong></span>' +
@@ -2753,7 +3380,7 @@
                         '<span class="badge badge-booked">' + formatMinutesAr(eff) + '</span>' +
                       '</div>' +
                       '<div style="font-size:0.85rem;color:var(--teal);font-weight:700;margin-top:4px;">' +
-                        (d ? esc(d.doctorName + ' • ' + d.clinicName) : esc(s.doctorId)) +
+                        (d ? esc(getDoctorDisplayName(d) + ' • ' + getClinicDisplayName(d)) : esc(s.doctorId)) +
                       '</div>' +
                       '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">' +
                         '<button class="btn btn-outline" type="button" data-admin-cancel-slot="' + esc(s.id) + '" style="flex:1;min-height:38px;">' + esc(bi('إلغاء الحجز', 'Cancel Booking')) + '</button>' +
@@ -3588,6 +4215,15 @@
                 })
                 .join('\n');
 
+              const bundle = BilingualMedicalTranslator.buildBilingualBundle({
+                patientName: member.fullName,
+                doctorName: docName,
+                specialty: specialty + ' (زيارة خارجية)',
+                diagnosisInput: diagnosis,
+                medicationsInput: formattedMeds,
+                notesInput: notes
+              });
+
               db.records.unshift({
                 id: 'ext_' + Date.now(),
                 familyMemberId: member.id,
@@ -3595,11 +4231,16 @@
                 patientPhone: member.phone,
                 doctorId: '',
                 doctorName: docName,
-                specialty: specialty,
+                specialty: specialty + ' (زيارة خارجية)',
                 visitDateLabel: visitDate,
-                diagnosis: diagnosis,
-                medications: formattedMeds,
-                notes: notes,
+                diagnosis: bundle.diagnosisAr,
+                medications: bundle.medicationsAr || formattedMeds,
+                notes: bundle.notesAr || notes,
+                diagnosisEn: bundle.diagnosisEn,
+                medicationsEn: bundle.medicationsEn,
+                notesEn: bundle.notesEn,
+                aiReportAr: bundle.aiReportAr,
+                aiReportEn: bundle.aiReportEn,
                 attachmentDataUrl: extAttachment.dataUrl || '',
                 attachmentMimeType: extAttachment.mimeType || '',
                 attachmentName: extAttachment.fileName || '',
@@ -3620,21 +4261,69 @@
         const startHr = editDoc ? Math.floor(editDoc.workStartMinutes / 60) : 17;
         const endHr = editDoc ? Math.floor(editDoc.workEndMinutes / 60) : 21;
         const dur = editDoc ? editDoc.slotDurationMinutes : 20;
+        let selectedPrimarySpec = editDoc ? normalizeSpecialty(editDoc.specialty) : SPECIALTIES_CATALOG[0].ar;
+        if (!SPECIALTIES_CATALOG.some((s) => s.ar === selectedPrimarySpec)) {
+          selectedPrimarySpec = SPECIALTIES_CATALOG[SPECIALTIES_CATALOG.length - 1].ar;
+        }
+        let selectedAdditionalSpecs = editDoc
+          ? parseAdditionalSpecialties(editDoc.additionalSpecialties).map(normalizeSpecialty).filter((s) => s !== selectedPrimarySpec)
+          : [];
+
+        function renderAdditionalSpecsChips() {
+          const box = document.getElementById('admAdditionalSpecsContainer');
+          if (!box) return;
+          box.innerHTML = SPECIALTIES_CATALOG
+            .filter((s) => s.ar !== selectedPrimarySpec)
+            .map((s) => {
+              const active = selectedAdditionalSpecs.indexOf(s.ar) >= 0;
+              return '<button class="chip spec-multi-chip ' + (active ? 'active' : '') + '" type="button" data-adm-extra-spec="' + esc(s.ar) + '">' +
+                (active ? '✓ ' : '+ ') + esc(ui.lang === 'en' ? s.en : s.ar) +
+              '</button>';
+            }).join('');
+
+          box.querySelectorAll('[data-adm-extra-spec]').forEach((btn) => {
+            btn.onclick = function () {
+              const val = btn.getAttribute('data-adm-extra-spec');
+              const idx = selectedAdditionalSpecs.indexOf(val);
+              if (idx >= 0) selectedAdditionalSpecs.splice(idx, 1);
+              else selectedAdditionalSpecs.push(val);
+              renderAdditionalSpecsChips();
+            };
+          });
+        }
 
         openModal(
           isEdit ? bi('تعديل بيانات الدكتور / العيادة', 'Edit Doctor / Clinic') : bi('إضافة دكتور أو عيادة جديدة', 'Add New Doctor / Clinic'),
-          '<input class="input" id="admDocName" value="' + esc(editDoc ? editDoc.doctorName : '') + '" placeholder="' + esc(bi('اسم الدكتور بالكامل *', 'Doctor Full Name *')) + '" />' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-            '<input class="input" id="admDocSpec" value="' + esc(editDoc ? editDoc.specialty : '') + '" placeholder="' + esc(bi('التخصص (مثال: باطنة)', 'Specialty *')) + '" />' +
-            '<select class="select" id="admDocType">' +
-              '<option value="PRIVATE"' + (!editDoc || editDoc.clinicType === 'PRIVATE' ? ' selected' : '') + '>' + esc(bi('عيادة خاصة', 'Private Clinic')) + '</option>' +
-              '<option value="HOSPITAL"' + (editDoc && editDoc.clinicType === 'HOSPITAL' ? ' selected' : '') + '>' + esc(bi('المستشفى التخصصي', 'Hospital Dept')) + '</option>' +
-            '</select>' +
+            '<input class="input" id="admDocName" value="' + esc(editDoc ? editDoc.doctorName : '') + '" placeholder="' + esc(bi('اسم الدكتور (عربي) *', 'Doctor Name (AR) *')) + '" />' +
+            '<input class="input" id="admDocNameEn" value="' + esc(editDoc ? (editDoc.doctorNameEn || '') : '') + '" placeholder="' + esc(bi('اسم الدكتور بالإنجليزية (اختياري)', 'Doctor Name (EN)')) + '" dir="ltr" />' +
           '</div>' +
-          '<input class="input" id="admClinicName" value="' + esc(editDoc ? editDoc.clinicName : '') + '" placeholder="' + esc(bi('اسم العيادة أو القسم', 'Clinic or Department Name')) + '" />' +
+          '<div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:8px;">' +
+            '<div><label style="font-size:0.78rem;font-weight:700;color:var(--teal-text);">' + esc(bi('التخصص الأساسي *', 'Primary Specialty *')) + '</label>' +
+              '<select class="select" id="admDocSpec">' +
+                SPECIALTIES_CATALOG.map((s) =>
+                  '<option value="' + esc(s.ar) + '"' + (s.ar === selectedPrimarySpec ? ' selected' : '') + '>' + esc(ui.lang === 'en' ? (s.en + ' (' + s.ar + ')') : s.ar) + '</option>'
+                ).join('') +
+              '</select>' +
+            '</div>' +
+            '<div><label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">' + esc(bi('نوع المنشأة', 'Facility Type')) + '</label>' +
+              '<select class="select" id="admDocType">' +
+                '<option value="PRIVATE"' + (!editDoc || editDoc.clinicType === 'PRIVATE' ? ' selected' : '') + '>' + esc(bi('عيادة خاصة', 'Private Clinic')) + '</option>' +
+                '<option value="HOSPITAL"' + (editDoc && editDoc.clinicType === 'HOSPITAL' ? ' selected' : '') + '>' + esc(bi('المستشفى التخصصي', 'Hospital Dept')) + '</option>' +
+              '</select>' +
+            '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div style="font-size:0.8rem;font-weight:700;color:var(--teal-text);margin-bottom:6px;">' + esc(bi('تخصصات إضافية (اختياري — يمكن اختيار أكثر من تخصص للطبيب):', 'Additional Specialties (optional multi-select):')) + '</div>' +
+            '<div id="admAdditionalSpecsContainer" class="chips-row"></div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<input class="input" id="admClinicName" value="' + esc(editDoc ? editDoc.clinicName : '') + '" placeholder="' + esc(bi('اسم العيادة (عربي)', 'Clinic Name (AR)')) + '" />' +
+            '<input class="input" id="admClinicNameEn" value="' + esc(editDoc ? (editDoc.clinicNameEn || '') : '') + '" placeholder="' + esc(bi('اسم العيادة بالإنجليزية (اختياري)', 'Clinic Name (EN)')) + '" dir="ltr" />' +
+          '</div>' +
           '<textarea class="textarea" id="admDocBio" placeholder="' + esc(bi('نبذة عن الدكتور والخبرات...', 'Doctor bio & experience...')) + '">' + esc(editDoc ? (editDoc.bio || '') : '') + '</textarea>' +
           '<div style="display:grid;grid-template-columns:1.4fr 0.6fr;gap:8px;">' +
-            '<input class="input" id="admDocLoc" value="' + esc(editDoc ? editDoc.locationLabel : '') + '" placeholder="' + esc(bi('عنوان العيادة بالتفصيل في الحجايزة أو القرى المجاورة', 'Clinic Address')) + '" />' +
+            '<input class="input" id="admDocLoc" value="' + esc(editDoc ? editDoc.locationLabel : 'قرية الحجايزة') + '" placeholder="' + esc(bi('عنوان العيادة بالتفصيل في قرية الحجايزة', 'Clinic Address')) + '" />' +
             '<input class="input" id="admDocFee" type="number" value="' + esc(editDoc ? editDoc.feeEgp : 150) + '" placeholder="' + esc(bi('سعر الكشف', 'Fee')) + '" />' +
           '</div>' +
           '<input class="input" id="admDocMaps" value="' + esc(editDoc ? (editDoc.mapsUrl || '') : '') + '" placeholder="' + esc(bi('رابط موقع العيادة على خرائط جوجل (Google Maps)', 'Google Maps URL')) + '" dir="ltr" />' +
@@ -3657,13 +4346,25 @@
           '</div>' +
           '<button class="btn btn-primary btn-block" id="btnSaveAdminDoctor" type="button">' + esc(isEdit ? bi('💾 حفظ التعديلات وتحديث المنصة فوراً', '💾 Save & Update Immediately') : bi('➕ إضافة الدكتور ونشره فوراً في المنصة', '➕ Add & Publish Immediately')) + '</button>',
           function () {
+            renderAdditionalSpecsChips();
+            const specSelect = document.getElementById('admDocSpec');
+            if (specSelect) {
+              specSelect.onchange = function () {
+                selectedPrimarySpec = specSelect.value;
+                selectedAdditionalSpecs = selectedAdditionalSpecs.filter((s) => s !== selectedPrimarySpec);
+                renderAdditionalSpecsChips();
+              };
+            }
+
             document.getElementById('btnSaveAdminDoctor').onclick = function () {
               const doctorName = document.getElementById('admDocName').value.trim();
+              const doctorNameEn = document.getElementById('admDocNameEn').value.trim();
               const specialty = document.getElementById('admDocSpec').value.trim();
               const clinicType = document.getElementById('admDocType').value;
               const clinicName = document.getElementById('admClinicName').value.trim() || (clinicType === 'HOSPITAL' ? db.config.hospitalNameAr + ' - ' + specialty : 'عيادة ' + doctorName);
+              const clinicNameEn = document.getElementById('admClinicNameEn').value.trim();
               const bio = document.getElementById('admDocBio').value.trim();
-              const locationLabel = document.getElementById('admDocLoc').value.trim() || 'الحجايزة - الشارع الرئيسي';
+              const locationLabel = document.getElementById('admDocLoc').value.trim() || 'قرية الحجايزة';
               const feeEgp = parseInt(document.getElementById('admDocFee').value, 10) || 150;
               const mapsUrl = document.getElementById('admDocMaps').value.trim();
               const sHr = Math.min(22, Math.max(8, parseInt(document.getElementById('admStartHr').value, 10) || 17));
@@ -3671,6 +4372,7 @@
               const slotDurationMinutes = parseInt(document.getElementById('admSlotDur').value, 10) || 20;
               const username = document.getElementById('admDocUser').value.trim();
               const password = document.getElementById('admDocPass').value.trim();
+              const extraSpecs = selectedAdditionalSpecs.filter((s) => s !== specialty);
 
               if (!doctorName || !specialty || !username || !password) {
                 showToast(bi('يرجى إدخال اسم الدكتور والتخصص واسم المستخدم وكلمة المرور', 'Please fill doctor name, specialty, username, and password'));
@@ -3690,9 +4392,12 @@
                   editDoc.slotDurationMinutes !== slotDurationMinutes;
 
                 editDoc.doctorName = doctorName;
+                editDoc.doctorNameEn = doctorNameEn;
                 editDoc.specialty = specialty;
+                editDoc.additionalSpecialties = extraSpecs;
                 editDoc.clinicType = clinicType;
                 editDoc.clinicName = clinicName;
+                editDoc.clinicNameEn = clinicNameEn;
                 editDoc.bio = bio;
                 editDoc.locationLabel = locationLabel;
                 editDoc.feeEgp = feeEgp;
@@ -3714,10 +4419,14 @@
                 const newDoc = {
                   id: 'doc_' + Date.now(),
                   doctorName: doctorName,
+                  doctorNameEn: doctorNameEn,
                   specialty: specialty,
+                  additionalSpecialties: extraSpecs,
                   clinicName: clinicName,
+                  clinicNameEn: clinicNameEn,
                   clinicType: clinicType,
                   locationLabel: locationLabel,
+                  locationLabelEn: locationLabel === 'قرية الحجايزة' ? 'Al-Hajayzah Village' : '',
                   bio: bio,
                   mapsUrl: mapsUrl,
                   username: username,
@@ -3810,6 +4519,7 @@
       function openSmartPrescriptionModal(slotId) {
         const slot = db.slots.find((s) => s.id === slotId);
         const doc = db.doctors.find((d) => d.id === slot.doctorId);
+        const docMedKeys = medicationCatalogKeysForDoctor(doc);
         let filterMode = 'SPECIALTY';
         let medQuery = '';
         let selectedRx = [];
@@ -3825,7 +4535,7 @@
               m.strength.toLowerCase().includes(q);
             if (filterMode === 'FAV') return favSet.has(m.id) && matchQ;
             if (q) return matchQ;
-            if (filterMode === 'SPECIALTY') return m.specialty === doc.specialty;
+            if (filterMode === 'SPECIALTY') return docMedKeys.size === 0 || docMedKeys.has(m.specialty) || m.specialty === doc.specialty;
             return true;
           });
 
@@ -3909,11 +4619,44 @@
           return selectedRx.map((x) => '• ' + x.tradeName + (x.strength ? ' ' + x.strength : '') + ' — ' + (x.dosage || 'حسب إرشادات الطبيب')).join('\n');
         }
 
+        function populateBilingualFields(forceRefresh) {
+          const diagInput = document.getElementById('rxDiagnosis').value.trim();
+          const medsInput = buildMedicationsText();
+          const notesInput = document.getElementById('rxNotes').value.trim();
+          const bundle = BilingualMedicalTranslator.buildBilingualBundle({
+            patientName: slot.patientName,
+            doctorName: getDoctorDisplayName(doc, false),
+            specialty: doc.specialty,
+            diagnosisInput: diagInput,
+            medicationsInput: medsInput,
+            notesInput: notesInput,
+            existingDiagnosisEn: forceRefresh ? '' : document.getElementById('rxDiagnosisEn').value,
+            existingMedicationsEn: forceRefresh ? '' : document.getElementById('rxMedsEn').value,
+            existingNotesEn: forceRefresh ? '' : document.getElementById('rxNotesEn').value
+          });
+          if (forceRefresh || !document.getElementById('rxDiagnosisEn').value.trim()) {
+            document.getElementById('rxDiagnosisEn').value = bundle.diagnosisEn;
+          }
+          if (forceRefresh || !document.getElementById('rxMedsEn').value.trim()) {
+            document.getElementById('rxMedsEn').value = bundle.medicationsEn;
+          }
+          if (forceRefresh || !document.getElementById('rxNotesEn').value.trim()) {
+            document.getElementById('rxNotesEn').value = bundle.notesEn;
+          }
+          if (forceRefresh || !document.getElementById('rxAiReportAr').value.trim()) {
+            document.getElementById('rxAiReportAr').value = bundle.aiReportAr;
+          }
+          if (forceRefresh || !document.getElementById('rxAiReportEn').value.trim()) {
+            document.getElementById('rxAiReportEn').value = bundle.aiReportEn;
+          }
+          return bundle;
+        }
+
         openModal(bi('الروشتة الإلكترونية الذكية — ', 'Smart E-Prescription — ') + slot.patientName,
           '<div class="badge ' + (ui.isLiveMedsApi ? 'badge-avail' : '') + '" style="background:var(--teal-soft);color:var(--teal-text);">' +
             (ui.isLiveMedsApi ? '☁️ متصل بقاعدة الأدوية المصرية (' + ui.medications.length + ' دواء)' : '💊 ' + esc(bi('قاعدة الأدوية المصرية المدمجة Offline (' + ui.medications.length + ' دواء)', 'Egyptian Drugs Offline DB (' + ui.medications.length + ' items)'))) +
           '</div>' +
-          '<input class="input" id="rxDiagnosis" placeholder="' + esc(bi('التشخيص الطبي *', 'Diagnosis *')) + '" />' +
+          '<input class="input" id="rxDiagnosis" placeholder="' + esc(bi('التشخيص الطبي (بالعربية أو الإنجليزية) *', 'Diagnosis (AR or EN) *')) + '" />' +
           '<input class="input" id="rxMedSearch" type="search" placeholder="' + esc(bi('ابحث بالاسم التجاري أو المادة الفعالة أو التركيز...', 'Search trade name or active ingredient...')) + '" />' +
           '<div class="chips-row">' +
             '<button class="chip active" id="rxTabSpec" type="button">' + esc(bi('تخصص العيادة', 'Specialty')) + '</button>' +
@@ -3929,9 +4672,23 @@
             '<button class="btn btn-outline" id="btnAddCustomMed" type="button">+</button>' +
           '</div>' +
           '<textarea class="textarea" id="rxNotes" placeholder="' + esc(bi('تعليمات وملاحظات إضافية للمريض (اختياري)', 'Additional notes for patient (optional)')) + '"></textarea>' +
+          '<button class="btn btn-primary btn-block" id="btnRxGenerateBilingual" type="button" style="background:linear-gradient(135deg,#0D7377 0%,#0F5E8C 100%);">' +
+            esc(bi('🧠 توليد الروشتة والتقرير الطبي باللغتين (AR + EN)', '🧠 Generate Bilingual Rx & AI Medical Report (AR + EN)')) +
+          '</button>' +
+          '<div id="rxBilingualPreviewPanel" class="card" style="background:#F8FCFC;padding:12px;display:flex;flex-direction:column;gap:8px;border-color:rgba(13,115,119,0.35);">' +
+            '<div style="font-weight:800;font-size:0.88rem;color:var(--teal-text);">🌐 ' + esc(bi('معاينة وتعديل الصياغة المزدوجة (AR + EN) والتقرير الطبي', 'Bilingual Output & AI Medical Report Preview (Editable)')) + '</div>' +
+            '<label style="font-size:0.78rem;font-weight:700;">Diagnosis (EN)<input class="input" id="rxDiagnosisEn" placeholder="Clinical Diagnosis (EN)" dir="ltr" /></label>' +
+            '<label style="font-size:0.78rem;font-weight:700;">Medications (EN)<textarea class="textarea" id="rxMedsEn" placeholder="Prescribed Medications (EN)" dir="ltr" style="min-height:66px;"></textarea></label>' +
+            '<input type="hidden" id="rxNotesEn" />' +
+            '<label style="font-size:0.78rem;font-weight:700;">' + esc(bi('التقرير الطبي المبسط للمريض (AR)', 'Simplified Medical Report (AR)')) + '<textarea class="textarea" id="rxAiReportAr" style="min-height:76px;"></textarea></label>' +
+            '<label style="font-size:0.78rem;font-weight:700;">Clinical Medical Report (EN)<textarea class="textarea" id="rxAiReportEn" dir="ltr" style="min-height:76px;"></textarea></label>' +
+          '</div>' +
           '<label class="btn btn-outline btn-block" style="cursor:pointer;">📷 ' + esc(bi('إرفاق صورة روشتة ورقية (اختياري)', 'Attach paper Rx photo (optional)')) + '<input type="file" id="rxPhotoInput" accept="image/*" style="display:none;" /></label>' +
           '<div id="rxPhotoPreview"></div>' +
-          '<button class="btn btn-outline btn-block" id="btnPrintRxModal" type="button">🖨️ ' + esc(bi('طباعة الروشتة (Print / PDF)', 'Print Prescription (PDF)')) + '</button>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<button class="btn btn-outline" id="btnPrintRxModalAr" type="button">🖨️ ' + esc(bi('طباعة عربي (AR)', 'Print AR')) + '</button>' +
+            '<button class="btn btn-outline" id="btnPrintRxModalEn" type="button">🖨️ ' + esc(bi('طباعة إنجليزي (EN)', 'Print EN')) + '</button>' +
+          '</div>' +
           '<button class="btn btn-primary btn-block" id="btnSaveCompleteRx" type="button">✓ ' + esc(bi('إرسال لملف المريض وإنهاء الكشف', 'Save & Send to Patient Record')) + '</button>',
           function () {
             renderRxModalBody();
@@ -3962,6 +4719,15 @@
               renderRxModalBody();
             };
 
+            document.getElementById('btnRxGenerateBilingual').onclick = function () {
+              if (!document.getElementById('rxDiagnosis').value.trim() && selectedRx.length === 0) {
+                showToast(bi('اكتب التشخيص أو أضف دواءً أولاً لتوليد الصيغة المزدوجة', 'Enter diagnosis or select meds first'));
+                return;
+              }
+              populateBilingualFields(true);
+              showToast(bi('تم توليد الروشتة والتقرير الطبي باللغتين بنجاح', 'Bilingual Rx & AI Medical Report generated'));
+            };
+
             document.getElementById('rxPhotoInput').onchange = function (e) {
               const file = e.target.files[0];
               if (!file) return;
@@ -3973,21 +4739,31 @@
               reader.readAsDataURL(file);
             };
 
-            document.getElementById('btnPrintRxModal').onclick = function () {
+            function printFromModal(isEnPrint) {
+              const b = populateBilingualFields(false);
               printPrescription({
                 patientName: slot.patientName,
-                doctorName: doc.doctorName,
+                doctorName: getDoctorDisplayName(doc, isEnPrint),
                 specialty: doc.specialty,
                 visitDateLabel: formatTodayAr(),
-                diagnosis: document.getElementById('rxDiagnosis').value.trim() || 'كشف طبي عام',
-                medications: buildMedicationsText(),
-                notes: document.getElementById('rxNotes').value.trim()
-              });
-            };
+                diagnosis: b.diagnosisAr,
+                medications: b.medicationsAr || buildMedicationsText(),
+                notes: b.notesAr,
+                diagnosisEn: document.getElementById('rxDiagnosisEn').value.trim() || b.diagnosisEn,
+                medicationsEn: document.getElementById('rxMedsEn').value.trim() || b.medicationsEn,
+                notesEn: document.getElementById('rxNotesEn').value.trim() || b.notesEn,
+                aiReportAr: document.getElementById('rxAiReportAr').value.trim() || b.aiReportAr,
+                aiReportEn: document.getElementById('rxAiReportEn').value.trim() || b.aiReportEn
+              }, isEnPrint);
+            }
+
+            document.getElementById('btnPrintRxModalAr').onclick = () => printFromModal(false);
+            document.getElementById('btnPrintRxModalEn').onclick = () => printFromModal(true);
 
             document.getElementById('btnSaveCompleteRx').onclick = function () {
               const diag = document.getElementById('rxDiagnosis').value.trim();
               if (!diag) { showToast(bi('يرجى كتابة التشخيص الطبي', 'Please enter a diagnosis')); return; }
+              const bundle = populateBilingualFields(false);
               slot.status = 'COMPLETED';
               db.records.unshift({
                 id: 'rec_' + Date.now(),
@@ -3998,16 +4774,21 @@
                 doctorName: doc.doctorName,
                 specialty: doc.specialty,
                 visitDateLabel: formatTodayAr(),
-                diagnosis: diag,
-                medications: buildMedicationsText(),
-                notes: document.getElementById('rxNotes').value.trim(),
+                diagnosis: bundle.diagnosisAr,
+                medications: bundle.medicationsAr || buildMedicationsText(),
+                notes: bundle.notesAr || document.getElementById('rxNotes').value.trim(),
+                diagnosisEn: document.getElementById('rxDiagnosisEn').value.trim() || bundle.diagnosisEn,
+                medicationsEn: document.getElementById('rxMedsEn').value.trim() || bundle.medicationsEn,
+                notesEn: document.getElementById('rxNotesEn').value.trim() || bundle.notesEn,
+                aiReportAr: document.getElementById('rxAiReportAr').value.trim() || bundle.aiReportAr,
+                aiReportEn: document.getElementById('rxAiReportEn').value.trim() || bundle.aiReportEn,
                 attachmentDataUrl: rxAttachmentUrl,
                 recordType: 'PRESCRIPTION',
                 createdAtMillis: Date.now()
               });
               saveState(db);
               closeModal();
-              showToast(bi('تم حفظ الروشتة وإرسالها فوراً إلى ملف المريض', 'Prescription saved & sent to patient EMR'));
+              showToast(bi('تم حفظ الروشتة والتقرير الثنائي وإرسالهما فوراً لملف المريض', 'Bilingual Rx & report saved to patient EMR'));
               renderApp();
             };
           }
@@ -4034,10 +4815,46 @@
       // 7. ربط الأحداث (Event Wiring)
       // ================================================================
       function bindSharedRecordActions() {
+        document.querySelectorAll('[data-toggle-ai-summary-lang]').forEach((btn) => {
+          btn.onclick = function () {
+            const currentIsEn = ui.aiSummaryLang ? (ui.aiSummaryLang === 'en') : (ui.lang === 'en');
+            ui.aiSummaryLang = currentIsEn ? 'ar' : 'en';
+            const cardEl = btn.closest('#aiMedicalSummaryCard');
+            if (cardEl && ui.lastAiSummaryContext) {
+              cardEl.outerHTML = renderAiMedicalSummaryCardHtml(ui.lastAiSummaryContext.memberName, ui.lastAiSummaryContext.records);
+              bindSharedRecordActions();
+            } else {
+              renderApp();
+            }
+          };
+        });
+        document.querySelectorAll('[data-toggle-rec-lang]').forEach((btn) => {
+          btn.onclick = function () {
+            const recId = btn.getAttribute('data-toggle-rec-lang');
+            const currentIsEn = ui.cardLangOverrides[recId]
+              ? (ui.cardLangOverrides[recId] === 'en')
+              : (ui.lang === 'en');
+            ui.cardLangOverrides[recId] = currentIsEn ? 'ar' : 'en';
+            const rec = db.records.find((r) => r.id === recId);
+            const cardEl = btn.closest('[data-record-card]');
+            if (rec && cardEl) {
+              cardEl.outerHTML = renderMedicalRecordCardHtml(rec);
+              bindSharedRecordActions();
+            } else {
+              renderApp();
+            }
+          };
+        });
         document.querySelectorAll('[data-print-rec]').forEach((btn) => {
           btn.onclick = function () {
-            const rec = db.records.find((r) => r.id === btn.getAttribute('data-print-rec'));
-            if (rec) printPrescription(rec);
+            const recId = btn.getAttribute('data-print-rec');
+            const rec = db.records.find((r) => r.id === recId);
+            if (rec) {
+              const cardIsEn = ui.cardLangOverrides[recId]
+                ? (ui.cardLangOverrides[recId] === 'en')
+                : (ui.lang === 'en');
+              printPrescription(rec, cardIsEn);
+            }
           };
         });
         document.querySelectorAll('[data-preview-img]').forEach((img) => {

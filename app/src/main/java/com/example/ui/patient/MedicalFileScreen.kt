@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
@@ -90,6 +92,7 @@ import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
 import com.example.ui.theme.TealPrimary
+import com.example.util.BilingualMedicalTranslator
 import com.example.util.ImageStorageHelper
 import com.example.util.MedicalSummaryAnalyzer
 import com.example.util.PrescriptionPrintHelper
@@ -944,9 +947,15 @@ fun MedicalRecordTimelineCard(
     onShowMessage: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    var cardIsEn by remember(isEn, record.id) { mutableStateOf(isEn) }
+    val localized = remember(record, cardIsEn) {
+        BilingualMedicalTranslator.resolveForDisplay(record, showEnglish = cardIsEn)
+    }
+
     val isUpload = record.recordType == MedicalRecordType.PATIENT_UPLOAD
     val isLabResult = record.recordType == MedicalRecordType.LAB_RESULT
     val isExternal = record.recordType == MedicalRecordType.EXTERNAL_VISIT
+    val isRxOrExternal = record.recordType == MedicalRecordType.PRESCRIPTION || isExternal
     val isPdf = ImageStorageHelper.isPdfAttachment(record.attachmentPath, record.attachmentMimeType)
 
     val accentColor = when (record.recordType) {
@@ -957,10 +966,10 @@ fun MedicalRecordTimelineCard(
     }
 
     val badgeLabel = when (record.recordType) {
-        MedicalRecordType.LAB_RESULT -> bi(isEn, "نتيجة معمل", "Lab Result")
-        MedicalRecordType.EXTERNAL_VISIT -> bi(isEn, "طبيب خارجي", "External Doctor")
-        MedicalRecordType.PATIENT_UPLOAD -> bi(isEn, "رفع المريض", "Patient Upload")
-        else -> bi(isEn, "عيادة بالمنصة", "Platform Clinic")
+        MedicalRecordType.LAB_RESULT -> bi(cardIsEn, "نتيجة معمل", "Lab Result")
+        MedicalRecordType.EXTERNAL_VISIT -> bi(cardIsEn, "طبيب خارجي", "External Doctor")
+        MedicalRecordType.PATIENT_UPLOAD -> bi(cardIsEn, "رفع المريض", "Patient Upload")
+        else -> bi(cardIsEn, "عيادة بالمنصة", "Platform Clinic")
     }
 
     Card(
@@ -968,12 +977,52 @@ fun MedicalRecordTimelineCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("medical_record_card_${record.id}"),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (isRxOrExternal) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = bi(cardIsEn, "لغة عرض الروشتة والتقرير:", "Prescription & Report Language:"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FilterChip(
+                        selected = cardIsEn,
+                        onClick = { cardIsEn = !cardIsEn },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Translate,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = if (cardIsEn) "عرض بالعربية (AR)" else "عرض بالإنجليزية (EN)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = TealPrimary,
+                            selectedLabelColor = Color.White,
+                            selectedLeadingIconColor = Color.White,
+                        ),
+                        modifier = Modifier.testTag("record_lang_toggle_${record.id}"),
+                    )
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -998,7 +1047,7 @@ fun MedicalRecordTimelineCard(
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            text = record.specialty,
+                            text = localized.specialty,
                             style = MaterialTheme.typography.bodySmall,
                             color = accentColor,
                             fontWeight = FontWeight.SemiBold,
@@ -1042,13 +1091,13 @@ fun MedicalRecordTimelineCard(
                 ) {
                     Text(
                         text = when {
-                            isLabResult -> bi(isEn, "اسم التحليل / الفحص: ${record.diagnosis}", "Lab Test: ${record.diagnosis}")
-                            isUpload -> bi(isEn, "العنوان: ${record.diagnosis}", "Title: ${record.diagnosis}")
-                            else -> bi(isEn, "التشخيص الطبي: ${record.diagnosis}", "Diagnosis: ${record.diagnosis}")
+                            isLabResult -> bi(cardIsEn, "اسم التحليل / الفحص: ${localized.diagnosis}", "Lab Test: ${localized.diagnosis}")
+                            isUpload -> bi(cardIsEn, "العنوان: ${localized.diagnosis}", "Title: ${localized.diagnosis}")
+                            else -> bi(cardIsEn, "التشخيص الطبي: ${localized.diagnosis}", "Diagnosis: ${localized.diagnosis}")
                         },
                         style = MaterialTheme.typography.titleSmall,
                     )
-                    if (record.medications.isNotBlank()) {
+                    if (localized.medications.isNotBlank()) {
                         Row(verticalAlignment = Alignment.Top) {
                             Icon(
                                 Icons.Filled.LocalPharmacy,
@@ -1060,16 +1109,50 @@ fun MedicalRecordTimelineCard(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = record.medications,
+                                text = localized.medications,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
                     }
-                    if (record.notes.isNotBlank()) {
+                    if (localized.notes.isNotBlank()) {
                         Text(
-                            text = bi(isEn, "ملاحظات: ${record.notes}", "Notes: ${record.notes}"),
+                            text = bi(cardIsEn, "ملاحظات: ${localized.notes}", "Notes: ${localized.notes}"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (isRxOrExternal && localized.aiReport.isNotBlank()) {
+                Surface(
+                    color = TealPrimary.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                tint = TealPrimary,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                text = if (cardIsEn) "Clinical Medical Report (EN)" else "التقرير الطبي المبسط للمريض (AR)",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = TealPrimary,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        Text(
+                            text = localized.aiReport,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -1093,7 +1176,7 @@ fun MedicalRecordTimelineCard(
                     ) {
                         Icon(Icons.Filled.PictureAsPdf, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(bi(isEn, "فتح ملف PDF: ${record.attachmentName.ifBlank { "نتيجة التحليل" }}", "Open PDF: ${record.attachmentName.ifBlank { "Lab Report" }}"))
+                        Text(bi(cardIsEn, "فتح ملف PDF: ${record.attachmentName.ifBlank { "نتيجة التحليل" }}", "Open PDF: ${record.attachmentName.ifBlank { "Lab Report" }}"))
                     }
                 } else {
                     Box(
@@ -1101,11 +1184,11 @@ fun MedicalRecordTimelineCard(
                             .fillMaxWidth()
                             .height(170.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable { onPreviewImage(record.attachmentPath, record.diagnosis) },
+                            .clickable { onPreviewImage(record.attachmentPath, localized.diagnosis) },
                     ) {
                         AsyncImage(
                             model = File(record.attachmentPath),
-                            contentDescription = bi(isEn, "صورة الروشتة أو التحليل", "Prescription or lab image"),
+                            contentDescription = bi(cardIsEn, "صورة الروشتة أو التحليل", "Prescription or lab image"),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -1128,7 +1211,7 @@ fun MedicalRecordTimelineCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = bi(isEn, "اضغط للتكبير", "Tap to zoom"),
+                                    text = bi(cardIsEn, "اضغط للتكبير", "Tap to zoom"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White,
                                 )
@@ -1138,13 +1221,14 @@ fun MedicalRecordTimelineCard(
                 }
             }
 
-            if (record.recordType == MedicalRecordType.PRESCRIPTION || isExternal) {
+            if (isRxOrExternal) {
                 OutlinedButton(
                     onClick = {
                         PrescriptionPrintHelper.printPrescription(
                             context = context,
                             brandConfig = brandConfig,
                             record = record,
+                            isEnglish = cardIsEn,
                             onError = onShowMessage,
                         )
                     },
@@ -1155,7 +1239,10 @@ fun MedicalRecordTimelineCard(
                 ) {
                     Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(bi(isEn, "طباعة الروشتة (Print / PDF)", "Print Prescription (PDF)"))
+                    Text(
+                        if (cardIsEn) "Print Prescription & Report (EN PDF)"
+                        else "طباعة الروشتة والتقرير (AR Print / PDF)"
+                    )
                 }
             }
         }

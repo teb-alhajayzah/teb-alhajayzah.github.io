@@ -24,35 +24,11 @@ data class PatientMedicalSummary(
 
 object MedicalSummaryAnalyzer {
 
-    val EXTERNAL_SPECIALTIES = listOf(
-        "جلدية",
-        "نساء وتوليد",
-        "قلب وأوعية دموية",
-        "أسنان",
-        "أطفال",
-        "باطنة",
-        "عظام",
-        "أنف وأذن وحنجرة",
-        "عيون",
-        "جراحة",
-        "مسالك بولية",
-        "تخصصات أخرى",
-    )
+    val EXTERNAL_SPECIALTIES: List<String>
+        get() = SpecialtyCatalog.all.map { it.nameAr }
 
-    val EXTERNAL_SPECIALTIES_EN = listOf(
-        "Dermatology" to "جلدية",
-        "OB/GYN" to "نساء وتوليد",
-        "Cardiology" to "قلب وأوعية دموية",
-        "Dentistry" to "أسنان",
-        "Pediatrics" to "أطفال",
-        "Internal Medicine" to "باطنة",
-        "Orthopedics" to "عظام",
-        "ENT" to "أنف وأذن وحنجرة",
-        "Ophthalmology" to "عيون",
-        "General Surgery" to "جراحة",
-        "Urology" to "مسالك بولية",
-        "Other Specialties" to "تخصصات أخرى",
-    )
+    val EXTERNAL_SPECIALTIES_EN: List<Pair<String, String>>
+        get() = SpecialtyCatalog.all.map { it.nameEn to it.nameAr }
 
     fun summarize(
         patientName: String,
@@ -89,21 +65,23 @@ object MedicalSummaryAnalyzer {
         val diagnoses = mutableListOf<String>()
         val seenDiag = HashSet<String>()
         (platformRx + externalVisits).forEach { rec ->
-            val diagClean = rec.diagnosis.trim()
+            val localized = BilingualMedicalTranslator.resolveForDisplay(rec, showEnglish = isEn)
+            val diagClean = localized.diagnosis.trim()
             if (diagClean.isNotEmpty() && seenDiag.add(diagClean.lowercase())) {
                 val sourceTag = if (rec.recordType == MedicalRecordType.EXTERNAL_VISIT) {
                     if (isEn) "External" else "خارجي"
                 } else {
                     if (isEn) "Platform" else "المنصة"
                 }
-                diagnoses += "$diagClean (${rec.specialty} • $sourceTag • ${rec.visitDateLabel})"
+                diagnoses += "$diagClean (${localized.specialty} • $sourceTag • ${rec.visitDateLabel})"
             }
         }
 
         val medLines = mutableListOf<String>()
         val seenMeds = HashSet<String>()
         (platformRx + externalVisits).forEach { rec ->
-            rec.medications
+            val localized = BilingualMedicalTranslator.resolveForDisplay(rec, showEnglish = isEn)
+            localized.medications
                 .split('\n')
                 .map { it.trim().removePrefix("•").removePrefix("-").trim() }
                 .filter { it.isNotEmpty() }
@@ -117,11 +95,13 @@ object MedicalSummaryAnalyzer {
 
         val labItems = mutableListOf<String>()
         labsAndUploads.take(5).forEach { rec ->
-            val title = rec.diagnosis.trim().ifEmpty { if (isEn) "Lab / Imaging" else "تحليل / أشعة" }
+            val localized = BilingualMedicalTranslator.resolveForDisplay(rec, showEnglish = isEn)
+            val title = localized.diagnosis.trim().ifEmpty { if (isEn) "Lab / Imaging" else "تحليل / أشعة" }
             val source = if (rec.recordType == MedicalRecordType.LAB_RESULT) rec.doctorName else {
                 if (isEn) "Patient Upload" else "رفع المريض"
             }
-            val noteSuffix = if (rec.notes.isNotBlank()) " — ${rec.notes.take(60)}" else ""
+            val noteText = localized.notes.trim()
+            val noteSuffix = if (noteText.isNotBlank()) " — ${noteText.take(60)}" else ""
             labItems += "$title ($source • ${rec.visitDateLabel})$noteSuffix"
         }
 

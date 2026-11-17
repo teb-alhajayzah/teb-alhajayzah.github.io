@@ -66,6 +66,10 @@ data class ClinicDoctorEntity(
     val mapsUrl: String = "",
     val username: String = "",
     val password: String = "1234",
+    val doctorNameEn: String = "",
+    val clinicNameEn: String = "",
+    val locationLabelEn: String = "",
+    val additionalSpecialties: String = "",
 )
 
 @Entity(tableName = "appointment_slots")
@@ -104,6 +108,11 @@ data class MedicalRecordEntity(
     val attachmentName: String = "",
     val recordType: String = MedicalRecordType.PRESCRIPTION,
     val createdAtMillis: Long = System.currentTimeMillis(),
+    val diagnosisEn: String = "",
+    val medicationsEn: String = "",
+    val notesEn: String = "",
+    val aiReportAr: String = "",
+    val aiReportEn: String = "",
 )
 
 @Entity(tableName = "delay_notifications")

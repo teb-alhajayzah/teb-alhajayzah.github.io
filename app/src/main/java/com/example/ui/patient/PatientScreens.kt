@@ -104,6 +104,7 @@ import com.example.ui.theme.SlotCompletedBg
 import com.example.ui.theme.SlotCompletedBorder
 import com.example.ui.theme.SlotCompletedText
 import com.example.ui.theme.TealPrimary
+import com.example.util.SpecialtyCatalog
 import com.example.util.TimeUtils
 
 @Composable
@@ -845,12 +846,19 @@ private fun MyBookingCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    val docName = if (isEn && doctor.doctorNameEn.isNotBlank()) doctor.doctorNameEn else doctor.doctorName
+                    val clinName = if (isEn && doctor.clinicNameEn.isNotBlank()) doctor.clinicNameEn else doctor.clinicName
+                    val specsLabel = SpecialtyCatalog.formatDoctorSpecialties(
+                        doctor.specialty,
+                        doctor.additionalSpecialties,
+                        isEn,
+                    )
                     Text(
-                        text = doctor.doctorName,
+                        text = docName,
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "${doctor.specialty} • ${doctor.clinicName}",
+                        text = "$specsLabel • $clinName",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -925,16 +933,20 @@ fun ClinicsDirectoryScreen(
         state.selectedSpecialty,
         state.searchQuery,
     ) {
+        val selectedSpec = state.selectedSpecialty
         state.doctors.filter { doc ->
             val matchesType = clinicTypeFilter == null || doc.clinicType == clinicTypeFilter
             val matchesSpec = !showSpecialtyChips ||
-                state.selectedSpecialty == null ||
-                doc.specialty == state.selectedSpecialty
+                selectedSpec == null ||
+                SpecialtyCatalog.doctorMatchesSpecialty(doc, selectedSpec)
             val q = state.searchQuery.trim()
             val matchesSearch = q.isEmpty() ||
                 doc.doctorName.contains(q, ignoreCase = true) ||
+                doc.doctorNameEn.contains(q, ignoreCase = true) ||
                 doc.specialty.contains(q, ignoreCase = true) ||
-                doc.clinicName.contains(q, ignoreCase = true)
+                doc.additionalSpecialties.contains(q, ignoreCase = true) ||
+                doc.clinicName.contains(q, ignoreCase = true) ||
+                doc.clinicNameEn.contains(q, ignoreCase = true)
             matchesType && matchesSpec && matchesSearch
         }
     }
@@ -976,13 +988,18 @@ fun ClinicsDirectoryScreen(
                                 label = { Text(bi(isEn, "كل التخصصات", "All Specialties")) },
                             )
                         }
-                        items(state.specialties) { spec ->
+                        items(SpecialtyCatalog.all, key = { it.id }) { specItem ->
+                            val isSelected = state.selectedSpecialty == specItem.nameAr
                             FilterChip(
-                                selected = state.selectedSpecialty == spec,
+                                selected = isSelected,
                                 onClick = {
-                                    onSelectSpecialty(if (state.selectedSpecialty == spec) null else spec)
+                                    onSelectSpecialty(if (isSelected) null else specItem.nameAr)
                                 },
-                                label = { Text(spec) },
+                                label = { Text(specItem.label(isEn)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = TealPrimary,
+                                    selectedLabelColor = Color.White,
+                                ),
                             )
                         }
                     }
@@ -1085,18 +1102,25 @@ fun DoctorDirectoryCard(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val docName = if (isEn && doctor.doctorNameEn.isNotBlank()) doctor.doctorNameEn else doctor.doctorName
+                        val clinName = if (isEn && doctor.clinicNameEn.isNotBlank()) doctor.clinicNameEn else doctor.clinicName
+                        val specsLabel = SpecialtyCatalog.formatDoctorSpecialties(
+                            doctor.specialty,
+                            doctor.additionalSpecialties,
+                            isEn,
+                        )
                         Text(
-                            text = doctor.doctorName,
+                            text = docName,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            text = doctor.specialty,
+                            text = specsLabel,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = doctor.clinicName,
+                            text = clinName,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1141,7 +1165,7 @@ fun DoctorDirectoryCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = doctor.locationLabel,
+                        text = if (isEn && doctor.locationLabelEn.isNotBlank()) doctor.locationLabelEn else doctor.locationLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -1329,17 +1353,25 @@ fun DoctorBookingScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(text = doctor.doctorName, style = MaterialTheme.typography.headlineSmall)
+                        val docName = if (isEn && doctor.doctorNameEn.isNotBlank()) doctor.doctorNameEn else doctor.doctorName
+                        val clinName = if (isEn && doctor.clinicNameEn.isNotBlank()) doctor.clinicNameEn else doctor.clinicName
+                        val locLabel = if (isEn && doctor.locationLabelEn.isNotBlank()) doctor.locationLabelEn else doctor.locationLabel
+                        val specsLabel = SpecialtyCatalog.formatDoctorSpecialties(
+                            doctor.specialty,
+                            doctor.additionalSpecialties,
+                            isEn,
+                        )
+                        Text(text = docName, style = MaterialTheme.typography.headlineSmall)
                         Text(
-                            text = "${doctor.specialty} — ${doctor.clinicName}",
+                            text = "$specsLabel — $clinName",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
                             text = bi(
                                 isEn,
-                                "العنوان: ${doctor.locationLabel}  •  سعر الكشف: ${doctor.feeEgp} $currencyLabel",
-                                "Address: ${doctor.locationLabel}  •  Fee: ${doctor.feeEgp} $currencyLabel",
+                                "العنوان: $locLabel  •  سعر الكشف: ${doctor.feeEgp} $currencyLabel",
+                                "Address: $locLabel  •  Fee: ${doctor.feeEgp} $currencyLabel",
                             ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

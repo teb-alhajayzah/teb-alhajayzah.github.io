@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -26,6 +27,7 @@ import com.example.data.local.TebDao
 import com.example.data.medications.EgyptianMedicationService
 import com.example.data.medications.MedicationFetchResult
 import com.example.ui.AppLanguage
+import com.example.util.BilingualMedicalTranslator
 import com.example.util.TimeUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -67,6 +69,7 @@ class TebRepository(
     private val cfgApkUrlKey = stringPreferencesKey("cfg_apk_url")
     private val cfgMedsApiKey = stringPreferencesKey("cfg_meds_api_url")
     private val appLanguageKey = stringPreferencesKey("app_language")
+    private val seededRealDoctorsKey = booleanPreferencesKey("seeded_real_doctors_v1")
 
     val appLanguageFlow: Flow<AppLanguage> = appContext.tebDataStore.data
         .map { prefs -> AppLanguage.fromCode(prefs[appLanguageKey]) }
@@ -139,6 +142,10 @@ class TebRepository(
 
     suspend fun setActiveDoctorPortal(doctorId: String) {
         appContext.tebDataStore.edit { it[activeDoctorPortalKey] = doctorId }
+    }
+
+    internal suspend fun clearPrefsForTesting() {
+        appContext.tebDataStore.edit { it.clear() }
     }
 
     suspend fun updateAdminCredentials(username: String, password: String) {
@@ -466,6 +473,10 @@ class TebRepository(
         slotDurationMinutes: Int,
         username: String,
         password: String,
+        additionalSpecialties: String = "",
+        doctorNameEn: String = "",
+        clinicNameEn: String = "",
+        locationLabelEn: String = "",
     ): Result<ClinicDoctorEntity> {
         val cleanUser = username.trim()
         val cleanName = doctorName.trim()
@@ -490,7 +501,7 @@ class TebRepository(
             specialty = cleanSpec,
             clinicName = resolvedClinicName,
             clinicType = clinicType,
-            locationLabel = locationLabel.trim().ifEmpty { "الحجايزة - الشارع الرئيسي" },
+            locationLabel = locationLabel.trim().ifEmpty { "قرية الحجايزة" },
             feeEgp = feeEgp.coerceAtLeast(0),
             workStartMinutes = workStartMinutes,
             workEndMinutes = workEndMinutes,
@@ -502,6 +513,10 @@ class TebRepository(
             mapsUrl = mapsUrl.trim(),
             username = cleanUser,
             password = password.trim().ifEmpty { "1234" },
+            doctorNameEn = doctorNameEn.trim(),
+            clinicNameEn = clinicNameEn.trim(),
+            locationLabelEn = locationLabelEn.trim(),
+            additionalSpecialties = additionalSpecialties.trim(),
         )
         dao.insertDoctor(doctor)
         val initialSlots = buildSlotsForDoctor(doctor)
@@ -524,6 +539,10 @@ class TebRepository(
         slotDurationMinutes: Int,
         username: String,
         password: String,
+        additionalSpecialties: String = "",
+        doctorNameEn: String = "",
+        clinicNameEn: String = "",
+        locationLabelEn: String = "",
     ): Result<ClinicDoctorEntity> {
         val existingDoc = dao.getDoctorById(doctorId)
             ?: return Result.failure(IllegalStateException("الدكتور غير موجود"))
@@ -559,6 +578,10 @@ class TebRepository(
             currentDelayMinutes = if (scheduleChanged) 0 else existingDoc.currentDelayMinutes,
             username = cleanUser,
             password = password.trim().ifEmpty { existingDoc.password },
+            doctorNameEn = doctorNameEn.trim().ifEmpty { existingDoc.doctorNameEn },
+            clinicNameEn = clinicNameEn.trim().ifEmpty { existingDoc.clinicNameEn },
+            locationLabelEn = locationLabelEn.trim().ifEmpty { existingDoc.locationLabelEn },
+            additionalSpecialties = additionalSpecialties.trim(),
         )
         dao.updateDoctor(updated)
         if (scheduleChanged) {
@@ -597,12 +620,73 @@ class TebRepository(
 
     /**
      * تهيئة نظيفة لبيئة الإنتاج:
-     * تبدأ بدون أي بيانات وهمية أو حسابات مسبقة، وتجهز فقط دفعة أكواد تفعيل نظامية عند الحاجة.
+     * تبدأ بدون أي مرضى أو سجلات وهمية، وتُدرج لمرة واحدة فقط بيانات الطبيبين الحقيقيين بقرية الحجايزة
+     * (د. محمد فكري ود. شادي) مع قابلية التعديل والحذف من لوحة الإدارة دون إعادة فرضهما.
      */
     suspend fun ensureSeeded() {
         seedMutex.withLock {
             val existingAccounts = dao.getAllAccountsOnce()
             val prefs = appContext.tebDataStore.data.first()
+            if (prefs[seededRealDoctorsKey] != true) {
+                val baselineDoctors = listOf(
+                    ClinicDoctorEntity(
+                        id = "doc_fekry_hajayzah",
+                        doctorName = "د. محمد فكري",
+                        doctorNameEn = "Dr. Mohamed Fekry",
+                        specialty = "النساء والتوليد وتأخر الإنجاب",
+                        clinicName = "عيادة د. محمد فكري للنساء والتوليد",
+                        clinicNameEn = "Dr. Mohamed Fekry OB/GYN Clinic",
+                        clinicType = ClinicType.PRIVATE,
+                        locationLabel = "قرية الحجايزة",
+                        locationLabelEn = "Al-Hajayzah Village",
+                        feeEgp = 150,
+                        workStartMinutes = 17 * 60,
+                        workEndMinutes = 21 * 60,
+                        slotDurationMinutes = 20,
+                        currentDelayMinutes = 0,
+                        rating = 4.9f,
+                        experienceYears = 12,
+                        bio = "أخصائي النساء والتوليد وتأخر الإنجاب ومتابعة الحمل",
+                        mapsUrl = "",
+                        username = "dr_fekry",
+                        password = "1234",
+                        additionalSpecialties = "",
+                    ),
+                    ClinicDoctorEntity(
+                        id = "doc_shady_hajayzah",
+                        doctorName = "د. شادي",
+                        doctorNameEn = "Dr. Shady",
+                        specialty = "طب الأطفال وحديثي الولادة",
+                        clinicName = "عيادة د. شادي لطب الأطفال",
+                        clinicNameEn = "Dr. Shady Pediatrics Clinic",
+                        clinicType = ClinicType.PRIVATE,
+                        locationLabel = "قرية الحجايزة",
+                        locationLabelEn = "Al-Hajayzah Village",
+                        feeEgp = 150,
+                        workStartMinutes = 17 * 60,
+                        workEndMinutes = 21 * 60,
+                        slotDurationMinutes = 20,
+                        currentDelayMinutes = 0,
+                        rating = 4.9f,
+                        experienceYears = 10,
+                        bio = "أخصائي طب الأطفال وحديثي الولادة ومتابعة النمو",
+                        mapsUrl = "",
+                        username = "dr_shady",
+                        password = "1234",
+                        additionalSpecialties = "",
+                    ),
+                )
+                baselineDoctors.forEach { baseDoc ->
+                    if (dao.getDoctorById(baseDoc.id) == null && dao.findDoctorByUsername(baseDoc.username) == null) {
+                        dao.insertDoctor(baseDoc)
+                        dao.insertSlots(buildSlotsForDoctor(baseDoc))
+                    }
+                }
+                appContext.tebDataStore.edit { editPrefs ->
+                    editPrefs[seededRealDoctorsKey] = true
+                }
+            }
+
             val savedAccountId = prefs[activeAccountKey].orEmpty()
             val savedDoctorId = prefs[loggedInDoctorIdKey].orEmpty()
             val savedLabId = prefs[loggedInLabIdKey].orEmpty()
@@ -746,11 +830,28 @@ class TebRepository(
         medications: String,
         notes: String,
         attachmentPath: String,
+        diagnosisEn: String = "",
+        medicationsEn: String = "",
+        notesEn: String = "",
+        aiReportAr: String = "",
+        aiReportEn: String = "",
     ): Result<MedicalRecordEntity> {
         val slot = dao.getSlotById(slotId)
             ?: return Result.failure(IllegalStateException("الحجز غير موجود"))
         val doctor = dao.getDoctorById(slot.doctorId)
             ?: return Result.failure(IllegalStateException("الطبيب غير موجود"))
+
+        val bundle = BilingualMedicalTranslator.buildBilingualBundle(
+            patientName = slot.patientName,
+            doctorName = doctor.doctorName,
+            specialty = doctor.specialty,
+            diagnosisInput = diagnosis,
+            medicationsInput = medications,
+            notesInput = notes,
+            existingDiagnosisEn = diagnosisEn,
+            existingMedicationsEn = medicationsEn,
+            existingNotesEn = notesEn,
+        )
 
         dao.updateSlot(slot.copy(status = SlotStatus.COMPLETED))
         val record = MedicalRecordEntity(
@@ -762,14 +863,19 @@ class TebRepository(
             doctorName = doctor.doctorName,
             specialty = doctor.specialty,
             visitDateLabel = TimeUtils.formatTodayLabelAr(),
-            diagnosis = diagnosis.trim(),
-            medications = medications.trim(),
-            notes = notes.trim(),
+            diagnosis = bundle.diagnosisAr,
+            medications = bundle.medicationsAr.ifBlank { medications.trim() },
+            notes = bundle.notesAr.ifBlank { notes.trim() },
             attachmentPath = attachmentPath,
             attachmentMimeType = if (attachmentPath.isNotBlank()) "image/jpeg" else "",
             attachmentName = if (attachmentPath.isNotBlank()) "روشتة_ورقية.jpg" else "",
             recordType = MedicalRecordType.PRESCRIPTION,
             createdAtMillis = System.currentTimeMillis(),
+            diagnosisEn = diagnosisEn.trim().ifBlank { bundle.diagnosisEn },
+            medicationsEn = medicationsEn.trim().ifBlank { bundle.medicationsEn },
+            notesEn = notesEn.trim().ifBlank { bundle.notesEn },
+            aiReportAr = aiReportAr.trim().ifBlank { bundle.aiReportAr },
+            aiReportEn = aiReportEn.trim().ifBlank { bundle.aiReportEn },
         )
         dao.insertMedicalRecord(record)
         return Result.success(record)

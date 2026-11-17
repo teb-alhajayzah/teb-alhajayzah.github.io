@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ActivationOtpCodeEntity::class,
         MedicalLabEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -109,6 +109,20 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `doctorNameEn` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `clinicNameEn` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `locationLabelEn` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `additionalSpecialties` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `diagnosisEn` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `medicationsEn` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `notesEn` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `aiReportAr` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `aiReportEn` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -120,7 +134,7 @@ abstract class TebDatabase : RoomDatabase() {
                         TebDatabase::class.java,
                         "teb_al_hajayzah_prod_v100.db",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                         .build()
                 }.also { INSTANCE = it }
             }

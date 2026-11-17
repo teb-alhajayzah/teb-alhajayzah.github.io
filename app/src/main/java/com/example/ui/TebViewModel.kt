@@ -21,6 +21,7 @@ import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
 import com.example.data.repository.LabPatientSearchResult
 import com.example.data.repository.TebRepository
+import com.example.util.SpecialtyCatalog
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -106,7 +107,12 @@ data class TebUiState(
         get() = doctors.filter { it.clinicType == ClinicType.HOSPITAL }
 
     val specialties: List<String>
-        get() = doctors.map { it.specialty }.distinct()
+        get() = SpecialtyCatalog.all.map { it.nameAr }
+
+    val activeDoctorSpecialties: List<String>
+        get() = doctors
+            .flatMap { SpecialtyCatalog.allDoctorSpecialties(it.specialty, it.additionalSpecialties) }
+            .distinct()
 
     val selectedBookingDoctor: ClinicDoctorEntity?
         get() = doctors.firstOrNull { it.id == selectedBookingDoctorId }
@@ -660,6 +666,10 @@ class TebViewModel(
         slotDurationMinutes: Int,
         username: String,
         password: String,
+        additionalSpecialties: String = "",
+        doctorNameEn: String = "",
+        clinicNameEn: String = "",
+        locationLabelEn: String = "",
     ) {
         viewModelScope.launch {
             val res = repository.addDoctorByAdmin(
@@ -676,6 +686,10 @@ class TebViewModel(
                 slotDurationMinutes = slotDurationMinutes,
                 username = username,
                 password = password,
+                additionalSpecialties = additionalSpecialties,
+                doctorNameEn = doctorNameEn,
+                clinicNameEn = clinicNameEn,
+                locationLabelEn = locationLabelEn,
             )
             res.onSuccess { doc ->
                 _snackbarMessages.tryEmit("تمت إضافة ${doc.doctorName} ونشر عيادته في المنصة فوراً")
@@ -700,6 +714,10 @@ class TebViewModel(
         slotDurationMinutes: Int,
         username: String,
         password: String,
+        additionalSpecialties: String = "",
+        doctorNameEn: String = "",
+        clinicNameEn: String = "",
+        locationLabelEn: String = "",
     ) {
         viewModelScope.launch {
             val res = repository.updateDoctorByAdmin(
@@ -717,6 +735,10 @@ class TebViewModel(
                 slotDurationMinutes = slotDurationMinutes,
                 username = username,
                 password = password,
+                additionalSpecialties = additionalSpecialties,
+                doctorNameEn = doctorNameEn,
+                clinicNameEn = clinicNameEn,
+                locationLabelEn = locationLabelEn,
             )
             res.onSuccess { doc ->
                 _snackbarMessages.tryEmit("تم تحديث بيانات ${doc.doctorName} فوراً")
@@ -869,21 +891,31 @@ class TebViewModel(
         medications: String,
         notes: String,
         attachmentPath: String,
+        diagnosisEn: String = "",
+        medicationsEn: String = "",
+        notesEn: String = "",
+        aiReportAr: String = "",
+        aiReportEn: String = "",
     ) {
         viewModelScope.launch {
-            if (diagnosis.isBlank()) {
+            if (diagnosis.isBlank() && diagnosisEn.isBlank()) {
                 _snackbarMessages.tryEmit("يرجى كتابة التشخيص الطبي")
                 return@launch
             }
             val result = repository.completeVisitAndSavePrescription(
                 slotId = slotId,
-                diagnosis = diagnosis,
+                diagnosis = diagnosis.ifBlank { diagnosisEn },
                 medications = medications,
                 notes = notes,
                 attachmentPath = attachmentPath,
+                diagnosisEn = diagnosisEn,
+                medicationsEn = medicationsEn,
+                notesEn = notesEn,
+                aiReportAr = aiReportAr,
+                aiReportEn = aiReportEn,
             )
             result.onSuccess {
-                _snackbarMessages.tryEmit("تم إنهاء الكشف وإرسال الروشتة فوراً لملف المريض")
+                _snackbarMessages.tryEmit("تم إنهاء الكشف وإرسال الروشتة والتقرير لملف المريض")
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر حفظ الروشتة")
             }

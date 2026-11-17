@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,11 +40,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
@@ -53,6 +60,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -81,6 +89,7 @@ import com.example.ui.theme.SlotBookedBorder
 import com.example.ui.theme.SlotBookedText
 import com.example.ui.theme.TealPrimary
 import com.example.ui.theme.TealPrimaryDark
+import com.example.util.SpecialtyCatalog
 import com.example.util.TimeUtils
 
 @Composable
@@ -100,6 +109,10 @@ fun SuperAdminDashboardScreen(
         slotDurationMinutes: Int,
         username: String,
         password: String,
+        additionalSpecialties: String,
+        doctorNameEn: String,
+        clinicNameEn: String,
+        locationLabelEn: String,
     ) -> Unit,
     onUpdateDoctor: (
         doctorId: String,
@@ -116,6 +129,10 @@ fun SuperAdminDashboardScreen(
         slotDurationMinutes: Int,
         username: String,
         password: String,
+        additionalSpecialties: String,
+        doctorNameEn: String,
+        clinicNameEn: String,
+        locationLabelEn: String,
     ) -> Unit,
     onDeleteDoctor: (String) -> Unit,
     onCancelBooking: (slotId: String) -> Unit,
@@ -686,8 +703,8 @@ fun SuperAdminDashboardScreen(
             hospitalName = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn),
             isEn = isEn,
             currencyLabel = currencyLabel,
-            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass ->
-                onAddDoctor(name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass)
+            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn ->
+                onAddDoctor(name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn)
                 showAddForm = false
             },
             onDismiss = { showAddForm = false },
@@ -702,8 +719,8 @@ fun SuperAdminDashboardScreen(
             hospitalName = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn),
             isEn = isEn,
             currencyLabel = currencyLabel,
-            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass ->
-                onUpdateDoctor(editingDoc.id, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass)
+            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn ->
+                onUpdateDoctor(editingDoc.id, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn)
                 doctorToEdit = null
             },
             onDismiss = { doctorToEdit = null },
@@ -855,8 +872,15 @@ private fun AdminDoctorManageCard(
                 verticalAlignment = Alignment.Top,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(doctor.doctorName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("${doctor.specialty} — ${doctor.clinicName}", style = MaterialTheme.typography.bodySmall, color = TealPrimary)
+                    val docDisplayName = if (isEn && doctor.doctorNameEn.isNotBlank()) doctor.doctorNameEn else doctor.doctorName
+                    val clinicDisplayName = if (isEn && doctor.clinicNameEn.isNotBlank()) doctor.clinicNameEn else doctor.clinicName
+                    val allSpecsText = SpecialtyCatalog.formatDoctorSpecialties(
+                        doctor.specialty,
+                        doctor.additionalSpecialties,
+                        isEn,
+                    )
+                    Text(docDisplayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("$allSpecsText — $clinicDisplayName", style = MaterialTheme.typography.bodySmall, color = TealPrimary)
                 }
                 Surface(color = SlotAvailableBg, shape = RoundedCornerShape(8.dp)) {
                     Text(
@@ -876,7 +900,7 @@ private fun AdminDoctorManageCard(
                 text = bi(
                     isEn,
                     "📍 ${doctor.locationLabel} • الكشف: ${doctor.feeEgp} $currencyLabel • 🕒 ${TimeUtils.formatMinutesAr(doctor.workStartMinutes, false)} - ${TimeUtils.formatMinutesAr(doctor.workEndMinutes, false)}",
-                    "📍 ${doctor.locationLabel} • Fee: ${doctor.feeEgp} $currencyLabel • 🕒 ${TimeUtils.formatMinutesAr(doctor.workStartMinutes, true)} - ${TimeUtils.formatMinutesAr(doctor.workEndMinutes, true)}",
+                    "📍 ${doctor.locationLabelEn.ifBlank { doctor.locationLabel }} • Fee: ${doctor.feeEgp} $currencyLabel • 🕒 ${TimeUtils.formatMinutesAr(doctor.workStartMinutes, true)} - ${TimeUtils.formatMinutesAr(doctor.workEndMinutes, true)}",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -923,6 +947,7 @@ private fun AdminDoctorManageCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DoctorFormDialog(
     initialDoctor: ClinicDoctorEntity?,
@@ -944,16 +969,32 @@ private fun DoctorFormDialog(
         slotDurationMinutes: Int,
         username: String,
         password: String,
+        additionalSpecialties: String,
+        doctorNameEn: String,
+        clinicNameEn: String,
+        locationLabelEn: String,
     ) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val isEdit = initialDoctor != null
     var doctorName by remember { mutableStateOf(initialDoctor?.doctorName ?: "") }
-    var specialty by remember { mutableStateOf(initialDoctor?.specialty ?: "") }
+    var doctorNameEn by remember { mutableStateOf(initialDoctor?.doctorNameEn ?: "") }
+    val initialPrimary = SpecialtyCatalog.normalizeSpecialty(initialDoctor?.specialty ?: "").ifBlank {
+        SpecialtyCatalog.all.first().nameAr
+    }
+    var specialty by remember { mutableStateOf(initialPrimary) }
+    var primaryDropdownExpanded by remember { mutableStateOf(false) }
+    val selectedAdditional = remember {
+        mutableStateListOf<String>().apply {
+            addAll(SpecialtyCatalog.parseAdditionalSpecialties(initialDoctor?.additionalSpecialties.orEmpty()))
+        }
+    }
     var clinicName by remember { mutableStateOf(initialDoctor?.clinicName ?: "") }
+    var clinicNameEn by remember { mutableStateOf(initialDoctor?.clinicNameEn ?: "") }
     var clinicType by remember { mutableStateOf(initialDoctor?.clinicType ?: defaultClinicType) }
     var bio by remember { mutableStateOf(initialDoctor?.bio ?: "") }
-    var locationLabel by remember { mutableStateOf(initialDoctor?.locationLabel ?: "") }
+    var locationLabel by remember { mutableStateOf(initialDoctor?.locationLabel ?: "قرية الحجايزة") }
+    var locationLabelEn by remember { mutableStateOf(initialDoctor?.locationLabelEn ?: "Al-Hajayzah Village") }
     var feeText by remember { mutableStateOf((initialDoctor?.feeEgp ?: 150).toString()) }
     var mapsUrl by remember { mutableStateOf(initialDoctor?.mapsUrl ?: "") }
     var startHour by remember { mutableIntStateOf((initialDoctor?.workStartMinutes ?: (17 * 60)) / 60) }
@@ -978,17 +1019,87 @@ private fun DoctorFormDialog(
                 OutlinedTextField(
                     value = doctorName,
                     onValueChange = { doctorName = it },
-                    label = { Text(bi(isEn, "اسم الدكتور", "Doctor Name")) },
+                    label = { Text(bi(isEn, "اسم الدكتور (بالعربية) *", "Doctor Name (Arabic) *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = specialty,
-                    onValueChange = { specialty = it },
-                    label = { Text(bi(isEn, "التخصص الطبي", "Medical Specialty")) },
+                    value = doctorNameEn,
+                    onValueChange = { doctorNameEn = it },
+                    label = { Text(bi(isEn, "اسم الدكتور بالإنجليزية (اختياري)", "Doctor Name (English, optional)")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                // Primary Specialty Dropdown (Unified 18 Specialties Catalog)
+                ExposedDropdownMenuBox(
+                    expanded = primaryDropdownExpanded,
+                    onExpandedChange = { primaryDropdownExpanded = !primaryDropdownExpanded },
+                ) {
+                    OutlinedTextField(
+                        value = SpecialtyCatalog.displaySpecialty(specialty, isEn),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(bi(isEn, "التخصص الرئيسي *", "Primary Specialty *")) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = primaryDropdownExpanded) },
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth()
+                            .testTag("admin_primary_specialty_dropdown"),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = primaryDropdownExpanded,
+                        onDismissRequest = { primaryDropdownExpanded = false },
+                    ) {
+                        SpecialtyCatalog.all.forEach { specItem ->
+                            DropdownMenuItem(
+                                text = { Text(specItem.label(isEn)) },
+                                onClick = {
+                                    specialty = specItem.nameAr
+                                    selectedAdditional.removeAll { it == specItem.nameAr }
+                                    primaryDropdownExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = bi(
+                        isEn,
+                        "تخصصات إضافية للطبيب (اختيار متعدد - اختياري):",
+                        "Additional Specialties (Multi-select, optional):",
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TealPrimary,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    SpecialtyCatalog.all.filter { it.nameAr != specialty }.forEach { specItem ->
+                        val isSelected = specItem.nameAr in selectedAdditional
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                if (isSelected) selectedAdditional.remove(specItem.nameAr)
+                                else selectedAdditional.add(specItem.nameAr)
+                            },
+                            label = {
+                                Text(
+                                    text = specItem.label(isEn),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = TealPrimary,
+                                selectedLabelColor = Color.White,
+                            ),
+                        )
+                    }
+                }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = clinicType == ClinicType.PRIVATE,
@@ -1015,7 +1126,7 @@ private fun DoctorFormDialog(
                     label = {
                         Text(
                             if (clinicType == ClinicType.HOSPITAL) bi(isEn, "اسم القسم بالمستشفى", "Department Name")
-                            else bi(isEn, "اسم العيادة", "Clinic Name")
+                            else bi(isEn, "اسم العيادة (عربي)", "Clinic Name (Arabic)")
                         )
                     },
                     placeholder = {
@@ -1024,6 +1135,13 @@ private fun DoctorFormDialog(
                             else ""
                         )
                     },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = clinicNameEn,
+                    onValueChange = { clinicNameEn = it },
+                    label = { Text(bi(isEn, "اسم العيادة بالإنجليزية (اختياري)", "Clinic Name (English, optional)")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1134,6 +1252,10 @@ private fun DoctorFormDialog(
                         slotDuration,
                         username,
                         password,
+                        SpecialtyCatalog.serializeAdditionalSpecialties(selectedAdditional),
+                        doctorNameEn,
+                        clinicNameEn,
+                        locationLabelEn,
                     )
                 }
             ) {

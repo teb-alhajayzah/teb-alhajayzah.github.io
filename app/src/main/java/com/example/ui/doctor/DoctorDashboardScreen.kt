@@ -88,6 +88,7 @@ import com.example.ui.theme.SlotCompletedBg
 import com.example.ui.theme.SlotCompletedBorder
 import com.example.ui.theme.SlotCompletedText
 import com.example.ui.theme.TealPrimary
+import com.example.util.SpecialtyCatalog
 import com.example.util.TimeUtils
 
 @Composable
@@ -212,7 +213,18 @@ fun DoctorDashboardScreen(
     onCancelSlot: (slotId: String) -> Unit,
     onDelayDoctor: (doctorId: String, delayMinutes: Int) -> Unit,
     onGenerateSchedule: (doctorId: String, startMin: Int, endMin: Int, durationMin: Int) -> Unit,
-    onCompleteVisit: (slotId: String, diagnosis: String, medications: String, notes: String, attachmentPath: String) -> Unit,
+    onCompleteVisit: (
+        slotId: String,
+        diagnosis: String,
+        medications: String,
+        notes: String,
+        attachmentPath: String,
+        diagnosisEn: String,
+        medicationsEn: String,
+        notesEn: String,
+        aiReportAr: String,
+        aiReportEn: String,
+    ) -> Unit,
     onToggleFavoriteMed: (doctorId: String, medicationId: String) -> Unit,
     onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
     onPreviewImage: (path: String, title: String) -> Unit,
@@ -249,9 +261,10 @@ fun DoctorDashboardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val docTitleName = if (isEn && activeDoctor.doctorNameEn.isNotBlank()) activeDoctor.doctorNameEn else activeDoctor.doctorName
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = bi(isEn, "لوحة تحكم عيادة ${activeDoctor.doctorName}", "${activeDoctor.doctorName} Clinic"),
+                            text = bi(isEn, "لوحة تحكم عيادة $docTitleName", "$docTitleName Clinic"),
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
@@ -321,13 +334,26 @@ fun DoctorDashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                val docDisplay = if (isEn && activeDoctor.doctorNameEn.isNotBlank()) activeDoctor.doctorNameEn else activeDoctor.doctorName
+                                val clinicDisplay = if (isEn && activeDoctor.clinicNameEn.isNotBlank()) activeDoctor.clinicNameEn else activeDoctor.clinicName
+                                val specsDisplay = SpecialtyCatalog.formatDoctorSpecialties(
+                                    activeDoctor.specialty,
+                                    activeDoctor.additionalSpecialties,
+                                    isEn,
+                                )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = activeDoctor.doctorName,
+                                        text = docDisplay,
                                         style = MaterialTheme.typography.titleLarge,
                                     )
                                     Text(
-                                        text = "${activeDoctor.clinicName} • ${TimeUtils.formatMinutesAr(activeDoctor.workStartMinutes, isEn)} - ${TimeUtils.formatMinutesAr(activeDoctor.workEndMinutes, isEn)}",
+                                        text = specsDisplay,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = TealPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text(
+                                        text = "$clinicDisplay • ${TimeUtils.formatMinutesAr(activeDoctor.workStartMinutes, isEn)} - ${TimeUtils.formatMinutesAr(activeDoctor.workEndMinutes, isEn)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -463,8 +489,19 @@ fun DoctorDashboardScreen(
             favoriteMedIds = state.favoriteMedicationIdsForDoctor(activeDoctor.id),
             isEn = isEn,
             onToggleFavorite = { medId -> onToggleFavoriteMed(activeDoctor.id, medId) },
-            onSaveAndComplete = { diagnosis, medicationsText, notes, attachmentPath ->
-                onCompleteVisit(rxSlot.id, diagnosis, medicationsText, notes, attachmentPath)
+            onSaveAndComplete = { diagnosis, medicationsText, notes, attachmentPath, diagEn, medsEn, notesEn, reportAr, reportEn ->
+                onCompleteVisit(
+                    rxSlot.id,
+                    diagnosis,
+                    medicationsText,
+                    notes,
+                    attachmentPath,
+                    diagEn,
+                    medsEn,
+                    notesEn,
+                    reportAr,
+                    reportEn,
+                )
                 slotForPrescription = null
             },
             onShowMessage = onShowMessage,

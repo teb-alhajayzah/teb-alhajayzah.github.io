@@ -11,7 +11,9 @@ import com.example.data.local.TebDatabase
 import com.example.data.medications.MedicationCatalog
 import com.example.data.repository.TebRepository
 import com.example.ui.AppLanguage
+import com.example.util.BilingualMedicalTranslator
 import com.example.util.MedicalSummaryAnalyzer
+import com.example.util.SpecialtyCatalog
 import com.example.util.TimeUtils
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -37,6 +39,7 @@ class ExampleRobolectricTest {
             .allowMainThreadQueries()
             .build()
         repository = TebRepository(db.tebDao(), context)
+        runBlocking { repository.clearPrefsForTesting() }
     }
 
     @After
@@ -55,10 +58,13 @@ class ExampleRobolectricTest {
 
         repository.ensureSeeded()
 
-        assertTrue(repository.doctorsFlow.first().isEmpty())
+        val seededDoctors = repository.doctorsFlow.first()
+        assertEquals(2, seededDoctors.size)
+        assertTrue(seededDoctors.any { it.id == "doc_fekry_hajayzah" && it.doctorName == "د. محمد فكري" && it.specialty == "النساء والتوليد وتأخر الإنجاب" })
+        assertTrue(seededDoctors.any { it.id == "doc_shady_hajayzah" && it.doctorName == "د. شادي" && it.specialty == "طب الأطفال وحديثي الولادة" })
         assertTrue(repository.labsFlow.first().isEmpty())
         assertTrue(repository.allAccountsFlow.first().isEmpty())
-        assertTrue(repository.allSlotsFlow.first().isEmpty())
+        assertEquals(24, repository.allSlotsFlow.first().size)
         assertTrue(repository.allMedicalRecordsFlow.first().isEmpty())
         assertEquals(5, repository.activationCodesFlow.first().size)
 
@@ -131,7 +137,12 @@ class ExampleRobolectricTest {
         assertTrue(rxResult.isSuccess)
 
         val records = repository.allMedicalRecordsFlow.first()
-        assertTrue(records.any { it.patientName == "ياسر محمود السيد" && it.diagnosis.contains("نزلة معوية") })
+        val rxRecord = records.first { it.patientName == "ياسر محمود السيد" && it.diagnosis.contains("نزلة معوية") }
+        assertEquals("Mild Acute Gastroenteritis", rxRecord.diagnosisEn)
+        assertTrue(rxRecord.medicationsEn.contains("Antinal"))
+        assertTrue(rxRecord.medicationsEn.contains("every 6 hours for 5 days"))
+        assertTrue(rxRecord.aiReportAr.contains("التقرير الطبي المبسط"))
+        assertTrue(rxRecord.aiReportEn.contains("Clinical Medical Report"))
     }
 
     @Test
@@ -391,5 +402,71 @@ class ExampleRobolectricTest {
 
         repository.unblockPhone("01055443322")
         assertTrue(repository.bookSlot(availSlot.id, "مريض مخالف", "01055443322", "", BookingSource.APP).isSuccess)
+    }
+
+    @Test
+    fun seededRealDoctorsLoginsAdminEditDeleteAndMultiSpecialtyFilterWork() = runBlocking {
+        repository.ensureSeeded()
+
+        // Default credentials work for Dr. Mohamed Fekry & Dr. Shady
+        assertTrue(repository.loginDoctor("dr_fekry", "1234").isSuccess)
+        assertTrue(repository.loginDoctor("dr_shady", "1234").isSuccess)
+
+        // All 18 unified specialties are present in order
+        assertEquals(18, SpecialtyCatalog.all.size)
+        assertEquals("طب الأطفال وحديثي الولادة", SpecialtyCatalog.all.first().nameAr)
+        assertEquals("تخصصات أخرى", SpecialtyCatalog.all.last().nameAr)
+
+        // Admin updates Dr. Fekry with an additional specialty
+        val updateRes = repository.updateDoctorByAdmin(
+            doctorId = "doc_fekry_hajayzah",
+            doctorName = "د. محمد فكري",
+            specialty = "النساء والتوليد وتأخر الإنجاب",
+            clinicName = "عيادة د. محمد فكري للنساء والتوليد",
+            clinicType = ClinicType.PRIVATE,
+            locationLabel = "قرية الحجايزة",
+            bio = "أخصائي النساء والتوليد",
+            mapsUrl = "",
+            feeEgp = 200,
+            workStartMinutes = 17 * 60,
+            workEndMinutes = 21 * 60,
+            slotDurationMinutes = 20,
+            username = "dr_fekry_updated",
+            password = "pass_new",
+            additionalSpecialties = "طب وجراحة الأسنان|الأشعة التشخيصية",
+        )
+        assertTrue(updateRes.isSuccess)
+        val updatedFekry = updateRes.getOrThrow()
+        assertEquals(200, updatedFekry.feeEgp)
+        assertTrue(SpecialtyCatalog.doctorMatchesSpecialty(updatedFekry, "النساء والتوليد وتأخر الإنجاب"))
+        assertTrue(SpecialtyCatalog.doctorMatchesSpecialty(updatedFekry, "الأشعة التشخيصية"))
+        assertFalse(SpecialtyCatalog.doctorMatchesSpecialty(updatedFekry, "طب الأطفال وحديثي الولادة"))
+        assertTrue(repository.loginDoctor("dr_fekry_updated", "pass_new").isSuccess)
+
+        // Deleting a seeded doctor persists even if ensureSeeded() runs again
+        repository.deleteDoctorByAdmin("doc_shady_hajayzah")
+        repository.ensureSeeded()
+        val remaining = repository.doctorsFlow.first()
+        assertEquals(1, remaining.size)
+        assertFalse(remaining.any { it.id == "doc_shady_hajayzah" })
+    }
+
+    @Test
+    fun bilingualTranslatorGeneratesArAndEnRxAndClinicalReport() {
+        val bundle = BilingualMedicalTranslator.buildBilingualBundle(
+            patientName = "عمر محمود",
+            doctorName = "د. شادي",
+            specialty = "طب الأطفال وحديثي الولادة",
+            diagnosisInput = "التهاب حاد باللوزتين",
+            medicationsInput = "• أوجمنتين شراب (Augmentin) 457 مجم/5 مل — 5 سم كل 12 ساعة لمدة 7 أيام",
+            notesInput = "الراحة وشرب سوائل دافئة",
+        )
+        assertEquals("التهاب حاد باللوزتين", bundle.diagnosisAr)
+        assertEquals("Acute Tonsillitis", bundle.diagnosisEn)
+        assertTrue(bundle.medicationsEn.contains("Augmentin"))
+        assertTrue(bundle.medicationsEn.contains("5 ml every 12 hours for 7 days"))
+        assertTrue(bundle.aiReportAr.contains("د. شادي"))
+        assertTrue(bundle.aiReportEn.contains("Acute Tonsillitis"))
+        assertTrue(bundle.aiReportEn.contains("Pediatrics & Neonatology"))
     }
 }
