@@ -64,6 +64,7 @@ import coil.compose.AsyncImage
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
 import com.example.ui.TebUiState
+import com.example.ui.bi
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.theme.SlotAvailableBg
 import com.example.ui.theme.SlotAvailableBorder
@@ -75,6 +76,7 @@ import java.io.File
 @Composable
 fun LabLoginGateCard(
     adminOwnerName: String,
+    isEn: Boolean = false,
     onLoginLab: (username: String, password: String) -> Unit,
 ) {
     var username by remember { mutableStateOf("") }
@@ -110,18 +112,22 @@ fun LabLoginGateCard(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Science,
-                            contentDescription = "تسجيل دخول معامل التحاليل",
+                            contentDescription = bi(isEn, "تسجيل دخول معامل التحاليل", "Medical Lab Login"),
                             tint = Color(0xFF4338CA),
                             modifier = Modifier.size(28.dp),
                         )
                     }
                     Column {
                         Text(
-                            text = "بوابة معامل التحاليل (Lab Login)",
+                            text = bi(isEn, "بوابة معامل التحاليل (Lab Login)", "Medical Lab Portal"),
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            text = "سجّل دخولك لإرسال نتائج التحاليل (PDF أو صورة) لملف المريض مباشرة",
+                            text = bi(
+                                isEn,
+                                "سجّل دخولك لإرسال نتائج التحاليل (PDF أو صورة) لملف المريض مباشرة",
+                                "Sign in to upload lab results (PDF or image) directly to a patient's file",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -131,7 +137,7 @@ fun LabLoginGateCard(
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("اسم المستخدم للمعمل") },
+                    label = { Text(bi(isEn, "اسم المستخدم للمعمل", "Lab Username")) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -141,7 +147,7 @@ fun LabLoginGateCard(
                 PasswordOutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = "كلمة المرور",
+                    label = bi(isEn, "كلمة المرور", "Password"),
                     toggleTestTag = "lab_login_password_toggle",
                     modifier = Modifier
                         .fillMaxWidth()
@@ -158,7 +164,7 @@ fun LabLoginGateCard(
                 ) {
                     Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("دخول إلى بوابة المعمل")
+                    Text(bi(isEn, "دخول إلى بوابة المعمل", "Enter Lab Portal"))
                 }
 
                 Surface(
@@ -167,7 +173,11 @@ fun LabLoginGateCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "تُنشأ حسابات معامل التحاليل في قرية الحجايزة من لوحة الإدارة العليا ($adminOwnerName).",
+                        text = bi(
+                            isEn,
+                            "تُنشأ حسابات معامل التحاليل في قرية الحجايزة من لوحة الإدارة العليا ($adminOwnerName).",
+                            "Medical lab accounts are created by the Super Admin ($adminOwnerName).",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(10.dp),
@@ -197,6 +207,7 @@ fun LabDashboardScreen(
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val isEn = state.isEn
     var phoneQuery by remember { mutableStateOf("") }
     var selectedTarget by remember { mutableStateOf<Pair<FamilyMemberEntity, String>?>(null) }
 
@@ -217,7 +228,7 @@ fun LabDashboardScreen(
                 attachmentMime = saved.mimeType
                 attachmentName = saved.displayName
             } else {
-                onShowMessage("تعذر قراءة ملف التحليل")
+                onShowMessage(bi(isEn, "تعذر قراءة ملف التحليل", "Could not read lab file"))
             }
         }
     }
@@ -244,7 +255,7 @@ fun LabDashboardScreen(
             if (saved != null) {
                 attachmentPath = saved
                 attachmentMime = "image/jpeg"
-                attachmentName = "تقرير_معمل.jpg"
+                attachmentName = if (isEn) "lab_report.jpg" else "تقرير_معمل.jpg"
             }
         }
     }
@@ -270,7 +281,7 @@ fun LabDashboardScreen(
                             color = Color(0xFF4338CA),
                         )
                         Text(
-                            text = "رفع نتائج التحاليل مباشرة لملف المريض الموحد",
+                            text = bi(isEn, "رفع نتائج التحاليل مباشرة لملف المريض الموحد", "Upload lab results straight to the unified patient file"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -283,7 +294,7 @@ fun LabDashboardScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("خروج")
+                        Text(bi(isEn, "خروج", "Sign Out"))
                     }
                 }
             }
@@ -301,7 +312,7 @@ fun LabDashboardScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(
-                            text = "البحث عن المريض برقم الهاتف",
+                            text = bi(isEn, "البحث عن المريض برقم الهاتف", "Find Patient by Phone"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                         )
@@ -313,7 +324,7 @@ fun LabDashboardScreen(
                             OutlinedTextField(
                                 value = phoneQuery,
                                 onValueChange = { phoneQuery = it },
-                                label = { Text("رقم هاتف المريض") },
+                                label = { Text(bi(isEn, "رقم هاتف المريض", "Patient Phone")) },
                                 placeholder = { Text("010xxxxxxxx") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 singleLine = true,
@@ -331,9 +342,9 @@ fun LabDashboardScreen(
                                     .height(54.dp)
                                     .testTag("lab_phone_search_button"),
                             ) {
-                                Icon(Icons.Filled.Search, contentDescription = "بحث")
+                                Icon(Icons.Filled.Search, contentDescription = bi(isEn, "بحث", "Search"))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("بحث")
+                                Text(bi(isEn, "بحث", "Search"))
                             }
                         }
                     }
@@ -343,7 +354,7 @@ fun LabDashboardScreen(
             if (state.labSearchResults.isNotEmpty()) {
                 item {
                     Text(
-                        text = "اختر الفرد المراد إرسال النتيجة إلى ملفه:",
+                        text = bi(isEn, "اختر الفرد المراد إرسال النتيجة إلى ملفه:", "Select family member to upload result for:"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -360,7 +371,7 @@ fun LabDashboardScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = "حساب: ${res.account.fullName} (${res.account.phone})",
+                                text = bi(isEn, "حساب: ${res.account.fullName} (${res.account.phone})", "Account: ${res.account.fullName} (${res.account.phone})"),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = TealPrimary,
                                 fontWeight = FontWeight.Bold,
@@ -390,11 +401,14 @@ fun LabDashboardScreen(
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Column {
                                                 Text(member.fullName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                                Text("${member.relation} • ${member.age} سنة", style = MaterialTheme.typography.bodySmall)
+                                                Text(
+                                                    text = bi(isEn, "${member.relation} • ${member.age} سنة", "${member.relation} • ${member.age} yrs"),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
                                             }
                                         }
                                         if (isSelected) {
-                                            Icon(Icons.Filled.CheckCircle, contentDescription = "محدد", tint = SlotAvailableBorder)
+                                            Icon(Icons.Filled.CheckCircle, contentDescription = bi(isEn, "محدد", "Selected"), tint = SlotAvailableBorder)
                                         }
                                     }
                                 }
@@ -424,7 +438,7 @@ fun LabDashboardScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Filled.UploadFile, contentDescription = null, tint = SlotAvailableBorder)
                                 Text(
-                                    text = "إرسال نتيجة تحليل لملف: ${member.fullName}",
+                                    text = bi(isEn, "إرسال نتيجة تحليل لملف: ${member.fullName}", "Upload Result for: ${member.fullName}"),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                 )
@@ -433,8 +447,8 @@ fun LabDashboardScreen(
                             OutlinedTextField(
                                 value = testTitle,
                                 onValueChange = { testTitle = it },
-                                label = { Text("اسم التحليل أو الفحص *") },
-                                placeholder = { Text("مثال: صورة دم كاملة CBC / وظائف كلى") },
+                                label = { Text(bi(isEn, "اسم التحليل أو الفحص *", "Test / Scan Title *")) },
+                                placeholder = { Text(bi(isEn, "مثال: صورة دم كاملة CBC / وظائف كلى", "e.g., CBC / Kidney Panel")) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -444,7 +458,7 @@ fun LabDashboardScreen(
                             OutlinedTextField(
                                 value = testNotes,
                                 onValueChange = { testNotes = it },
-                                label = { Text("ملاحظات المعمل أو القيم المهمة (اختياري)") },
+                                label = { Text(bi(isEn, "ملاحظات المعمل أو القيم المهمة (اختياري)", "Lab notes or key values (optional)")) },
                                 minLines = 2,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -462,7 +476,7 @@ fun LabDashboardScreen(
                                 ) {
                                     Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("ملف PDF / مستند", maxLines = 1)
+                                    Text(bi(isEn, "ملف PDF / مستند", "PDF / Document"), maxLines = 1)
                                 }
                                 OutlinedButton(
                                     onClick = {
@@ -474,7 +488,7 @@ fun LabDashboardScreen(
                                 ) {
                                     Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("صورة من المعرض", maxLines = 1)
+                                    Text(bi(isEn, "صورة من المعرض", "Gallery Image"), maxLines = 1)
                                 }
                             }
 
@@ -485,14 +499,14 @@ fun LabDashboardScreen(
                                         tempCameraFile = file
                                         cameraLauncher.launch(uri)
                                     } catch (_: ActivityNotFoundException) {
-                                        onShowMessage("لا توجد كاميرا متاحة")
+                                        onShowMessage(bi(isEn, "لا توجد كاميرا متاحة", "No camera available"))
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth().height(46.dp),
                             ) {
                                 Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("تصوير نتيجة التحليل بالكاميرا")
+                                Text(bi(isEn, "تصوير نتيجة التحليل بالكاميرا", "Take Photo with Camera"))
                             }
 
                             if (attachmentPath.isNotBlank()) {
@@ -508,13 +522,16 @@ fun LabDashboardScreen(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
                                             Icon(Icons.Filled.PictureAsPdf, contentDescription = null, tint = Color(0xFFDC2626))
-                                            Text("جاهز للإرسال: ${attachmentName.ifBlank { "نتيجة_التحليل.pdf" }}", style = MaterialTheme.typography.bodyMedium)
+                                            Text(
+                                                text = bi(isEn, "جاهز للإرسال: ${attachmentName.ifBlank { "نتيجة_التحليل.pdf" }}", "Ready: ${attachmentName.ifBlank { "lab_report.pdf" }}"),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
                                         }
                                     }
                                 } else {
                                     AsyncImage(
                                         model = File(attachmentPath),
-                                        contentDescription = "معاينة النتيجة",
+                                        contentDescription = bi(isEn, "معاينة النتيجة", "Result preview"),
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -550,7 +567,7 @@ fun LabDashboardScreen(
                             ) {
                                 Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("إرسال النتيجة لملف المريض فوراً")
+                                Text(bi(isEn, "إرسال النتيجة لملف المريض فوراً", "Send Result to Patient File"))
                             }
                         }
                     }

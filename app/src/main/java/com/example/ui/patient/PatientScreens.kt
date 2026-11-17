@@ -90,6 +90,7 @@ import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.PatientTab
 import com.example.ui.TebUiState
+import com.example.ui.bi
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
 import com.example.ui.theme.DelayWarningText
@@ -118,9 +119,15 @@ fun PatientHomeScreen(
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val isEn = state.isEn
     val activeMember = state.activeMember
     val familyIds = remember(state.familyMembers) { state.familyMembers.map { it.id }.toSet() }
     val familyNames = remember(state.familyMembers) { state.familyMembers.map { it.fullName }.toSet() }
+    val platformTitle = bi(isEn, state.brandConfig.platformNameAr, state.brandConfig.platformNameEn)
+    val villageLabel = bi(isEn, state.brandConfig.villageNameAr, state.brandConfig.villageNameEn)
+    val hospitalLabel = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn)
+    val taglineLabel = bi(isEn, state.brandConfig.taglineAr, state.brandConfig.taglineEn)
+    val currencyLabel = bi(isEn, state.brandConfig.currencyLabelAr, state.brandConfig.currencyLabelEn)
 
     val myBookedSlots = remember(state.allSlots, familyIds, familyNames) {
         state.allSlots.filter { slot ->
@@ -152,7 +159,7 @@ fun PatientHomeScreen(
                     ) {
                         Image(
                             painter = painterResource(id = state.brandConfig.heroBannerRes),
-                            contentDescription = state.brandConfig.hospitalNameAr,
+                            contentDescription = hospitalLabel,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -170,17 +177,23 @@ fun PatientHomeScreen(
                                 )
                                 .padding(16.dp),
                         ) {
+                            val displayName = activeMember?.fullName ?: state.activeAccount?.fullName
+                            val greetingText = if (displayName.isNullOrBlank()) {
+                                bi(isEn, "أهلاً بك في منصة $platformTitle", "Welcome to $platformTitle")
+                            } else {
+                                bi(isEn, "أهلاً بك، $displayName", "Welcome, $displayName")
+                            }
                             Column(
                                 modifier = Modifier.align(Alignment.CenterStart),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Text(
-                                    text = "أهلاً بك، ${activeMember?.fullName ?: state.activeAccount?.fullName ?: "مريضنا الكريم"}",
+                                    text = greetingText,
                                     style = MaterialTheme.typography.headlineSmall,
                                     color = Color.White,
                                 )
                                 Text(
-                                    text = state.brandConfig.taglineAr,
+                                    text = taglineLabel,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.94f),
                                 )
@@ -189,7 +202,11 @@ fun PatientHomeScreen(
                                     shape = RoundedCornerShape(50),
                                 ) {
                                     Text(
-                                        text = "احجز موعدك في ثوانٍ بدون انتظار • ${state.brandConfig.hospitalNameAr}",
+                                        text = bi(
+                                            isEn,
+                                            "احجز موعدك في ثوانٍ بدون انتظار • $hospitalLabel",
+                                            "Book instantly with zero wait • $hospitalLabel",
+                                        ),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White,
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -215,7 +232,7 @@ fun PatientHomeScreen(
                         ) {
                             Icon(
                                 Icons.Filled.MedicalInformation,
-                                contentDescription = "إعلان المنصة",
+                                contentDescription = bi(isEn, "إعلان المنصة", "Platform Notice"),
                                 tint = TealPrimary,
                                 modifier = Modifier.size(26.dp),
                             )
@@ -246,13 +263,17 @@ fun PatientHomeScreen(
                         ) {
                             Icon(
                                 Icons.Filled.Warning,
-                                contentDescription = "تأكيد OTP مطلوب",
+                                contentDescription = bi(isEn, "تأكيد OTP مطلوب", "OTP verification required"),
                                 tint = SlotBookedBorder,
                                 modifier = Modifier.size(26.dp),
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "حسابك بانتظار التفعيل برمز التحقق (OTP). اضغط هنا لإدخال الكود وتفعيل الحجز.",
+                                text = bi(
+                                    isEn,
+                                    "حسابك بانتظار التفعيل برمز التحقق (OTP). اضغط هنا لإدخال الكود وتفعيل الحجز.",
+                                    "Your account awaits OTP activation. Tap here to enter your 6-digit code and unlock booking.",
+                                ),
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = SlotBookedText,
                             )
@@ -298,13 +319,13 @@ fun PatientHomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "الحجز والملف الطبي باسم:",
+                            text = bi(isEn, "الحجز والملف الطبي باسم:", "Booking & Medical File For:"),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         TextButton(onClick = onOpenAddFamilyDialog) {
                             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("إضافة فرد عائلة")
+                            Text(bi(isEn, "إضافة فرد عائلة", "Add Family"))
                         }
                     }
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -339,7 +360,7 @@ fun PatientHomeScreen(
 
             item {
                 Text(
-                    text = "الأقسام الرئيسية",
+                    text = bi(isEn, "الأقسام الرئيسية", "Main Sections"),
                     style = MaterialTheme.typography.headlineSmall,
                 )
             }
@@ -351,8 +372,8 @@ fun PatientHomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         HomeSectionTile(
-                            title = "العيادات الخاصة",
-                            subtitle = "${state.privateClinics.size} عيادات متاحة",
+                            title = bi(isEn, "العيادات الخاصة", "Private Clinics"),
+                            subtitle = bi(isEn, "${state.privateClinics.size} عيادات متاحة", "${state.privateClinics.size} clinics"),
                             icon = Icons.Filled.MedicalServices,
                             containerColor = Color(0xFFE0F2F1),
                             accentColor = Color(0xFF0D7377),
@@ -361,8 +382,8 @@ fun PatientHomeScreen(
                             onClick = { onSelectTab(PatientTab.PRIVATE_CLINICS) },
                         )
                         HomeSectionTile(
-                            title = "المستشفى التخصصي",
-                            subtitle = "${state.hospitalClinics.size} أقسام طبية",
+                            title = bi(isEn, "المستشفى التخصصي", "Specialty Hospital"),
+                            subtitle = bi(isEn, "${state.hospitalClinics.size} أقسام طبية", "${state.hospitalClinics.size} depts"),
                             icon = Icons.Filled.LocalHospital,
                             containerColor = Color(0xFFE3F2FD),
                             accentColor = Color(0xFF0F5E8C),
@@ -376,8 +397,8 @@ fun PatientHomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         HomeSectionTile(
-                            title = "التخصصات الطبية",
-                            subtitle = "${state.specialties.size} تخصصات",
+                            title = bi(isEn, "التخصصات الطبية", "Specialties"),
+                            subtitle = bi(isEn, "${state.specialties.size} تخصصات", "${state.specialties.size} specialties"),
                             icon = Icons.Filled.MedicalInformation,
                             containerColor = Color(0xFFECFDF5),
                             accentColor = Color(0xFF15803D),
@@ -389,8 +410,8 @@ fun PatientHomeScreen(
                             },
                         )
                         HomeSectionTile(
-                            title = "ملفي الطبي",
-                            subtitle = "الروشتات والتحاليل",
+                            title = bi(isEn, "ملفي الطبي", "My Medical File"),
+                            subtitle = bi(isEn, "الروشتات والتحاليل", "Rx & Lab Results"),
                             icon = Icons.Filled.FolderShared,
                             containerColor = Color(0xFFFFF7ED),
                             accentColor = Color(0xFFC2410C),
@@ -404,7 +425,7 @@ fun PatientHomeScreen(
 
             item {
                 Text(
-                    text = "مواعيد العائلة المحجوزة اليوم (${myBookedSlots.size})",
+                    text = bi(isEn, "مواعيد العائلة المحجوزة اليوم (${myBookedSlots.size})", "Today's Family Bookings (${myBookedSlots.size})"),
                     style = MaterialTheme.typography.titleLarge,
                 )
             }
@@ -429,11 +450,15 @@ fun PatientHomeScreen(
                                 modifier = Modifier.size(36.dp),
                             )
                             Text(
-                                text = "لا توجد حجوزات قادمة اليوم",
+                                text = bi(isEn, "لا توجد حجوزات قادمة اليوم", "No upcoming bookings today"),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                text = "اختر العيادات الخاصة أو المستشفى التخصصي لحجز موعدك بضغطة واحدة.",
+                                text = bi(
+                                    isEn,
+                                    "اختر العيادات الخاصة أو المستشفى التخصصي لحجز موعدك بضغطة واحدة.",
+                                    "Choose Private Clinics or the Specialty Hospital to book in one tap.",
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
@@ -448,6 +473,7 @@ fun PatientHomeScreen(
                         MyBookingCard(
                             slot = slot,
                             doctor = doctor,
+                            isEn = isEn,
                             onOpenClinic = { onOpenDoctorBooking(doctor.id) },
                             onCancel = { onCancelSlot(slot.id) },
                         )
@@ -457,7 +483,7 @@ fun PatientHomeScreen(
 
             item {
                 Text(
-                    text = "أطباء متاحون الآن في ${state.brandConfig.villageNameAr}",
+                    text = bi(isEn, "أطباء متاحون الآن في $villageLabel", "Doctors Available Now in $villageLabel"),
                     style = MaterialTheme.typography.titleLarge,
                 )
             }
@@ -482,11 +508,15 @@ fun PatientHomeScreen(
                                 modifier = Modifier.size(34.dp),
                             )
                             Text(
-                                text = "لا توجد عيادات أو أقسام مضافة حالياً",
+                                text = bi(isEn, "لا توجد عيادات أو أقسام مضافة حالياً", "No clinics or departments added yet"),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                text = "يمكن للإدارة إضافة العيادات والأطباء من لوحة إدارة المنصة لتظهر هنا فوراً.",
+                                text = bi(
+                                    isEn,
+                                    "يمكن للإدارة إضافة العيادات والأطباء من لوحة إدارة المنصة لتظهر هنا فوراً.",
+                                    "Administrators can add real clinics and doctors from the admin dashboard to appear here immediately.",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
@@ -501,6 +531,8 @@ fun PatientHomeScreen(
                         doctor = doctor,
                         availableCount = doctorSlots.count { it.status == SlotStatus.AVAILABLE },
                         bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
+                        isEn = isEn,
+                        currencyLabel = currencyLabel,
                         onBookClick = { onOpenDoctorBooking(doctor.id) },
                     )
                 }
@@ -509,8 +541,9 @@ fun PatientHomeScreen(
             // بطاقة التحميل المباشر وتحديث تطبيق طب الحجايزة (الإصدار v1.0.0) في أسفل الصفحة الرئيسية
             item {
                 ApkDownloadCard(
-                    platformName = state.brandConfig.platformNameAr,
+                    platformName = platformTitle,
                     versionLabel = state.brandConfig.appVersionLabel,
+                    isEn = isEn,
                     onDownloadClick = {
                         try {
                             val intent = Intent(
@@ -519,7 +552,13 @@ fun PatientHomeScreen(
                             )
                             context.startActivity(intent)
                         } catch (_: Exception) {
-                            onShowMessage("تعذر فتح رابط التحميل: ${state.brandConfig.apkDownloadUrl}")
+                            onShowMessage(
+                                bi(
+                                    isEn,
+                                    "تعذر فتح رابط التحميل: ${state.brandConfig.apkDownloadUrl}",
+                                    "Could not open download link: ${state.brandConfig.apkDownloadUrl}",
+                                )
+                            )
                         }
                     },
                 )
@@ -528,8 +567,9 @@ fun PatientHomeScreen(
             // تذييل التواصل وطلب انضمام عيادة + شريط الحقوق
             item {
                 FooterContactAndRightsSection(
-                    platformName = state.brandConfig.platformNameAr,
+                    platformName = platformTitle,
                     supportPhone = state.brandConfig.supportPhone,
+                    isEn = isEn,
                     onWhatsAppClick = {
                         val digits = state.brandConfig.supportPhone.filter { it.isDigit() }
                         val waDigits = if (digits.startsWith("2")) digits else "2$digits"
@@ -538,7 +578,7 @@ fun PatientHomeScreen(
                                 Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waDigits"))
                             )
                         } catch (_: Exception) {
-                            onShowMessage("تعذر فتح واتساب على هذا الجهاز")
+                            onShowMessage(bi(isEn, "تعذر فتح واتساب على هذا الجهاز", "Could not open WhatsApp on this device"))
                         }
                     },
                     onCallClick = {
@@ -548,7 +588,7 @@ fun PatientHomeScreen(
                                 Intent(Intent.ACTION_DIAL, Uri.parse("tel:$digits"))
                             )
                         } catch (_: Exception) {
-                            onShowMessage("رقم التواصل: ${state.brandConfig.supportPhone}")
+                            onShowMessage(bi(isEn, "رقم التواصل: ${state.brandConfig.supportPhone}", "Support phone: ${state.brandConfig.supportPhone}"))
                         }
                     },
                 )
@@ -561,6 +601,7 @@ fun PatientHomeScreen(
 private fun ApkDownloadCard(
     platformName: String,
     versionLabel: String,
+    isEn: Boolean = false,
     onDownloadClick: () -> Unit,
 ) {
     Surface(
@@ -595,12 +636,20 @@ private fun ApkDownloadCard(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "تحميل وتحديث تطبيق $platformName (الإصدار $versionLabel)",
+                        text = bi(
+                            isEn,
+                            "تحميل وتحديث تطبيق $platformName (الإصدار $versionLabel)",
+                            "Download & Update $platformName App ($versionLabel)",
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                     Text(
-                        text = "تحميل مباشر لنسخة الأندرويد الرسمية المحدّثة تلقائياً من GitHub Releases",
+                        text = bi(
+                            isEn,
+                            "تحميل مباشر لنسخة الأندرويد الرسمية المحدّثة تلقائياً من GitHub Releases",
+                            "Direct download for the official Android release from GitHub Releases",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -621,7 +670,7 @@ private fun ApkDownloadCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "تحميل مباشر للتطبيق (APK)",
+                    text = bi(isEn, "تحميل مباشر للتطبيق (APK)", "Direct Download (APK)"),
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
@@ -633,6 +682,7 @@ private fun ApkDownloadCard(
 private fun FooterContactAndRightsSection(
     platformName: String,
     supportPhone: String,
+    isEn: Boolean = false,
     onWhatsAppClick: () -> Unit,
     onCallClick: () -> Unit,
 ) {
@@ -651,11 +701,15 @@ private fun FooterContactAndRightsSection(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "التواصل وطلب انضمام عيادة جديدة",
+                    text = bi(isEn, "التواصل وطلب انضمام عيادة جديدة", "Contact & New Clinic Registration"),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "للدكاترة والمرضى: تواصل مباشرة لتسجيل العيادات أو الاستفسار",
+                    text = bi(
+                        isEn,
+                        "للدكاترة والمرضى: تواصل مباشرة لتسجيل العيادات أو الاستفسار",
+                        "For doctors & patients: contact us directly to register clinics or get support",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -674,7 +728,7 @@ private fun FooterContactAndRightsSection(
                     ) {
                         Icon(Icons.Filled.PhoneInTalk, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("واتساب مباشر")
+                        Text(bi(isEn, "واتساب مباشر", "Direct WhatsApp"))
                     }
                     OutlinedButton(
                         onClick = onCallClick,
@@ -693,7 +747,11 @@ private fun FooterContactAndRightsSection(
         }
 
         Text(
-            text = "جميع الحقوق محفوظة © 2026 منصة $platformName - لخدمة أهالي الحجايزة والقرى المجاورة",
+            text = bi(
+                isEn,
+                "جميع الحقوق محفوظة © 2026 منصة $platformName - لخدمة أهالي الحجايزة والقرى المجاورة",
+                "All Rights Reserved © 2026 $platformName - Serving Al-Hajayzah & Nearby Villages",
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -766,6 +824,7 @@ private fun HomeSectionTile(
 private fun MyBookingCard(
     slot: AppointmentSlotEntity,
     doctor: ClinicDoctorEntity,
+    isEn: Boolean = false,
     onOpenClinic: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -801,7 +860,7 @@ private fun MyBookingCard(
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Text(
-                        text = TimeUtils.formatMinutesAr(slot.effectiveMinutes),
+                        text = TimeUtils.formatMinutesAr(slot.effectiveMinutes, isEn),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -811,7 +870,11 @@ private fun MyBookingCard(
 
             if (slot.delayMinutes > 0) {
                 Text(
-                    text = "تم تعديل الموعد (+${slot.delayMinutes} دقيقة تأخير عن ${TimeUtils.formatMinutesAr(slot.startMinutes)})",
+                    text = bi(
+                        isEn,
+                        "تم تعديل الموعد (+${slot.delayMinutes} دقيقة تأخير عن ${TimeUtils.formatMinutesAr(slot.startMinutes, false)})",
+                        "Rescheduled (+${slot.delayMinutes} min delay from ${TimeUtils.formatMinutesAr(slot.startMinutes, true)})",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = DelayWarningBorder,
                     fontWeight = FontWeight.Bold,
@@ -824,19 +887,19 @@ private fun MyBookingCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "المريض: ${slot.patientName}",
+                    text = bi(isEn, "المريض: ${slot.patientName}", "Patient: ${slot.patientName}"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onCancel) {
-                        Text("إلغاء", color = SlotBookedBorder)
+                        Text(bi(isEn, "إلغاء", "Cancel"), color = SlotBookedBorder)
                     }
                     Button(
                         onClick = onOpenClinic,
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     ) {
-                        Text("تفاصيل العيادة")
+                        Text(bi(isEn, "تفاصيل العيادة", "Clinic Details"))
                     }
                 }
             }
@@ -854,6 +917,8 @@ fun ClinicsDirectoryScreen(
     onSelectSpecialty: (String?) -> Unit,
     onOpenDoctorBooking: (String) -> Unit,
 ) {
+    val isEn = state.isEn
+    val currencyLabel = bi(isEn, state.brandConfig.currencyLabelAr, state.brandConfig.currencyLabelEn)
     val filteredDoctors = remember(
         state.doctors,
         clinicTypeFilter,
@@ -893,7 +958,7 @@ fun ClinicsDirectoryScreen(
                 OutlinedTextField(
                     value = state.searchQuery,
                     onValueChange = onSearchChange,
-                    placeholder = { Text("ابحث باسم الدكتور أو التخصص أو العيادة...") },
+                    placeholder = { Text(bi(isEn, "ابحث باسم الدكتور أو التخصص أو العيادة...", "Search doctor, specialty, or clinic...")) },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -908,7 +973,7 @@ fun ClinicsDirectoryScreen(
                             FilterChip(
                                 selected = state.selectedSpecialty == null,
                                 onClick = { onSelectSpecialty(null) },
-                                label = { Text("كل التخصصات") },
+                                label = { Text(bi(isEn, "كل التخصصات", "All Specialties")) },
                             )
                         }
                         items(state.specialties) { spec ->
@@ -943,7 +1008,7 @@ fun ClinicsDirectoryScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "لا توجد عيادات مطابقة للبحث",
+                                text = bi(isEn, "لا توجد عيادات مطابقة للبحث", "No matching clinics found"),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                         }
@@ -956,6 +1021,8 @@ fun ClinicsDirectoryScreen(
                         doctor = doctor,
                         availableCount = doctorSlots.count { it.status == SlotStatus.AVAILABLE },
                         bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
+                        isEn = isEn,
+                        currencyLabel = currencyLabel,
                         onBookClick = { onOpenDoctorBooking(doctor.id) },
                     )
                 }
@@ -969,6 +1036,8 @@ fun DoctorDirectoryCard(
     doctor: ClinicDoctorEntity,
     availableCount: Int,
     bookedCount: Int,
+    isEn: Boolean = false,
+    currencyLabel: String = if (isEn) "EGP" else "ج.م",
     onBookClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1088,7 +1157,7 @@ fun DoctorDirectoryCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "الكشف: ${doctor.feeEgp} ج.م",
+                        text = bi(isEn, "الكشف: ${doctor.feeEgp} $currencyLabel", "Fee: ${doctor.feeEgp} $currencyLabel"),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -1126,7 +1195,7 @@ fun DoctorDirectoryCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "موقع العيادة على خرائط جوجل",
+                        text = bi(isEn, "موقع العيادة على خرائط جوجل", "View Clinic on Google Maps"),
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
@@ -1139,7 +1208,11 @@ fun DoctorDirectoryCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "تنبيه: العيادة متأخرة حالياً ${doctor.currentDelayMinutes} دقيقة",
+                        text = bi(
+                            isEn,
+                            "تنبيه: العيادة متأخرة حالياً ${doctor.currentDelayMinutes} دقيقة",
+                            "Notice: Clinic delayed by ${doctor.currentDelayMinutes} min",
+                        ),
                         style = MaterialTheme.typography.labelMedium,
                         color = DelayWarningText,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1158,7 +1231,7 @@ fun DoctorDirectoryCard(
                         shape = RoundedCornerShape(10.dp),
                     ) {
                         Text(
-                            text = "متاح: $availableCount",
+                            text = bi(isEn, "متاح: $availableCount", "Open: $availableCount"),
                             style = MaterialTheme.typography.labelMedium,
                             color = SlotAvailableText,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -1169,7 +1242,7 @@ fun DoctorDirectoryCard(
                         shape = RoundedCornerShape(10.dp),
                     ) {
                         Text(
-                            text = "محجوز: $bookedCount",
+                            text = bi(isEn, "محجوز: $bookedCount", "Booked: $bookedCount"),
                             style = MaterialTheme.typography.labelMedium,
                             color = SlotBookedText,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -1182,7 +1255,7 @@ fun DoctorDirectoryCard(
                     modifier = Modifier.height(44.dp),
                     shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text("عرض المواعيد")
+                    Text(bi(isEn, "عرض المواعيد", "View Slots"))
                 }
             }
         }
@@ -1198,6 +1271,7 @@ fun DoctorBookingScreen(
     activeMember: FamilyMemberEntity?,
     isAccountVerified: Boolean = false,
     isBookingSubmitting: Boolean = false,
+    isEn: Boolean = false,
     onSelectFamilyMember: (String) -> Unit,
     onRequireAccountForBooking: () -> Unit = {},
     onBookSlot: (slotId: String, member: FamilyMemberEntity) -> Unit,
@@ -1210,6 +1284,7 @@ fun DoctorBookingScreen(
     var slotPendingConfirm by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     val familyIds = remember(familyMembers) { familyMembers.map { it.id }.toSet() }
     val familyNames = remember(familyMembers) { familyMembers.map { it.fullName }.toSet() }
+    val currencyLabel = if (isEn) "EGP" else "ج.م"
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -1232,11 +1307,11 @@ fun DoctorBookingScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "رجوع",
+                            contentDescription = bi(isEn, "رجوع", "Back"),
                         )
                     }
                     Text(
-                        text = "الحجز اللحظي للمواعيد",
+                        text = bi(isEn, "الحجز اللحظي للمواعيد", "Real-Time Slot Booking"),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                 }
@@ -1261,7 +1336,11 @@ fun DoctorBookingScreen(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            text = "العنوان: ${doctor.locationLabel}  •  سعر الكشف: ${doctor.feeEgp} ج.م",
+                            text = bi(
+                                isEn,
+                                "العنوان: ${doctor.locationLabel}  •  سعر الكشف: ${doctor.feeEgp} $currencyLabel",
+                                "Address: ${doctor.locationLabel}  •  Fee: ${doctor.feeEgp} $currencyLabel",
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1274,7 +1353,11 @@ fun DoctorBookingScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "مواعيد العمل: ${TimeUtils.formatMinutesAr(doctor.workStartMinutes)} إلى ${TimeUtils.formatMinutesAr(doctor.workEndMinutes)} (كل ${doctor.slotDurationMinutes} دقيقة)",
+                                text = bi(
+                                    isEn,
+                                    "مواعيد العمل: ${TimeUtils.formatMinutesAr(doctor.workStartMinutes, false)} إلى ${TimeUtils.formatMinutesAr(doctor.workEndMinutes, false)} (كل ${doctor.slotDurationMinutes} دقيقة)",
+                                    "Hours: ${TimeUtils.formatMinutesAr(doctor.workStartMinutes, true)} to ${TimeUtils.formatMinutesAr(doctor.workEndMinutes, true)} (every ${doctor.slotDurationMinutes} min)",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -1302,7 +1385,7 @@ fun DoctorBookingScreen(
                             ) {
                                 Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("موقع العيادة على خرائط جوجل")
+                                Text(bi(isEn, "موقع العيادة على خرائط جوجل", "View Clinic on Google Maps"))
                             }
                         }
                         if (doctor.currentDelayMinutes > 0) {
@@ -1312,7 +1395,11 @@ fun DoctorBookingScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    text = "تحديث: العيادة متأخرة ${doctor.currentDelayMinutes} دقيقة والأوقات الظاهرة معدّلة تلقائياً.",
+                                    text = bi(
+                                        isEn,
+                                        "تحديث: العيادة متأخرة ${doctor.currentDelayMinutes} دقيقة والأوقات الظاهرة معدّلة تلقائياً.",
+                                        "Update: Clinic delayed by ${doctor.currentDelayMinutes} min; shown times are adjusted automatically.",
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = DelayWarningText,
                                     fontWeight = FontWeight.Bold,
@@ -1327,7 +1414,7 @@ fun DoctorBookingScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "احجز الموعد لصالح:",
+                        text = bi(isEn, "احجز الموعد لصالح:", "Book Appointment For:"),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     if (familyMembers.isEmpty() || !isAccountVerified) {
@@ -1341,9 +1428,17 @@ fun DoctorBookingScreen(
                         ) {
                             Text(
                                 text = if (familyMembers.isEmpty()) {
-                                    "تصفح المواعيد مجاناً — لإتمام الحجز اضغط هنا لتسجيل الدخول وتفعيل الحساب بكود (OTP)."
+                                    bi(
+                                        isEn,
+                                        "تصفح المواعيد مجاناً — لإتمام الحجز اضغط هنا لتسجيل الدخول وتفعيل الحساب بكود (OTP).",
+                                        "Browse slots freely — tap here to sign in and activate with OTP to complete booking.",
+                                    )
                                 } else {
-                                    "حسابك غير مفعّل بعد — اضغط هنا لإدخال كود التفعيل (OTP) وإتمام الحجز."
+                                    bi(
+                                        isEn,
+                                        "حسابك غير مفعّل بعد — اضغط هنا لإدخال كود التفعيل (OTP) وإتمام الحجز.",
+                                        "Account not verified yet — tap here to enter your OTP code and unlock booking.",
+                                    )
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = DelayWarningText,
@@ -1380,19 +1475,19 @@ fun DoctorBookingScreen(
                         color = SlotAvailableBg,
                         borderColor = SlotAvailableBorder,
                         textColor = SlotAvailableText,
-                        label = "متاح للحجز",
+                        label = bi(isEn, "متاح للحجز", "Available"),
                     )
                     LegendChip(
                         color = SlotBookedBg,
                         borderColor = SlotBookedBorder,
                         textColor = SlotBookedText,
-                        label = "محجوز (مغلق)",
+                        label = bi(isEn, "محجوز (مغلق)", "Booked"),
                     )
                     LegendChip(
                         color = SlotCompletedBg,
                         borderColor = SlotCompletedBorder,
                         textColor = SlotCompletedText,
-                        label = "تم الكشف",
+                        label = bi(isEn, "تم الكشف", "Completed"),
                     )
                 }
             }
@@ -1424,10 +1519,10 @@ fun DoctorBookingScreen(
                             else -> SlotCompletedText
                         }
                         val statusText = when {
-                            slot.status == SlotStatus.AVAILABLE -> "متاح"
-                            isMine -> "محجوز لك"
-                            slot.status == SlotStatus.BOOKED -> "محجوز"
-                            else -> "تم الكشف"
+                            slot.status == SlotStatus.AVAILABLE -> bi(isEn, "متاح", "Open")
+                            isMine -> bi(isEn, "محجوز لك", "Yours")
+                            slot.status == SlotStatus.BOOKED -> bi(isEn, "محجوز", "Booked")
+                            else -> bi(isEn, "تم الكشف", "Done")
                         }
 
                         Surface(
@@ -1463,7 +1558,7 @@ fun DoctorBookingScreen(
                                     modifier = Modifier.size(20.dp),
                                 )
                                 Text(
-                                    text = TimeUtils.formatMinutesAr(slot.effectiveMinutes),
+                                    text = TimeUtils.formatMinutesAr(slot.effectiveMinutes, isEn),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = textColor,
                                     fontWeight = FontWeight.Bold,
@@ -1475,7 +1570,7 @@ fun DoctorBookingScreen(
                                 )
                                 if (isMine) {
                                     Text(
-                                        text = "إلغاء الحجز",
+                                        text = bi(isEn, "إلغاء الحجز", "Cancel"),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = SlotBookedBorder,
                                         fontWeight = FontWeight.Bold,
@@ -1497,15 +1592,19 @@ fun DoctorBookingScreen(
     if (pendingSlot != null && activeMember != null) {
         AlertDialog(
             onDismissRequest = { slotPendingConfirm = null },
-            title = { Text("تأكيد حجز الموعد") },
+            title = { Text(bi(isEn, "تأكيد حجز الموعد", "Confirm Appointment Booking")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("الطبيب: ${doctor.doctorName}")
-                    Text("العيادة: ${doctor.clinicName}")
-                    Text("الموعد: ${TimeUtils.formatMinutesAr(pendingSlot.effectiveMinutes)}")
-                    Text("اسم المريض: ${activeMember.fullName}")
+                    Text(bi(isEn, "الطبيب: ${doctor.doctorName}", "Doctor: ${doctor.doctorName}"))
+                    Text(bi(isEn, "العيادة: ${doctor.clinicName}", "Clinic: ${doctor.clinicName}"))
+                    Text(bi(isEn, "الموعد: ${TimeUtils.formatMinutesAr(pendingSlot.effectiveMinutes, isEn)}", "Time: ${TimeUtils.formatMinutesAr(pendingSlot.effectiveMinutes, isEn)}"))
+                    Text(bi(isEn, "اسم المريض: ${activeMember.fullName}", "Patient: ${activeMember.fullName}"))
                     Text(
-                        text = "سيتم إغلاق الموعد فوراً باللون الأحمر عند جميع المستخدمين لمنع التضارب.",
+                        text = bi(
+                            isEn,
+                            "سيتم إغلاق الموعد فوراً باللون الأحمر عند جميع المستخدمين لمنع التضارب.",
+                            "This slot will immediately lock for all users to prevent double booking.",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1531,12 +1630,15 @@ fun DoctorBookingScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                     }
-                    Text(if (isBookingSubmitting) "جاري الحجز..." else "تأكيد الحجز الآن")
+                    Text(
+                        if (isBookingSubmitting) bi(isEn, "جاري الحجز...", "Booking...")
+                        else bi(isEn, "تأكيد الحجز الآن", "Confirm Booking")
+                    )
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { slotPendingConfirm = null }) {
-                    Text("تراجع")
+                    Text(bi(isEn, "تراجع", "Back"))
                 }
             },
         )

@@ -58,6 +58,7 @@ fun LazyListScope.otpCodeGeneratorItems(
     context: Context,
     brandConfig: PlatformBrandConfig,
     activationCodes: List<ActivationOtpCodeEntity>,
+    isEn: Boolean = false,
     onGenerateBatch: (Int) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
@@ -81,13 +82,17 @@ fun LazyListScope.otpCodeGeneratorItems(
                 ) {
                     Icon(Icons.Filled.Key, contentDescription = null, tint = TealPrimary)
                     Text(
-                        text = "مولد أكواد التفعيل ذات الاستخدام الواحد (OTP)",
+                        text = if (isEn) "Single-Use OTP Code Generator" else "مولد أكواد التفعيل ذات الاستخدام الواحد (OTP)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
                 }
                 Text(
-                    text = "يُستخدم كل كود مرة واحدة فقط لتفعيل حساب مريض جديد ويحترق تلقائياً بعد الاستخدام لمنع الحجوزات الوهمية.",
+                    text = if (isEn) {
+                        "Each 6-digit code works once to activate a patient account and burns automatically to prevent fake bookings."
+                    } else {
+                        "يُستخدم كل كود مرة واحدة فقط لتفعيل حساب مريض جديد ويحترق تلقائياً بعد الاستخدام لمنع الحجوزات الوهمية."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -112,7 +117,7 @@ fun LazyListScope.otpCodeGeneratorItems(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "متاح للاستخدام",
+                                text = if (isEn) "Available" else "متاح للاستخدام",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = SlotAvailableText,
                             )
@@ -134,7 +139,7 @@ fun LazyListScope.otpCodeGeneratorItems(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "مستخدم / منتهي",
+                                text = if (isEn) "Used / Expired" else "مستخدم / منتهي",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = SlotBookedText,
                             )
@@ -155,7 +160,7 @@ fun LazyListScope.otpCodeGeneratorItems(
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("توليد 10 أكواد جديدة", maxLines = 1)
+                        Text(if (isEn) "Generate 10" else "توليد 10 أكواد جديدة", maxLines = 1)
                     }
                     Button(
                         onClick = { onGenerateBatch(20) },
@@ -167,7 +172,7 @@ fun LazyListScope.otpCodeGeneratorItems(
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("توليد 20 كوداً جديداً", maxLines = 1)
+                        Text(if (isEn) "Generate 20" else "توليد 20 كوداً جديداً", maxLines = 1)
                     }
                 }
 
@@ -187,7 +192,7 @@ fun LazyListScope.otpCodeGeneratorItems(
                 ) {
                     Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("طباعة الأكواد المتاحة (${availableCount})")
+                    Text(if (isEn) "Print Available Codes (${availableCount})" else "طباعة الأكواد المتاحة (${availableCount})")
                 }
             }
         }
@@ -200,7 +205,11 @@ fun LazyListScope.otpCodeGeneratorItems(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "لا توجد أكواد تفعيل حالياً. اضغط على زر التوليد أعلاه لإنشاء دفعة أكواد جديدة.",
+                    text = if (isEn) {
+                        "No activation codes yet. Tap Generate above to create new codes."
+                    } else {
+                        "لا توجد أكواد تفعيل حالياً. اضغط على زر التوليد أعلاه لإنشاء دفعة أكواد جديدة."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
@@ -254,7 +263,11 @@ fun LazyListScope.otpCodeGeneratorItems(
                                 shape = RoundedCornerShape(8.dp),
                             ) {
                                 Text(
-                                    text = if (isUsed) "مستخدم / منتهي" else "متاح للاستخدام",
+                                    text = if (isUsed) {
+                                        if (isEn) "Used" else "مستخدم / منتهي"
+                                    } else {
+                                        if (isEn) "Available" else "متاح للاستخدام"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
@@ -265,14 +278,18 @@ fun LazyListScope.otpCodeGeneratorItems(
 
                         if (isUsed) {
                             Text(
-                                text = "استخدمه: ${item.usedByName.ifBlank { "مريض" }} (${item.usedByPhone.ifBlank { "بدون رقم" }})",
+                                text = if (isEn) {
+                                    "Used by: ${item.usedByName.ifBlank { "Patient" }} (${item.usedByPhone.ifBlank { "-" }})"
+                                } else {
+                                    "استخدمه: ${item.usedByName.ifBlank { "مريض" }} (${item.usedByPhone.ifBlank { "بدون رقم" }})"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = SlotBookedText,
                                 fontWeight = FontWeight.SemiBold,
                             )
                         } else {
                             Text(
-                                text = "جاهز للتسليم عبر واتساب أو ورقياً في العيادة",
+                                text = if (isEn) "Ready to send via WhatsApp or clinic desk" else "جاهز للتسليم عبر واتساب أو ورقياً في العيادة",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = SlotAvailableText,
                             )
@@ -285,21 +302,23 @@ fun LazyListScope.otpCodeGeneratorItems(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 clipboard?.setPrimaryClip(ClipData.newPlainText("OTP Code", item.code))
-                                onShowMessage("تم نسخ الكود ${item.code} بنجاح لإرساله عبر واتساب")
+                                onShowMessage(
+                                    if (isEn) "Code ${item.code} copied" else "تم نسخ الكود ${item.code} بنجاح لإرساله عبر واتساب"
+                                )
                             },
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             modifier = Modifier
                                 .height(48.dp)
                                 .testTag("copy_otp_${item.code}"),
                         ) {
-                            Icon(Icons.Filled.ContentCopy, contentDescription = "نسخ الكود", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.ContentCopy, contentDescription = if (isEn) "Copy code" else "نسخ الكود", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("نسخ الكود")
+                            Text(if (isEn) "Copy" else "نسخ الكود")
                         }
                     } else {
                         Icon(
                             imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = "مستخدم",
+                            contentDescription = if (isEn) "Used" else "مستخدم",
                             tint = SlotBookedBorder,
                             modifier = Modifier.size(22.dp),
                         )

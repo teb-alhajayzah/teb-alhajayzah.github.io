@@ -42,10 +42,11 @@ import com.example.util.MedicalSummaryAnalyzer
 fun AiMedicalSummaryCard(
     patientName: String,
     records: List<MedicalRecordEntity>,
+    isEn: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val summary = remember(patientName, records) {
-        MedicalSummaryAnalyzer.summarize(patientName, records)
+    val summary = remember(patientName, records, isEn) {
+        MedicalSummaryAnalyzer.summarize(patientName, records, isEn = isEn)
     }
 
     Card(
@@ -77,7 +78,7 @@ fun AiMedicalSummaryCard(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = "الملخص الطبي الذكي",
+                            contentDescription = if (isEn) "AI Medical Summary" else "الملخص الطبي الذكي",
                             tint = TealPrimary,
                             modifier = Modifier
                                 .padding(7.dp)
@@ -86,13 +87,13 @@ fun AiMedicalSummaryCard(
                     }
                     Column {
                         Text(
-                            text = "الملخص الطبي المختصر (AI Summary)",
+                            text = if (isEn) "AI Medical Summary" else "الملخص الطبي المختصر (AI Summary)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TealPrimary,
                         )
                         Text(
-                            text = "تحليل تلقائي للزيارات والأدوية ونتائج التحاليل",
+                            text = if (isEn) "Auto-generated from visits, prescriptions & lab reports" else "تحليل تلقائي للزيارات والأدوية ونتائج التحاليل",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -106,19 +107,19 @@ fun AiMedicalSummaryCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     SummaryMiniPill(
-                        label = "عيادات",
+                        label = if (isEn) "Clinics" else "عيادات",
                         value = summary.platformPrescriptionsCount.toString(),
                         color = TealPrimary,
                         modifier = Modifier.weight(1f),
                     )
                     SummaryMiniPill(
-                        label = "خارجية",
+                        label = if (isEn) "External" else "خارجية",
                         value = summary.externalVisitsCount.toString(),
                         color = Color(0xFFD97706),
                         modifier = Modifier.weight(1f),
                     )
                     SummaryMiniPill(
-                        label = "معامل وأشعة",
+                        label = if (isEn) "Labs/Files" else "معامل وأشعة",
                         value = summary.labAndImagingCount.toString(),
                         color = Color(0xFF0284C7),
                         modifier = Modifier.weight(1f),
@@ -130,7 +131,11 @@ fun AiMedicalSummaryCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.MedicalInformation, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("أبرز التشخيصات والحالة:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (isEn) "Key Diagnoses & History:" else "أبرز التشخيصات والحالة:",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                         summary.keyDiagnoses.take(3).forEach { diag ->
                             Text(
@@ -147,7 +152,11 @@ fun AiMedicalSummaryCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.LocalPharmacy, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("الأدوية الحالية والمسجلة:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (isEn) "Current & Logged Medications:" else "الأدوية الحالية والمسجلة:",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                         summary.currentMedications.take(4).forEach { med ->
                             Text(
@@ -164,7 +173,11 @@ fun AiMedicalSummaryCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Science, contentDescription = null, tint = Color(0xFF0284C7), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("أحدث التحاليل والأشعة:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (isEn) "Recent Labs & Imaging:" else "أحدث التحاليل والأشعة:",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                         summary.recentLabsAndImaging.take(3).forEach { labItem ->
                             Text(

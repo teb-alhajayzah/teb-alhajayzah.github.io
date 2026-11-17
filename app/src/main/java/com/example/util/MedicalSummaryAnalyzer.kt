@@ -17,6 +17,8 @@ data class PatientMedicalSummary(
     companion object {
         const val STANDARD_DISCLAIMER =
             "تنبيه طبي قياسي: هذا الملخص مولّد آلياً للاستئناس الطبي ومساعدة الطبيب المعالج ولا يغني عن الفحص الإكلينيكي المباشر ومراجعة أصل التحاليل والروشتات."
+        const val STANDARD_DISCLAIMER_EN =
+            "Medical Notice: This summary is auto-generated to assist the treating physician and does not replace direct clinical examination or original reports."
     }
 }
 
@@ -37,7 +39,28 @@ object MedicalSummaryAnalyzer {
         "تخصصات أخرى",
     )
 
-    fun summarize(patientName: String, records: List<MedicalRecordEntity>): PatientMedicalSummary {
+    val EXTERNAL_SPECIALTIES_EN = listOf(
+        "Dermatology" to "جلدية",
+        "OB/GYN" to "نساء وتوليد",
+        "Cardiology" to "قلب وأوعية دموية",
+        "Dentistry" to "أسنان",
+        "Pediatrics" to "أطفال",
+        "Internal Medicine" to "باطنة",
+        "Orthopedics" to "عظام",
+        "ENT" to "أنف وأذن وحنجرة",
+        "Ophthalmology" to "عيون",
+        "General Surgery" to "جراحة",
+        "Urology" to "مسالك بولية",
+        "Other Specialties" to "تخصصات أخرى",
+    )
+
+    fun summarize(
+        patientName: String,
+        records: List<MedicalRecordEntity>,
+        isEn: Boolean = false,
+    ): PatientMedicalSummary {
+        val fallbackName = if (isEn) "Patient" else "المريض"
+        val disclaimerText = if (isEn) PatientMedicalSummary.STANDARD_DISCLAIMER_EN else PatientMedicalSummary.STANDARD_DISCLAIMER
         if (records.isEmpty()) {
             return PatientMedicalSummary(
                 totalRecords = 0,
@@ -47,7 +70,12 @@ object MedicalSummaryAnalyzer {
                 keyDiagnoses = emptyList(),
                 currentMedications = emptyList(),
                 recentLabsAndImaging = emptyList(),
-                headlineSummary = "لا توجد بيانات طبية مسجلة بعد لـ ${patientName.ifBlank { "المريض" }}. أضف زيارة طبيب أو نتيجة تحليل ليتم تحليلها تلقائياً.",
+                headlineSummary = if (isEn) {
+                    "No medical records yet for ${patientName.ifBlank { fallbackName }}. Log an external visit or lab report to generate an automatic summary."
+                } else {
+                    "لا توجد بيانات طبية مسجلة بعد لـ ${patientName.ifBlank { fallbackName }}. أضف زيارة طبيب أو نتيجة تحليل ليتم تحليلها تلقائياً."
+                },
+                disclaimer = disclaimerText,
             )
         }
 
@@ -63,7 +91,11 @@ object MedicalSummaryAnalyzer {
         (platformRx + externalVisits).forEach { rec ->
             val diagClean = rec.diagnosis.trim()
             if (diagClean.isNotEmpty() && seenDiag.add(diagClean.lowercase())) {
-                val sourceTag = if (rec.recordType == MedicalRecordType.EXTERNAL_VISIT) "خارجي" else "المنصة"
+                val sourceTag = if (rec.recordType == MedicalRecordType.EXTERNAL_VISIT) {
+                    if (isEn) "External" else "خارجي"
+                } else {
+                    if (isEn) "Platform" else "المنصة"
+                }
                 diagnoses += "$diagClean (${rec.specialty} • $sourceTag • ${rec.visitDateLabel})"
             }
         }
@@ -85,23 +117,41 @@ object MedicalSummaryAnalyzer {
 
         val labItems = mutableListOf<String>()
         labsAndUploads.take(5).forEach { rec ->
-            val title = rec.diagnosis.trim().ifEmpty { "تحليل / أشعة" }
-            val source = if (rec.recordType == MedicalRecordType.LAB_RESULT) rec.doctorName else "رفع المريض"
+            val title = rec.diagnosis.trim().ifEmpty { if (isEn) "Lab / Imaging" else "تحليل / أشعة" }
+            val source = if (rec.recordType == MedicalRecordType.LAB_RESULT) rec.doctorName else {
+                if (isEn) "Patient Upload" else "رفع المريض"
+            }
             val noteSuffix = if (rec.notes.isNotBlank()) " — ${rec.notes.take(60)}" else ""
             labItems += "$title ($source • ${rec.visitDateLabel})$noteSuffix"
         }
 
-        val nameLabel = patientName.ifBlank { "المريض" }
+        val nameLabel = patientName.ifBlank { fallbackName }
         val parts = mutableListOf<String>()
-        parts += "ملخص الحالة لـ $nameLabel (${sorted.size} سجل طبي)"
+        parts += if (isEn) {
+            "Summary for $nameLabel (${sorted.size} records)"
+        } else {
+            "ملخص الحالة لـ $nameLabel (${sorted.size} سجل طبي)"
+        }
         if (diagnoses.isNotEmpty()) {
-            parts += "أبرز التشخيصات المسجلة: ${diagnoses.take(2).joinToString(" | ")}"
+            parts += if (isEn) {
+                "Key Diagnoses: ${diagnoses.take(2).joinToString(" | ")}"
+            } else {
+                "أبرز التشخيصات المسجلة: ${diagnoses.take(2).joinToString(" | ")}"
+            }
         }
         if (medLines.isNotEmpty()) {
-            parts += "العلاجات الحالية/الأخيرة (${medLines.size}): ${medLines.take(3).joinToString(" • ")}"
+            parts += if (isEn) {
+                "Medications (${medLines.size}): ${medLines.take(3).joinToString(" • ")}"
+            } else {
+                "العلاجات الحالية/الأخيرة (${medLines.size}): ${medLines.take(3).joinToString(" • ")}"
+            }
         }
         if (labItems.isNotEmpty()) {
-            parts += "التحاليل والأشعة المرفقة (${labsAndUploads.size}): ${labItems.take(2).joinToString(" | ")}"
+            parts += if (isEn) {
+                "Labs & Imaging (${labsAndUploads.size}): ${labItems.take(2).joinToString(" | ")}"
+            } else {
+                "التحاليل والأشعة المرفقة (${labsAndUploads.size}): ${labItems.take(2).joinToString(" | ")}"
+            }
         }
 
         return PatientMedicalSummary(
@@ -113,6 +163,7 @@ object MedicalSummaryAnalyzer {
             currentMedications = medLines.take(8),
             recentLabsAndImaging = labItems,
             headlineSummary = parts.joinToString("\n"),
+            disclaimer = disclaimerText,
         )
     }
 }

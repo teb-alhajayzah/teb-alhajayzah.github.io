@@ -54,10 +54,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.ClinicType
 import com.example.data.local.TebDatabase
 import com.example.data.repository.TebRepository
+import com.example.ui.AppLanguage
 import com.example.ui.AppRoleMode
 import com.example.ui.PatientTab
 import com.example.ui.StaffPortalTab
+import com.example.ui.TebUiState
 import com.example.ui.TebViewModel
+import com.example.ui.bi
 import com.example.ui.admin.SuperAdminDashboardScreen
 import com.example.ui.components.AccountAndFamilyDialog
 import com.example.ui.components.AdminPinLockDialog
@@ -87,9 +90,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
+            val layoutDirection = if (state.isEn) LayoutDirection.Ltr else LayoutDirection.Rtl
+            CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 TebAlHajayzahTheme {
-                    TebAlHajayzahAppRoot(viewModel = viewModel)
+                    TebAlHajayzahAppRoot(viewModel = viewModel, state = state)
                 }
             }
         }
@@ -104,8 +109,11 @@ private data class NavDestination(
 )
 
 @Composable
-fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+fun TebAlHajayzahAppRoot(
+    viewModel: TebViewModel,
+    state: TebUiState,
+) {
+    val isEn = state.isEn
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -132,13 +140,13 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
         }
     }
 
-    val destinations = remember {
+    val destinations = remember(isEn) {
         listOf(
-            NavDestination(PatientTab.HOME, "الرئيسية", Icons.Filled.Home, "nav_home"),
-            NavDestination(PatientTab.PRIVATE_CLINICS, "العيادات", Icons.Filled.MedicalServices, "nav_private_clinics"),
-            NavDestination(PatientTab.HOSPITAL, "المستشفى", Icons.Filled.LocalHospital, "nav_hospital"),
-            NavDestination(PatientTab.SPECIALTIES, "التخصصات", Icons.Filled.MedicalInformation, "nav_specialties"),
-            NavDestination(PatientTab.MEDICAL_FILE, "ملفي الطبي", Icons.Filled.FolderShared, "nav_medical_file"),
+            NavDestination(PatientTab.HOME, bi(isEn, "الرئيسية", "Home"), Icons.Filled.Home, "nav_home"),
+            NavDestination(PatientTab.PRIVATE_CLINICS, bi(isEn, "العيادات", "Clinics"), Icons.Filled.MedicalServices, "nav_private_clinics"),
+            NavDestination(PatientTab.HOSPITAL, bi(isEn, "المستشفى", "Hospital"), Icons.Filled.LocalHospital, "nav_hospital"),
+            NavDestination(PatientTab.SPECIALTIES, bi(isEn, "التخصصات", "Specialties"), Icons.Filled.MedicalInformation, "nav_specialties"),
+            NavDestination(PatientTab.MEDICAL_FILE, bi(isEn, "ملفي الطبي", "My File"), Icons.Filled.FolderShared, "nav_medical_file"),
         )
     }
 
@@ -153,10 +161,12 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             topBar = {
                 TebTopHeader(
                     brandConfig = state.brandConfig,
+                    appLanguage = state.appLanguage,
                     roleMode = state.roleMode,
                     unreadAlertsCount = state.unreadAlertsCount,
                     activeAccount = state.activeAccount,
                     isRefreshing = state.isRefreshing,
+                    onSelectLanguage = viewModel::setAppLanguage,
                     onRefresh = viewModel::smartRefreshData,
                     onSwitchRole = viewModel::switchRoleMode,
                     onOpenNotifications = {
@@ -174,7 +184,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                 selected = state.patientTab == dest.tab,
                                 onClick = { viewModel.selectPatientTab(dest.tab) },
                                 icon = { Icon(dest.icon, contentDescription = dest.label) },
-                                label = { Text(dest.label, style = MaterialTheme.typography.labelSmall) },
+                                label = { Text(dest.label, style = MaterialTheme.typography.labelSmall, maxLines = 1) },
                                 modifier = Modifier.testTag(dest.testTag),
                             )
                         }
@@ -192,7 +202,11 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator()
                         Text(
-                            text = "جاري تجهيز منصة ${state.brandConfig.platformNameAr}...",
+                            text = bi(
+                                isEn,
+                                "جاري تجهيز منصة ${state.brandConfig.platformNameAr}...",
+                                "Loading ${state.brandConfig.platformNameEn}...",
+                            ),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(top = 12.dp),
                         )
@@ -230,6 +244,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         activeMember = state.activeMember,
                                         isAccountVerified = state.isAccountVerified,
                                         isBookingSubmitting = state.isBookingSubmitting,
+                                        isEn = isEn,
                                         onSelectFamilyMember = viewModel::selectActiveFamilyMember,
                                         onRequireAccountForBooking = {
                                             viewModel.openAccountDialogForVerification()
@@ -264,7 +279,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         PatientTab.PRIVATE_CLINICS -> {
                                             ClinicsDirectoryScreen(
                                                 state = state,
-                                                title = "العيادات الخاصة بالحجايزة",
+                                                title = bi(isEn, "العيادات الخاصة بالحجايزة", "Private Clinics"),
                                                 clinicTypeFilter = ClinicType.PRIVATE,
                                                 showSpecialtyChips = false,
                                                 onSearchChange = viewModel::updateSearchQuery,
@@ -276,7 +291,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         PatientTab.HOSPITAL -> {
                                             ClinicsDirectoryScreen(
                                                 state = state,
-                                                title = state.brandConfig.hospitalNameAr,
+                                                title = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn),
                                                 clinicTypeFilter = ClinicType.HOSPITAL,
                                                 showSpecialtyChips = false,
                                                 onSearchChange = viewModel::updateSearchQuery,
@@ -288,7 +303,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         PatientTab.SPECIALTIES -> {
                                             ClinicsDirectoryScreen(
                                                 state = state,
-                                                title = "التخصصات الطبية الشاملة",
+                                                title = bi(isEn, "التخصصات الطبية الشاملة", "Medical Specialties"),
                                                 clinicTypeFilter = null,
                                                 showSpecialtyChips = true,
                                                 onSearchChange = viewModel::updateSearchQuery,
@@ -346,13 +361,13 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         Tab(
                                             selected = state.staffPortalTab == StaffPortalTab.DOCTOR,
                                             onClick = { viewModel.switchStaffPortalTab(StaffPortalTab.DOCTOR) },
-                                            text = { Text(StaffPortalTab.DOCTOR.labelAr) },
+                                            text = { Text(StaffPortalTab.DOCTOR.label(isEn)) },
                                             modifier = Modifier.testTag("staff_tab_doctor"),
                                         )
                                         Tab(
                                             selected = state.staffPortalTab == StaffPortalTab.LAB,
                                             onClick = { viewModel.switchStaffPortalTab(StaffPortalTab.LAB) },
-                                            text = { Text(StaffPortalTab.LAB.labelAr) },
+                                            text = { Text(StaffPortalTab.LAB.label(isEn)) },
                                             modifier = Modifier.testTag("staff_tab_lab"),
                                         )
                                     }
@@ -362,7 +377,8 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                             StaffPortalTab.DOCTOR -> {
                                                 if (state.loggedInDoctor == null) {
                                                     DoctorLoginGateScreen(
-                                                        adminOwnerName = state.brandConfig.adminOwnerName,
+                                                        adminOwnerName = bi(isEn, state.brandConfig.adminOwnerName, state.brandConfig.adminOwnerNameEn),
+                                                        isEn = isEn,
                                                         onLoginDoctor = viewModel::loginDoctor,
                                                     )
                                                 } else {
@@ -386,7 +402,8 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                                 val loggedLab = state.loggedInLab
                                                 if (loggedLab == null) {
                                                     LabLoginGateCard(
-                                                        adminOwnerName = state.brandConfig.adminOwnerName,
+                                                        adminOwnerName = bi(isEn, state.brandConfig.adminOwnerName, state.brandConfig.adminOwnerNameEn),
+                                                        isEn = isEn,
                                                         onLoginLab = viewModel::loginLab,
                                                     )
                                                 } else {
@@ -455,6 +472,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             activeMemberId = state.activeMemberId,
             otpWhatsappPhone = state.brandConfig.otpWhatsappPhone,
             appVersionLabel = state.brandConfig.appVersionLabel,
+            isEn = isEn,
             onSelectMember = viewModel::selectActiveFamilyMember,
             onAddFamilyMember = { name, relation, age, phone ->
                 if (activeAccount != null) {
@@ -478,9 +496,10 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
 
     if (showAdminPinDialog) {
         AdminPinLockDialog(
-            ownerName = state.brandConfig.adminOwnerName,
+            ownerName = bi(isEn, state.brandConfig.adminOwnerName, state.brandConfig.adminOwnerNameEn),
             failedAttempts = state.adminFailedAttempts,
             lockoutUntilMillis = state.adminLockoutUntilMillis,
+            isEn = isEn,
             onSubmitPin = { enteredPin ->
                 viewModel.verifyAdminPinAndUnlock(
                     enteredPin = enteredPin,
@@ -494,6 +513,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
     if (showNotificationsDialog) {
         NotificationsDialog(
             notifications = state.notifications,
+            isEn = isEn,
             onDismiss = { showNotificationsDialog = false },
         )
     }
@@ -503,6 +523,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
         FullImagePreviewDialog(
             imagePath = preview.first,
             title = preview.second,
+            isEn = isEn,
             onDismiss = { previewImage = null },
         )
     }

@@ -34,27 +34,34 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-enum class AppRoleMode(val labelAr: String) {
-    PATIENT("واجهة المريض"),
-    DOCTOR_ADMIN("العيادات والمعامل"),
-    SUPER_ADMIN("إدارة المنصة"),
+enum class AppRoleMode(val labelAr: String, val labelEn: String) {
+    PATIENT("واجهة المريض", "Patient Portal"),
+    DOCTOR_ADMIN("العيادات والمعامل", "Clinics & Labs"),
+    SUPER_ADMIN("إدارة المنصة", "Super Admin");
+
+    fun label(isEn: Boolean): String = if (isEn) labelEn else labelAr
 }
 
-enum class StaffPortalTab(val labelAr: String) {
-    DOCTOR("بوابة الأطباء والعيادات"),
-    LAB("بوابة معامل التحاليل"),
+enum class StaffPortalTab(val labelAr: String, val labelEn: String) {
+    DOCTOR("بوابة الأطباء والعيادات", "Doctors & Clinics Portal"),
+    LAB("بوابة معامل التحاليل", "Medical Labs Portal");
+
+    fun label(isEn: Boolean): String = if (isEn) labelEn else labelAr
 }
 
-enum class PatientTab(val labelAr: String) {
-    HOME("الرئيسية"),
-    PRIVATE_CLINICS("العيادات الخاصة"),
-    HOSPITAL("المستشفى التخصصي"),
-    SPECIALTIES("التخصصات"),
-    MEDICAL_FILE("ملفي الطبي"),
+enum class PatientTab(val labelAr: String, val labelEn: String) {
+    HOME("الرئيسية", "Home"),
+    PRIVATE_CLINICS("العيادات الخاصة", "Private Clinics"),
+    HOSPITAL("المستشفى التخصصي", "Specialized Hospital"),
+    SPECIALTIES("التخصصات", "Specialties"),
+    MEDICAL_FILE("ملفي الطبي", "Medical File");
+
+    fun label(isEn: Boolean): String = if (isEn) labelEn else labelAr
 }
 
 data class TebUiState(
     val isReady: Boolean = false,
+    val appLanguage: AppLanguage = AppLanguage.AR,
     val roleMode: AppRoleMode = AppRoleMode.PATIENT,
     val staffPortalTab: StaffPortalTab = StaffPortalTab.DOCTOR,
     val patientTab: PatientTab = PatientTab.HOME,
@@ -86,6 +93,9 @@ data class TebUiState(
     val isRefreshing: Boolean = false,
     val isBookingSubmitting: Boolean = false,
 ) {
+    val isEn: Boolean
+        get() = appLanguage == AppLanguage.EN
+
     val activeMember: FamilyMemberEntity?
         get() = familyMembers.firstOrNull { it.id == activeMemberId } ?: familyMembers.firstOrNull()
 
@@ -311,8 +321,9 @@ class TebViewModel(
     private val adminOpsFlow = combine(
         repository.activationCodesFlow,
         _labSearchResults,
-    ) { activationCodes, labResults ->
-        activationCodes to labResults
+        repository.appLanguageFlow,
+    ) { activationCodes, labResults, appLang ->
+        Triple(activationCodes, labResults, appLang)
     }
 
     val uiState: StateFlow<TebUiState> = combine(
@@ -334,6 +345,7 @@ class TebViewModel(
 
         TebUiState(
             isReady = sel.isSeeded,
+            appLanguage = adminOps.third,
             roleMode = sel.roleMode,
             staffPortalTab = sel.staffPortalTab,
             patientTab = sel.patientTab,
@@ -371,6 +383,12 @@ class TebViewModel(
         initialValue = TebUiState(),
     )
 
+    fun setAppLanguage(language: AppLanguage) {
+        viewModelScope.launch {
+            repository.setAppLanguage(language)
+        }
+    }
+
     fun smartRefreshData() {
         if (_isRefreshing.value) return
         viewModelScope.launch {
@@ -380,7 +398,13 @@ class TebViewModel(
                 val result = repository.loadEgyptianMedications(apiUrl)
                 _medications.value = result.medications
                 _isLiveMedicationsApi.value = result.isLiveRemote
-                _snackbarMessages.tryEmit("تم تحديث المواعيد والبيانات بنجاح دون تسجيل الخروج")
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "تم تحديث المواعيد والبيانات بنجاح دون تسجيل الخروج",
+                        "Appointments and data refreshed without logging out",
+                    )
+                )
             } finally {
                 _isRefreshing.value = false
             }

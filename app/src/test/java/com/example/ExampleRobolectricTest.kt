@@ -10,6 +10,7 @@ import com.example.data.local.SlotStatus
 import com.example.data.local.TebDatabase
 import com.example.data.medications.MedicationCatalog
 import com.example.data.repository.TebRepository
+import com.example.ui.AppLanguage
 import com.example.util.MedicalSummaryAnalyzer
 import com.example.util.TimeUtils
 import kotlinx.coroutines.flow.first
@@ -60,6 +61,12 @@ class ExampleRobolectricTest {
         assertTrue(repository.allSlotsFlow.first().isEmpty())
         assertTrue(repository.allMedicalRecordsFlow.first().isEmpty())
         assertEquals(5, repository.activationCodesFlow.first().size)
+
+        assertEquals(AppLanguage.AR, repository.appLanguageFlow.first())
+        repository.setAppLanguage(AppLanguage.EN)
+        assertEquals(AppLanguage.EN, repository.appLanguageFlow.first())
+        repository.setAppLanguage(AppLanguage.AR)
+        assertEquals(AppLanguage.AR, repository.appLanguageFlow.first())
     }
 
     @Test
@@ -174,6 +181,8 @@ class ExampleRobolectricTest {
         assertEquals("6:00 م", TimeUtils.formatMinutesAr(18 * 60))
         assertEquals("6:20 م", TimeUtils.formatMinutesAr(18 * 60 + 20))
         assertEquals("9:00 ص", TimeUtils.formatMinutesAr(9 * 60))
+        assertEquals("6:00 PM", TimeUtils.formatMinutesAr(18 * 60, isEn = true))
+        assertEquals("9:00 AM", TimeUtils.formatMinutesAr(9 * 60, isEn = true))
     }
 
     @Test
@@ -260,6 +269,10 @@ class ExampleRobolectricTest {
         assertTrue(summary.currentMedications.any { it.contains("أوجمنتين") })
         assertTrue(summary.recentLabsAndImaging.any { it.contains("CBC") })
         assertTrue(summary.disclaimer.contains("تنبيه طبي قياسي"))
+
+        val summaryEn = MedicalSummaryAnalyzer.summarize(sonMember.fullName, sonRecords, isEn = true)
+        assertTrue(summaryEn.headlineSummary.contains("Summary for"))
+        assertTrue(summaryEn.disclaimer.contains("Medical Notice:"))
 
         // Admin updates and deletes lab
         val updatedLab = repository.updateLabByAdmin(

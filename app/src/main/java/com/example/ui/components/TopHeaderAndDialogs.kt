@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -48,6 +50,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -87,7 +91,9 @@ import com.example.config.PlatformBrandConfig
 import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.PatientAccountEntity
+import com.example.ui.AppLanguage
 import com.example.ui.AppRoleMode
+import com.example.ui.bi
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
 import com.example.ui.theme.DelayWarningText
@@ -106,15 +112,20 @@ import java.net.URLEncoder
 @Composable
 fun TebTopHeader(
     brandConfig: PlatformBrandConfig,
+    appLanguage: AppLanguage = AppLanguage.AR,
     roleMode: AppRoleMode,
     unreadAlertsCount: Int,
     activeAccount: PatientAccountEntity?,
     isRefreshing: Boolean = false,
+    onSelectLanguage: (AppLanguage) -> Unit = {},
     onRefresh: () -> Unit = {},
     onSwitchRole: (AppRoleMode) -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenAccount: () -> Unit,
 ) {
+    val isEn = appLanguage == AppLanguage.EN
+    var langMenuExpanded by remember { mutableStateOf(false) }
+
     Surface(
         shadowElevation = 4.dp,
         color = MaterialTheme.colorScheme.surface,
@@ -128,7 +139,7 @@ fun TebTopHeader(
                     )
                 )
                 .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
@@ -142,24 +153,24 @@ fun TebTopHeader(
                 ) {
                     Image(
                         painter = painterResource(id = brandConfig.logoRes),
-                        contentDescription = brandConfig.platformNameAr,
+                        contentDescription = bi(isEn, brandConfig.platformNameAr, brandConfig.platformNameEn),
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(34.dp)
                             .clip(RoundedCornerShape(10.dp)),
                         contentScale = ContentScale.Crop,
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Column {
                         Text(
-                            text = brandConfig.platformNameAr,
+                            text = bi(isEn, brandConfig.platformNameAr, brandConfig.platformNameEn),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
                             maxLines = 2,
                         )
                         Text(
-                            text = brandConfig.villageNameAr,
-                            style = MaterialTheme.typography.bodySmall,
+                            text = bi(isEn, brandConfig.villageNameAr, brandConfig.villageNameEn),
+                            style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.86f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -167,25 +178,91 @@ fun TebTopHeader(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    // Compact AR / EN Dropdown Pill
+                    Box {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = Color.White.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable { langMenuExpanded = true }
+                                .testTag("language_toggle_button"),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = appLanguage.code,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowDropDown,
+                                    contentDescription = bi(isEn, "تغيير اللغة", "Change Language"),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = langMenuExpanded,
+                            onDismissRequest = { langMenuExpanded = false },
+                        ) {
+                            AppLanguage.entries.forEach { lang ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = lang.displayLabel,
+                                            fontWeight = if (lang == appLanguage) FontWeight.Bold else FontWeight.Normal,
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (lang == appLanguage) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null,
+                                                tint = TealPrimary,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        langMenuExpanded = false
+                                        onSelectLanguage(lang)
+                                    },
+                                    modifier = Modifier.testTag("lang_option_${lang.code.lowercase()}"),
+                                )
+                            }
+                        }
+                    }
+
                     IconButton(
                         onClick = onRefresh,
                         enabled = !isRefreshing,
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(width = 40.dp, height = 48.dp)
                             .testTag("refresh_button"),
                     ) {
                         if (isRefreshing) {
                             CircularProgressIndicator(
                                 color = Color.White,
                                 strokeWidth = 2.dp,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(18.dp),
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Filled.Refresh,
-                                contentDescription = "تحديث البيانات والمواعيد",
+                                contentDescription = bi(isEn, "تحديث البيانات والمواعيد", "Refresh data & appointments"),
                                 tint = Color.White,
+                                modifier = Modifier.size(21.dp),
                             )
                         }
                     }
@@ -193,7 +270,7 @@ fun TebTopHeader(
                     IconButton(
                         onClick = onOpenNotifications,
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(width = 40.dp, height = 48.dp)
                             .testTag("notifications_button"),
                     ) {
                         BadgedBox(
@@ -210,8 +287,9 @@ fun TebTopHeader(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Notifications,
-                                contentDescription = "الإشعارات والتنبيهات",
+                                contentDescription = bi(isEn, "الإشعارات والتنبيهات", "Notifications"),
                                 tint = Color.White,
+                                modifier = Modifier.size(21.dp),
                             )
                         }
                     }
@@ -219,13 +297,14 @@ fun TebTopHeader(
                     IconButton(
                         onClick = onOpenAccount,
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(width = 40.dp, height = 48.dp)
                             .testTag("account_button"),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Person,
-                            contentDescription = activeAccount?.fullName ?: "حسابي والعائلة",
+                            contentDescription = activeAccount?.fullName ?: bi(isEn, "حسابي والعائلة", "Account & Family"),
                             tint = Color.White,
+                            modifier = Modifier.size(21.dp),
                         )
                     }
                 }
@@ -245,7 +324,7 @@ fun TebTopHeader(
                 ) {
                     RoleModePillButton(
                         selected = roleMode == AppRoleMode.PATIENT,
-                        label = AppRoleMode.PATIENT.labelAr,
+                        label = AppRoleMode.PATIENT.label(isEn),
                         icon = Icons.Filled.LocalHospital,
                         testTag = "switch_to_patient_mode",
                         modifier = Modifier.weight(1f),
@@ -253,7 +332,7 @@ fun TebTopHeader(
                     )
                     RoleModePillButton(
                         selected = roleMode == AppRoleMode.DOCTOR_ADMIN,
-                        label = AppRoleMode.DOCTOR_ADMIN.labelAr,
+                        label = AppRoleMode.DOCTOR_ADMIN.label(isEn),
                         icon = Icons.Filled.MedicalServices,
                         testTag = "switch_to_doctor_mode",
                         modifier = Modifier.weight(1f),
@@ -312,6 +391,7 @@ fun AccountAndFamilyDialog(
     activeMemberId: String,
     otpWhatsappPhone: String = "01141271027",
     appVersionLabel: String,
+    isEn: Boolean = false,
     onSelectMember: (String) -> Unit,
     onAddFamilyMember: (name: String, relation: String, age: Int, phone: String) -> Unit,
     onLogin: (identifier: String, password: String) -> Unit,
@@ -326,7 +406,7 @@ fun AccountAndFamilyDialog(
         mutableIntStateOf(if (activeAccount == null) 1 else 0)
     }
     var newMemberName by remember { mutableStateOf("") }
-    var newMemberRelation by remember { mutableStateOf("الابن") }
+    var newMemberRelation by remember { mutableStateOf(bi(isEn, "الابن", "Son")) }
     var newMemberAge by remember { mutableStateOf("") }
     var newMemberPhone by remember(activeAccount?.phone) { mutableStateOf(activeAccount?.phone ?: "") }
 
@@ -365,11 +445,11 @@ fun AccountAndFamilyDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "حسابي وأفراد العائلة",
+                        text = bi(isEn, "حسابي وأفراد العائلة", "Account & Family Members"),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "إغلاق")
+                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
 
@@ -396,12 +476,16 @@ fun AccountAndFamilyDialog(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "الحساب النشط: ${activeAccount.fullName}",
+                                        text = bi(isEn, "الحساب النشط: ${activeAccount.fullName}", "Active Account: ${activeAccount.fullName}"),
                                         style = MaterialTheme.typography.titleSmall,
                                         color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer else SlotBookedText,
                                     )
                                     Text(
-                                        text = "الهاتف: ${activeAccount.phone}  •  ${if (isVerified) "موثق ✓" else "بانتظار كود التفعيل (OTP)"}",
+                                        text = bi(
+                                            isEn,
+                                            "الهاتف: ${activeAccount.phone}  •  ${if (isVerified) "موثق ✓" else "بانتظار كود التفعيل (OTP)"}",
+                                            "Phone: ${activeAccount.phone}  •  ${if (isVerified) "Verified ✓" else "Pending OTP Activation"}",
+                                        ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else SlotBookedText,
                                     )
@@ -409,11 +493,11 @@ fun AccountAndFamilyDialog(
                                 TextButton(onClick = onLogoutPatient) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ExitToApp,
-                                        contentDescription = "تسجيل الخروج",
+                                        contentDescription = bi(isEn, "تسجيل الخروج", "Logout"),
                                         modifier = Modifier.size(16.dp),
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("خروج")
+                                    Text(bi(isEn, "خروج", "Logout"))
                                 }
                             }
 
@@ -432,14 +516,18 @@ fun AccountAndFamilyDialog(
                                             Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "تفعيل الحساب لإتمام الحجز (OTP)",
+                                                text = bi(isEn, "تفعيل الحساب لإتمام الحجز (OTP)", "Activate Account for Booking (OTP)"),
                                                 style = MaterialTheme.typography.titleSmall,
                                                 color = TealPrimary,
                                                 fontWeight = FontWeight.Bold,
                                             )
                                         }
                                         Text(
-                                            text = "أرسل بياناتك عبر واتساب لأخذ كود التفعيل المكون من 6 أرقام (صالح للاستخدام مرة واحدة)، أو استلمه مباشرة من سكرتيرة العيادة / الطبيب:",
+                                            text = bi(
+                                                isEn,
+                                                "Send your details on WhatsApp to receive a single-use 6-digit activation code, or obtain it directly from the clinic secretary / doctor:",
+                                                "أرسل بياناتك عبر واتساب لأخذ كود التفعيل المكون من 6 أرقام (صالح للاستخدام مرة واحدة)، أو استلمه مباشرة من سكرتيرة العيادة / الطبيب:",
+                                            ),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -468,7 +556,13 @@ fun AccountAndFamilyDialog(
                                         ) {
                                             Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("أرسل بياناتك على واتساب لأخذ كود التفعيل (OTP)")
+                                            Text(
+                                                bi(
+                                                    isEn,
+                                                    "أرسل بياناتك على واتساب لأخذ كود التفعيل (OTP)",
+                                                    "Send details on WhatsApp for OTP code",
+                                                )
+                                            )
                                         }
 
                                         OutlinedTextField(
@@ -476,7 +570,7 @@ fun AccountAndFamilyDialog(
                                             onValueChange = { ch ->
                                                 otpInput = ch.filter { it.isDigit() }.take(6)
                                             },
-                                            label = { Text("أدخل كود التفعيل (6 أرقام)") },
+                                            label = { Text(bi(isEn, "أدخل كود التفعيل (6 أرقام)", "Enter 6-digit OTP Code")) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             modifier = Modifier
@@ -493,7 +587,7 @@ fun AccountAndFamilyDialog(
                                         ) {
                                             Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("تأكيد وتفعيل الحساب")
+                                            Text(bi(isEn, "تأكيد وتفعيل الحساب", "Verify & Activate Account"))
                                         }
                                     }
                                 }
@@ -506,17 +600,17 @@ fun AccountAndFamilyDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("أفراد العائلة") },
+                        text = { Text(bi(isEn, "أفراد العائلة", "Family"), maxLines = 1) },
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("تسجيل الدخول") },
+                        text = { Text(bi(isEn, "تسجيل الدخول", "Login"), maxLines = 1) },
                     )
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { Text("حساب جديد") },
+                        text = { Text(bi(isEn, "حساب جديد", "Register"), maxLines = 1) },
                     )
                 }
 
@@ -530,13 +624,21 @@ fun AccountAndFamilyDialog(
                         0 -> {
                             if (activeAccount == null) {
                                 Text(
-                                    text = "يرجى تسجيل الدخول أو إنشاء حساب جديد أولاً لإدارة أفراد الأسرة.",
+                                    text = bi(
+                                        isEn,
+                                        "يرجى تسجيل الدخول أو إنشاء حساب جديد أولاً لإدارة أفراد الأسرة.",
+                                        "Please login or create an account first to manage family members.",
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             } else {
                                 Text(
-                                    text = "اختر الفرد الذي تحجز أو تستعرض ملفه الطبي، أو أضف فرداً جديداً:",
+                                    text = bi(
+                                        isEn,
+                                        "اختر الفرد الذي تحجز أو تستعرض ملفه الطبي، أو أضف فرداً جديداً:",
+                                        "Select the family member to book for or view their file, or add a new member:",
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -573,14 +675,18 @@ fun AccountAndFamilyDialog(
                                                     style = MaterialTheme.typography.titleMedium,
                                                 )
                                                 Text(
-                                                    text = "${member.relation} • ${member.age} سنة",
+                                                    text = bi(
+                                                        isEn,
+                                                        "${member.relation} • ${member.age} سنة",
+                                                        "${member.relation} • ${member.age} yrs",
+                                                    ),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                             }
                                             if (isSelected) {
                                                 Text(
-                                                    text = "نشط ✓",
+                                                    text = bi(isEn, "نشط ✓", "Active ✓"),
                                                     style = MaterialTheme.typography.labelLarge,
                                                     color = MaterialTheme.colorScheme.primary,
                                                 )
@@ -591,13 +697,13 @@ fun AccountAndFamilyDialog(
 
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "إضافة فرد جديد من العائلة",
+                                    text = bi(isEn, "إضافة فرد جديد من العائلة", "Add Family Member"),
                                     style = MaterialTheme.typography.titleMedium,
                                 )
                                 OutlinedTextField(
                                     value = newMemberName,
                                     onValueChange = { newMemberName = it },
-                                    label = { Text("الاسم الكامل") },
+                                    label = { Text(bi(isEn, "الاسم الكامل", "Full Name")) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -608,14 +714,14 @@ fun AccountAndFamilyDialog(
                                     OutlinedTextField(
                                         value = newMemberRelation,
                                         onValueChange = { newMemberRelation = it },
-                                        label = { Text("صلة القرابة (الأب/الأم/الابن)") },
+                                        label = { Text(bi(isEn, "صلة القرابة (الأب/الأم/الابن)", "Relation")) },
                                         singleLine = true,
                                         modifier = Modifier.weight(1.4f),
                                     )
                                     OutlinedTextField(
                                         value = newMemberAge,
                                         onValueChange = { newMemberAge = it.filter { ch -> ch.isDigit() } },
-                                        label = { Text("العمر") },
+                                        label = { Text(bi(isEn, "العمر", "Age")) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         singleLine = true,
                                         modifier = Modifier.weight(0.8f),
@@ -624,7 +730,7 @@ fun AccountAndFamilyDialog(
                                 OutlinedTextField(
                                     value = newMemberPhone,
                                     onValueChange = { newMemberPhone = it },
-                                    label = { Text("رقم الهاتف") },
+                                    label = { Text(bi(isEn, "رقم الهاتف", "Phone Number")) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
@@ -647,28 +753,32 @@ fun AccountAndFamilyDialog(
                                 ) {
                                     Icon(Icons.Filled.Add, contentDescription = null)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("إضافة إلى العائلة")
+                                    Text(bi(isEn, "إضافة إلى العائلة", "Add Member"))
                                 }
                             }
                         }
 
                         1 -> {
                             Text(
-                                text = "سجّل الدخول برقم الهاتف أو الرقم القومي المسجل:",
+                                text = bi(
+                                    isEn,
+                                    "سجّل الدخول برقم الهاتف أو الرقم القومي المسجل:",
+                                    "Login using your registered phone or national ID:",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             OutlinedTextField(
                                 value = loginIdentifier,
                                 onValueChange = { loginIdentifier = it },
-                                label = { Text("رقم الهاتف أو الرقم القومي") },
+                                label = { Text(bi(isEn, "رقم الهاتف أو الرقم القومي", "Phone or National ID")) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             PasswordOutlinedTextField(
                                 value = loginPassword,
                                 onValueChange = { loginPassword = it },
-                                label = "كلمة المرور",
+                                label = bi(isEn, "كلمة المرور", "Password"),
                                 toggleTestTag = "login_password_toggle",
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -683,13 +793,17 @@ fun AccountAndFamilyDialog(
                                     .fillMaxWidth()
                                     .height(50.dp),
                             ) {
-                                Text("دخول")
+                                Text(bi(isEn, "دخول", "Login"))
                             }
                         }
 
                         2 -> {
                             Text(
-                                text = "يتطلب تفعيل الحساب الجديد إدخال رمز تحقق (OTP) مكون من 6 أرقام عبر الهاتف.",
+                                text = bi(
+                                    isEn,
+                                    "يتطلب تفعيل الحساب الجديد إدخال رمز تحقق (OTP) مكون من 6 أرقام عبر الهاتف.",
+                                    "New accounts require a 6-digit single-use OTP activation code.",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TealPrimary,
                                 fontWeight = FontWeight.SemiBold,
@@ -697,7 +811,7 @@ fun AccountAndFamilyDialog(
                             OutlinedTextField(
                                 value = regName,
                                 onValueChange = { regName = it },
-                                label = { Text("الاسم ثلاثي") },
+                                label = { Text(bi(isEn, "الاسم ثلاثي", "Full Name")) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -706,7 +820,7 @@ fun AccountAndFamilyDialog(
                             OutlinedTextField(
                                 value = regPhone,
                                 onValueChange = { regPhone = it },
-                                label = { Text("رقم الهاتف") },
+                                label = { Text(bi(isEn, "رقم الهاتف", "Phone Number")) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 singleLine = true,
                                 modifier = Modifier
@@ -716,7 +830,7 @@ fun AccountAndFamilyDialog(
                             OutlinedTextField(
                                 value = regNationalId,
                                 onValueChange = { regNationalId = it },
-                                label = { Text("الرقم القومي (اختياري)") },
+                                label = { Text(bi(isEn, "الرقم القومي (اختياري)", "National ID (Optional)")) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
@@ -724,7 +838,7 @@ fun AccountAndFamilyDialog(
                             PasswordOutlinedTextField(
                                 value = regPassword,
                                 onValueChange = { regPassword = it },
-                                label = "كلمة المرور",
+                                label = bi(isEn, "كلمة المرور", "Password"),
                                 toggleTestTag = "reg_password_toggle",
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -740,14 +854,14 @@ fun AccountAndFamilyDialog(
                                     .height(50.dp)
                                     .testTag("reg_submit_button"),
                             ) {
-                                Text("إنشاء الحساب والمتابعة للتفعيل (OTP)")
+                                Text(bi(isEn, "إنشاء الحساب والمتابعة للتفعيل (OTP)", "Create Account & Activate (OTP)"))
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "إصدار التطبيق: $appVersionLabel",
+                        text = bi(isEn, "إصدار التطبيق: $appVersionLabel", "App Version: $appVersionLabel"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                         textAlign = TextAlign.Center,
@@ -776,6 +890,7 @@ fun AdminPinLockDialog(
     ownerName: String,
     failedAttempts: Int,
     lockoutUntilMillis: Long,
+    isEn: Boolean = false,
     onSubmitPin: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -800,13 +915,13 @@ fun AdminPinLockDialog(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Filled.Lock, contentDescription = null, tint = TealPrimary)
-                Text("الدخول المحمي للإدارة")
+                Text(bi(isEn, "الدخول المحمي للإدارة", "Protected Admin Access"))
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "بوابة خاصة بالإدارة العليا ($ownerName)",
+                    text = bi(isEn, "بوابة خاصة بالإدارة العليا ($ownerName)", "Super Admin Portal ($ownerName)"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -818,7 +933,11 @@ fun AdminPinLockDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "تم قفل البوابة مؤقتاً لمدة 15 دقيقة بعد 3 محاولات خاطئة.\nالوقت المتبقي: ${remMins} د : ${remSecs.toString().padStart(2, '0')} ث",
+                            text = bi(
+                                isEn,
+                                "تم قفل البوابة مؤقتاً لمدة 15 دقيقة بعد 3 محاولات خاطئة.\nالوقت المتبقي: ${remMins} د : ${remSecs.toString().padStart(2, '0')} ث",
+                                "Portal temporarily locked for 15 minutes after 3 failed attempts.\nRemaining: ${remMins}m : ${remSecs.toString().padStart(2, '0')}s",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = SlotBookedText,
                             fontWeight = FontWeight.Bold,
@@ -829,7 +948,7 @@ fun AdminPinLockDialog(
                     PasswordOutlinedTextField(
                         value = pinInput,
                         onValueChange = { pinInput = it },
-                        label = "الرقم السري للوحة التحكم (Admin PIN)",
+                        label = bi(isEn, "الرقم السري للوحة التحكم (Admin PIN)", "Admin PIN"),
                         keyboardType = KeyboardType.NumberPassword,
                         toggleTestTag = "admin_pin_toggle",
                         modifier = Modifier
@@ -838,7 +957,11 @@ fun AdminPinLockDialog(
                     )
                     if (failedAttempts > 0) {
                         Text(
-                            text = "تنبيه: محاولات خاطئة ($failedAttempts من 3) قبل القفل الأمني لمدة 15 دقيقة.",
+                            text = bi(
+                                isEn,
+                                "تنبيه: محاولات خاطئة ($failedAttempts من 3) قبل القفل الأمني لمدة 15 دقيقة.",
+                                "Warning: Failed attempts ($failedAttempts of 3) before 15-minute lockout.",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = SlotBookedBorder,
                             fontWeight = FontWeight.Bold,
@@ -853,12 +976,12 @@ fun AdminPinLockDialog(
                 enabled = !isLocked && pinInput.isNotBlank(),
                 modifier = Modifier.testTag("admin_pin_submit"),
             ) {
-                Text("تحقق ودخول")
+                Text(bi(isEn, "تحقق ودخول", "Verify & Enter"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("إغلاق")
+                Text(bi(isEn, "إغلاق", "Close"))
             }
         },
     )
@@ -867,6 +990,7 @@ fun AdminPinLockDialog(
 @Composable
 fun NotificationsDialog(
     notifications: List<DelayNotificationEntity>,
+    isEn: Boolean = false,
     onDismiss: () -> Unit,
 ) {
     Dialog(
@@ -884,15 +1008,22 @@ fun NotificationsDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("تنبيهات تأخير المواعيد", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        bi(isEn, "تنبيهات تأخير المواعيد", "Appointment Delay Alerts"),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "إغلاق")
+                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 if (notifications.isEmpty()) {
                     Text(
-                        text = "لا توجد تنبيهات تأخير حالياً. جميع العيادات تعمل في مواعيدها المحددة.",
+                        text = bi(
+                            isEn,
+                            "لا توجد تنبيهات تأخير حالياً. جميع العيادات تعمل في مواعيدها المحددة.",
+                            "No delay alerts right now. All clinics are running on schedule.",
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 20.dp),
@@ -936,7 +1067,7 @@ fun NotificationsDialog(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("حسناً")
+                    Text(bi(isEn, "حسناً", "OK"))
                 }
             }
         }
@@ -947,6 +1078,7 @@ fun NotificationsDialog(
 fun FullImagePreviewDialog(
     imagePath: String,
     title: String,
+    isEn: Boolean = false,
     onDismiss: () -> Unit,
 ) {
     Dialog(
@@ -984,9 +1116,9 @@ fun FullImagePreviewDialog(
                         onClick = onDismiss,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
                     ) {
-                        Icon(Icons.Filled.Close, contentDescription = "إغلاق", tint = Color.White)
+                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"), tint = Color.White)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("إغلاق", color = Color.White)
+                        Text(bi(isEn, "إغلاق", "Close"), color = Color.White)
                     }
                 }
             }

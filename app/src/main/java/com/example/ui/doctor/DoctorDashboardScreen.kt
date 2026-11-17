@@ -70,6 +70,7 @@ import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
+import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.components.otpCodeGeneratorItems
@@ -92,6 +93,7 @@ import com.example.util.TimeUtils
 @Composable
 fun DoctorLoginGateScreen(
     adminOwnerName: String,
+    isEn: Boolean = false,
     onLoginDoctor: (identifier: String, password: String) -> Unit,
 ) {
     var identifier by remember { mutableStateOf("") }
@@ -127,18 +129,22 @@ fun DoctorLoginGateScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.MedicalServices,
-                            contentDescription = "تسجيل دخول الأطباء",
+                            contentDescription = bi(isEn, "تسجيل دخول الأطباء", "Doctor Login"),
                             tint = TealPrimary,
                             modifier = Modifier.size(28.dp),
                         )
                     }
                     Column {
                         Text(
-                            text = "تسجيل دخول الأطباء والعيادات",
+                            text = bi(isEn, "تسجيل دخول الأطباء والعيادات", "Doctors & Clinics Portal"),
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            text = "أدخل اسم المستخدم أو رقم الهاتف وكلمة المرور الخاصة بعيادتك",
+                            text = bi(
+                                isEn,
+                                "أدخل اسم المستخدم أو رقم الهاتف وكلمة المرور الخاصة بعيادتك",
+                                "Enter your clinic username or phone number and password",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -148,7 +154,7 @@ fun DoctorLoginGateScreen(
                 OutlinedTextField(
                     value = identifier,
                     onValueChange = { identifier = it },
-                    label = { Text("اسم المستخدم أو رقم الهاتف") },
+                    label = { Text(bi(isEn, "اسم المستخدم أو رقم الهاتف", "Username or Phone")) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -158,7 +164,7 @@ fun DoctorLoginGateScreen(
                 PasswordOutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = "كلمة المرور",
+                    label = bi(isEn, "كلمة المرور", "Password"),
                     toggleTestTag = "doctor_login_password_toggle",
                     modifier = Modifier
                         .fillMaxWidth()
@@ -174,7 +180,7 @@ fun DoctorLoginGateScreen(
                 ) {
                     Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("دخول إلى لوحة العيادة")
+                    Text(bi(isEn, "دخول إلى لوحة العيادة", "Enter Clinic Dashboard"))
                 }
 
                 Surface(
@@ -183,7 +189,11 @@ fun DoctorLoginGateScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "تُنشأ حسابات الأطباء والعيادات وتُدار مباشرة من لوحة الإدارة العليا ($adminOwnerName).",
+                        text = bi(
+                            isEn,
+                            "تُنشأ حسابات الأطباء والعيادات وتُدار مباشرة من لوحة الإدارة العليا ($adminOwnerName).",
+                            "Doctor & clinic accounts are created and managed via Super Admin ($adminOwnerName).",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(10.dp),
@@ -209,6 +219,7 @@ fun DoctorDashboardScreen(
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val isEn = state.isEn
     val activeDoctor = state.loggedInDoctor ?: return
     val slots = remember(state.allSlots, activeDoctor.id) {
         state.slotsForDoctor(activeDoctor.id)
@@ -240,11 +251,15 @@ fun DoctorDashboardScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "لوحة تحكم عيادة ${activeDoctor.doctorName}",
+                            text = bi(isEn, "لوحة تحكم عيادة ${activeDoctor.doctorName}", "${activeDoctor.doctorName} Clinic"),
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
-                            text = "إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، والروشتة الإلكترونية.",
+                            text = bi(
+                                isEn,
+                                "إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، والروشتة الإلكترونية.",
+                                "Manage schedules, phone bookings, delay alerts, and smart prescriptions.",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -258,7 +273,7 @@ fun DoctorDashboardScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("خروج")
+                        Text(bi(isEn, "خروج", "Sign Out"))
                     }
                 }
             }
@@ -268,12 +283,12 @@ fun DoctorDashboardScreen(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("جدول المواعيد والعيادة") },
+                        text = { Text(bi(isEn, "جدول المواعيد والعيادة", "Schedule & Clinic")) },
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("أكواد التفعيل (OTP)") },
+                        text = { Text(bi(isEn, "أكواد التفعيل (OTP)", "OTP Codes")) },
                         modifier = Modifier.testTag("doctor_otp_codes_tab"),
                     )
                 }
@@ -284,6 +299,7 @@ fun DoctorDashboardScreen(
                     context = context,
                     brandConfig = state.brandConfig,
                     activationCodes = state.activationCodes,
+                    isEn = isEn,
                     onGenerateBatch = { count -> onGenerateOtpBatch(count, activeDoctor.doctorName) },
                     onShowMessage = onShowMessage,
                 )
@@ -311,7 +327,7 @@ fun DoctorDashboardScreen(
                                         style = MaterialTheme.typography.titleLarge,
                                     )
                                     Text(
-                                        text = "${activeDoctor.clinicName} • ${TimeUtils.formatMinutesAr(activeDoctor.workStartMinutes)} - ${TimeUtils.formatMinutesAr(activeDoctor.workEndMinutes)}",
+                                        text = "${activeDoctor.clinicName} • ${TimeUtils.formatMinutesAr(activeDoctor.workStartMinutes, isEn)} - ${TimeUtils.formatMinutesAr(activeDoctor.workEndMinutes, isEn)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -323,7 +339,7 @@ fun DoctorDashboardScreen(
                                         border = BorderStroke(1.dp, DelayWarningBorder),
                                     ) {
                                         Text(
-                                            text = "تأخير: +${activeDoctor.currentDelayMinutes} د",
+                                            text = bi(isEn, "تأخير: +${activeDoctor.currentDelayMinutes} د", "Delay: +${activeDoctor.currentDelayMinutes}m"),
                                             style = MaterialTheme.typography.labelMedium,
                                             color = DelayWarningText,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -336,9 +352,9 @@ fun DoctorDashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                StatPill("محجوز", bookedCount.toString(), SlotBookedBg, SlotBookedText, Modifier.weight(1f))
-                                StatPill("متاح", availableCount.toString(), SlotAvailableBg, SlotAvailableText, Modifier.weight(1f))
-                                StatPill("تم الكشف", completedCount.toString(), SlotCompletedBg, SlotCompletedText, Modifier.weight(1f))
+                                StatPill(bi(isEn, "محجوز", "Booked"), bookedCount.toString(), SlotBookedBg, SlotBookedText, Modifier.weight(1f))
+                                StatPill(bi(isEn, "متاح", "Open"), availableCount.toString(), SlotAvailableBg, SlotAvailableText, Modifier.weight(1f))
+                                StatPill(bi(isEn, "تم الكشف", "Done"), completedCount.toString(), SlotCompletedBg, SlotCompletedText, Modifier.weight(1f))
                             }
 
                             Row(
@@ -358,7 +374,7 @@ fun DoctorDashboardScreen(
                                 ) {
                                     Icon(Icons.Filled.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("تأخير 15 دقيقة")
+                                    Text(bi(isEn, "تأخير 15 دقيقة", "+15 min Delay"))
                                 }
                                 OutlinedButton(
                                     onClick = { onDelayDoctor(activeDoctor.id, 30) },
@@ -367,7 +383,7 @@ fun DoctorDashboardScreen(
                                         .height(48.dp)
                                         .testTag("delay_30_min_button"),
                                 ) {
-                                    Text("تأخير 30 دقيقة")
+                                    Text(bi(isEn, "تأخير 30 دقيقة", "+30 min Delay"))
                                 }
                             }
 
@@ -380,7 +396,7 @@ fun DoctorDashboardScreen(
                             ) {
                                 Icon(Icons.Filled.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)")
+                                Text(bi(isEn, "توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)", "Auto-Generate Schedule (15 / 20 / 30 min)"))
                             }
                         }
                     }
@@ -388,7 +404,7 @@ fun DoctorDashboardScreen(
 
                 item {
                     Text(
-                        text = "قائمة مواعيد اليوم (${slots.size})",
+                        text = bi(isEn, "قائمة مواعيد اليوم (${slots.size})", "Today's Appointments (${slots.size})"),
                         style = MaterialTheme.typography.titleLarge,
                     )
                 }
@@ -396,6 +412,7 @@ fun DoctorDashboardScreen(
                 items(slots, key = { it.id }) { slot ->
                     DoctorSlotCard(
                         slot = slot,
+                        isEn = isEn,
                         onManualBook = { slotForManualBooking = slot },
                         onViewEmr = { slotForEmrView = slot },
                         onWritePrescription = { slotForPrescription = slot },
@@ -412,6 +429,7 @@ fun DoctorDashboardScreen(
         ManualPhoneBookingDialog(
             slot = manualSlot,
             doctor = activeDoctor,
+            isEn = isEn,
             onConfirm = { name, phone ->
                 onBookManualPhoneSlot(manualSlot.id, name, phone)
                 slotForManualBooking = null
@@ -424,6 +442,7 @@ fun DoctorDashboardScreen(
     if (showScheduleDialog) {
         ScheduleGeneratorDialog(
             doctor = activeDoctor,
+            isEn = isEn,
             onConfirm = { startMin, endMin, durationMin ->
                 onGenerateSchedule(activeDoctor.id, startMin, endMin, durationMin)
                 showScheduleDialog = false
@@ -442,6 +461,7 @@ fun DoctorDashboardScreen(
             medications = state.medications,
             isLiveRemoteMeds = state.isLiveMedicationsApi,
             favoriteMedIds = state.favoriteMedicationIdsForDoctor(activeDoctor.id),
+            isEn = isEn,
             onToggleFavorite = { medId -> onToggleFavoriteMed(activeDoctor.id, medId) },
             onSaveAndComplete = { diagnosis, medicationsText, notes, attachmentPath ->
                 onCompleteVisit(rxSlot.id, diagnosis, medicationsText, notes, attachmentPath)
@@ -464,6 +484,7 @@ fun DoctorDashboardScreen(
             patientName = emrSlot.patientName,
             brandConfig = state.brandConfig,
             records = patientRecords,
+            isEn = isEn,
             onPreviewImage = onPreviewImage,
             onShowMessage = onShowMessage,
             onDismiss = { slotForEmrView = null },
@@ -506,6 +527,7 @@ private fun StatPill(
 @Composable
 private fun DoctorSlotCard(
     slot: AppointmentSlotEntity,
+    isEn: Boolean = false,
     onManualBook: () -> Unit,
     onViewEmr: () -> Unit,
     onWritePrescription: () -> Unit,
@@ -546,7 +568,7 @@ private fun DoctorSlotCard(
                         border = BorderStroke(1.dp, borderColor),
                     ) {
                         Text(
-                            text = TimeUtils.formatMinutesAr(slot.effectiveMinutes),
+                            text = TimeUtils.formatMinutesAr(slot.effectiveMinutes, isEn),
                             style = MaterialTheme.typography.titleMedium,
                             color = borderColor,
                             fontWeight = FontWeight.Bold,
@@ -556,14 +578,18 @@ private fun DoctorSlotCard(
                     Column {
                         Text(
                             text = when (slot.status) {
-                                SlotStatus.AVAILABLE -> "موعد متاح للحجز"
+                                SlotStatus.AVAILABLE -> bi(isEn, "موعد متاح للحجز", "Open Slot")
                                 SlotStatus.BOOKED -> slot.patientName
-                                else -> "${slot.patientName} (تم الكشف ✓)"
+                                else -> bi(isEn, "${slot.patientName} (تم الكشف ✓)", "${slot.patientName} (Completed ✓)")
                             },
                             style = MaterialTheme.typography.titleMedium,
                         )
                         if (slot.status != SlotStatus.AVAILABLE) {
-                            val sourceTag = if (slot.bookingSource == BookingSource.PHONE_WALKIN) "حجز هاتفي/حضور" else "حجز عبر التطبيق"
+                            val sourceTag = if (slot.bookingSource == BookingSource.PHONE_WALKIN) {
+                                bi(isEn, "حجز هاتفي/حضور", "Phone / Walk-in")
+                            } else {
+                                bi(isEn, "حجز عبر التطبيق", "App Booking")
+                            }
                             Text(
                                 text = "${slot.patientPhone} • $sourceTag",
                                 style = MaterialTheme.typography.bodySmall,
@@ -586,7 +612,7 @@ private fun DoctorSlotCard(
                     ) {
                         Icon(Icons.Filled.PhoneInTalk, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("إضافة حجز هاتفي / حضور مباشر")
+                        Text(bi(isEn, "إضافة حجز هاتفي / حضور مباشر", "Add Phone / Walk-in Booking"))
                     }
                 }
 
@@ -604,7 +630,7 @@ private fun DoctorSlotCard(
                         ) {
                             Icon(Icons.Filled.FolderShared, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("ملف المريض")
+                            Text(bi(isEn, "ملف المريض", "Patient File"))
                         }
                         Button(
                             onClick = onWritePrescription,
@@ -615,14 +641,14 @@ private fun DoctorSlotCard(
                         ) {
                             Icon(Icons.Filled.MedicalServices, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("كتابة روشتة")
+                            Text(bi(isEn, "كتابة روشتة", "Write Rx"))
                         }
                     }
                     TextButton(
                         onClick = onCancel,
                         modifier = Modifier.align(Alignment.End),
                     ) {
-                        Text("إلغاء الحجز وإتاحته", color = SlotBookedBorder)
+                        Text(bi(isEn, "إلغاء الحجز وإتاحته", "Cancel & Release"), color = SlotBookedBorder)
                     }
                 }
 
@@ -635,7 +661,7 @@ private fun DoctorSlotCard(
                     ) {
                         Icon(Icons.Filled.FolderShared, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("عرض الملف الطبي والروشتة")
+                        Text(bi(isEn, "عرض الملف الطبي والروشتة", "View Medical File & Rx"))
                     }
                 }
             }
@@ -647,6 +673,7 @@ private fun DoctorSlotCard(
 private fun ManualPhoneBookingDialog(
     slot: AppointmentSlotEntity,
     doctor: ClinicDoctorEntity,
+    isEn: Boolean = false,
     onConfirm: (name: String, phone: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -655,11 +682,11 @@ private fun ManualPhoneBookingDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تسجيل حجز هاتفي / مباشر") },
+        title = { Text(bi(isEn, "تسجيل حجز هاتفي / مباشر", "Manual Phone / Walk-in Booking")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "${doctor.doctorName} • الساعة ${TimeUtils.formatMinutesAr(slot.effectiveMinutes)}",
+                    text = "${doctor.doctorName} • ${TimeUtils.formatMinutesAr(slot.effectiveMinutes, isEn)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TealPrimary,
                     fontWeight = FontWeight.Bold,
@@ -667,7 +694,7 @@ private fun ManualPhoneBookingDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("اسم المريض ثلاثي") },
+                    label = { Text(bi(isEn, "اسم المريض ثلاثي", "Patient Full Name")) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -676,7 +703,7 @@ private fun ManualPhoneBookingDialog(
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("رقم الهاتف") },
+                    label = { Text(bi(isEn, "رقم الهاتف", "Phone Number")) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     singleLine = true,
                     modifier = Modifier
@@ -690,12 +717,12 @@ private fun ManualPhoneBookingDialog(
                 onClick = { onConfirm(name, phone) },
                 modifier = Modifier.testTag("manual_confirm_button"),
             ) {
-                Text("تأكيد وإغلاق الموعد")
+                Text(bi(isEn, "تأكيد وإغلاق الموعد", "Confirm & Lock Slot"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("إلغاء")
+                Text(bi(isEn, "إلغاء", "Cancel"))
             }
         },
     )
@@ -704,6 +731,7 @@ private fun ManualPhoneBookingDialog(
 @Composable
 private fun ScheduleGeneratorDialog(
     doctor: ClinicDoctorEntity,
+    isEn: Boolean = false,
     onConfirm: (startMin: Int, endMin: Int, durationMin: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -713,43 +741,56 @@ private fun ScheduleGeneratorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("توليد جدول المواعيد التلقائي") },
+        title = { Text(bi(isEn, "توليد جدول المواعيد التلقائي", "Auto-Generate Schedule")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "تحديد فترة العمل ومدة كل كشف لتقسيم المواعيد تلقائياً:",
+                    text = bi(
+                        isEn,
+                        "تحديد فترة العمل ومدة كل كشف لتقسيم المواعيد تلقائياً:",
+                        "Choose working hours and slot duration to generate slots:",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text("بداية العيادة: ${TimeUtils.formatMinutesAr(startHour * 60)}", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = bi(isEn, "بداية العيادة: ${TimeUtils.formatMinutesAr(startHour * 60, false)}", "Start Time: ${TimeUtils.formatMinutesAr(startHour * 60, true)}"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(listOf(14, 15, 16, 17, 18)) { hr ->
                         FilterChip(
                             selected = startHour == hr,
                             onClick = { startHour = hr },
-                            label = { Text(TimeUtils.formatMinutesAr(hr * 60)) },
+                            label = { Text(TimeUtils.formatMinutesAr(hr * 60, isEn)) },
                         )
                     }
                 }
 
-                Text("نهاية العيادة: ${TimeUtils.formatMinutesAr(endHour * 60)}", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = bi(isEn, "نهاية العيادة: ${TimeUtils.formatMinutesAr(endHour * 60, false)}", "End Time: ${TimeUtils.formatMinutesAr(endHour * 60, true)}"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(listOf(19, 20, 21, 22, 23)) { hr ->
                         FilterChip(
                             selected = endHour == hr,
                             onClick = { endHour = hr },
-                            label = { Text(TimeUtils.formatMinutesAr(hr * 60)) },
+                            label = { Text(TimeUtils.formatMinutesAr(hr * 60, isEn)) },
                         )
                     }
                 }
 
-                Text("مدة الكشف: كل $duration دقيقة", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = bi(isEn, "مدة الكشف: كل $duration دقيقة", "Visit Duration: every $duration min"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(15, 20, 30).forEach { dur ->
                         FilterChip(
                             selected = duration == dur,
                             onClick = { duration = dur },
-                            label = { Text("$dur د") },
+                            label = { Text(bi(isEn, "$dur د", "${dur}m")) },
                         )
                     }
                 }
@@ -761,12 +802,12 @@ private fun ScheduleGeneratorDialog(
             ) {
                 Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("توليد المواعيد")
+                Text(bi(isEn, "توليد المواعيد", "Generate Slots"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("إلغاء")
+                Text(bi(isEn, "إلغاء", "Cancel"))
             }
         },
     )
@@ -777,6 +818,7 @@ private fun PatientEmrViewerDialog(
     patientName: String,
     brandConfig: com.example.config.PlatformBrandConfig,
     records: List<MedicalRecordEntity>,
+    isEn: Boolean = false,
     onPreviewImage: (path: String, title: String) -> Unit,
     onShowMessage: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -800,7 +842,7 @@ private fun PatientEmrViewerDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "الملف الطبي للمريض",
+                            text = bi(isEn, "الملف الطبي للمريض", "Patient Medical File"),
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
@@ -810,7 +852,7 @@ private fun PatientEmrViewerDialog(
                         )
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "إغلاق")
+                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
 
@@ -824,6 +866,7 @@ private fun PatientEmrViewerDialog(
                         AiMedicalSummaryCard(
                             patientName = patientName,
                             records = records,
+                            isEn = isEn,
                         )
                     }
                     if (records.isEmpty()) {
@@ -834,7 +877,11 @@ private fun PatientEmrViewerDialog(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    text = "لا توجد زيارات سابقة أو تحاليل مرفوعة لهذا المريض حتى الآن.",
+                                    text = bi(
+                                        isEn,
+                                        "لا توجد زيارات سابقة أو تحاليل مرفوعة لهذا المريض حتى الآن.",
+                                        "No previous visits or lab reports uploaded for this patient yet.",
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(24.dp),
@@ -846,6 +893,7 @@ private fun PatientEmrViewerDialog(
                             MedicalRecordTimelineCard(
                                 record = rec,
                                 brandConfig = brandConfig,
+                                isEn = isEn,
                                 onPreviewImage = onPreviewImage,
                                 onShowMessage = onShowMessage,
                             )

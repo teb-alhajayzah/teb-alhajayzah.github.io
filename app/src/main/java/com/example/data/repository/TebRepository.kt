@@ -25,6 +25,7 @@ import com.example.data.local.SlotStatus
 import com.example.data.local.TebDao
 import com.example.data.medications.EgyptianMedicationService
 import com.example.data.medications.MedicationFetchResult
+import com.example.ui.AppLanguage
 import com.example.util.TimeUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -65,6 +66,10 @@ class TebRepository(
     private val cfgAnnouncementKey = stringPreferencesKey("cfg_home_announcement")
     private val cfgApkUrlKey = stringPreferencesKey("cfg_apk_url")
     private val cfgMedsApiKey = stringPreferencesKey("cfg_meds_api_url")
+    private val appLanguageKey = stringPreferencesKey("app_language")
+
+    val appLanguageFlow: Flow<AppLanguage> = appContext.tebDataStore.data
+        .map { prefs -> AppLanguage.fromCode(prefs[appLanguageKey]) }
 
     val activeAccountIdFlow: Flow<String> = appContext.tebDataStore.data
         .map { prefs -> prefs[activeAccountKey].orEmpty() }
@@ -123,6 +128,10 @@ class TebRepository(
 
     fun observeSlotsForDoctor(doctorId: String): Flow<List<AppointmentSlotEntity>> =
         dao.observeSlotsForDoctor(doctorId)
+
+    suspend fun setAppLanguage(language: AppLanguage) {
+        appContext.tebDataStore.edit { it[appLanguageKey] = language.code }
+    }
 
     suspend fun setActiveMember(memberId: String) {
         appContext.tebDataStore.edit { it[activeMemberKey] = memberId }

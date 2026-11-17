@@ -70,6 +70,7 @@ import com.example.data.local.ClinicType
 import com.example.data.local.MedicalLabEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
+import com.example.ui.bi
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.theme.SlotAvailableBg
@@ -139,6 +140,8 @@ fun SuperAdminDashboardScreen(
     onLogoutAdmin: () -> Unit,
 ) {
     val context = LocalContext.current
+    val isEn = state.isEn
+    val currencyLabel = bi(isEn, state.brandConfig.currencyLabelAr, state.brandConfig.currencyLabelEn)
     var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var defaultFormClinicType by remember { mutableStateOf(ClinicType.PRIVATE) }
@@ -151,7 +154,7 @@ fun SuperAdminDashboardScreen(
     var labToDelete by remember { mutableStateOf<MedicalLabEntity?>(null) }
 
     var manualBlockPhone by remember { mutableStateOf("") }
-    var manualBlockReason by remember { mutableStateOf("حجز وهمي / مخالفة") }
+    var manualBlockReason by remember { mutableStateOf(bi(isEn, "حجز وهمي / مخالفة", "Fake booking / Violation")) }
 
     // General platform settings state
     var cfgPlatformName by remember(state.brandConfig.platformNameAr) { mutableStateOf(state.brandConfig.platformNameAr) }
@@ -204,12 +207,16 @@ fun SuperAdminDashboardScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "لوحة التحكم الشاملة (Super Admin)",
+                                    text = bi(isEn, "لوحة التحكم الشاملة (Super Admin)", "Super Admin Control Panel"),
                                     style = MaterialTheme.typography.titleLarge,
                                     color = Color.White,
                                 )
                                 Text(
-                                    text = "إدارة كاملة للمنصة — ${state.brandConfig.adminOwnerName}",
+                                    text = bi(
+                                        isEn,
+                                        "إدارة كاملة للمنصة — ${state.brandConfig.adminOwnerName}",
+                                        "Full Platform Control — ${state.brandConfig.adminOwnerNameEn}",
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.92f),
                                 )
@@ -222,7 +229,7 @@ fun SuperAdminDashboardScreen(
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("قفل وخروج")
+                                Text(bi(isEn, "قفل وخروج", "Lock & Exit"))
                             }
                         }
                     }
@@ -234,10 +241,10 @@ fun SuperAdminDashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    AdminMetricBox("العيادات", state.privateClinics.size.toString(), Modifier.weight(1f))
-                    AdminMetricBox("المستشفى", state.hospitalClinics.size.toString(), Modifier.weight(1f))
-                    AdminMetricBox("المعامل", state.labs.size.toString(), Modifier.weight(1f))
-                    AdminMetricBox("الحجوزات", bookedSlots.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox(bi(isEn, "العيادات", "Clinics"), state.privateClinics.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox(bi(isEn, "المستشفى", "Hospital"), state.hospitalClinics.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox(bi(isEn, "المعامل", "Labs"), state.labs.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox(bi(isEn, "الحجوزات", "Bookings"), bookedSlots.size.toString(), Modifier.weight(1f))
                 }
             }
 
@@ -246,33 +253,33 @@ fun SuperAdminDashboardScreen(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("الأطباء والعيادات") },
+                        text = { Text(bi(isEn, "الأطباء والعيادات", "Doctors & Clinics")) },
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("المستشفى والأقسام") },
+                        text = { Text(bi(isEn, "المستشفى والأقسام", "Hospital Depts")) },
                     )
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { Text("الحجوزات والحظر") },
+                        text = { Text(bi(isEn, "الحجوزات والحظر", "Bookings & Bans")) },
                     )
                     Tab(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
-                        text = { Text("إعدادات المنصة والـ PIN") },
+                        text = { Text(bi(isEn, "إعدادات المنصة والـ PIN", "Settings & PIN")) },
                     )
                     Tab(
                         selected = selectedTab == 4,
                         onClick = { selectedTab = 4 },
-                        text = { Text("أكواد التفعيل (OTP)") },
+                        text = { Text(bi(isEn, "أكواد التفعيل (OTP)", "OTP Codes")) },
                         modifier = Modifier.testTag("admin_otp_codes_tab"),
                     )
                     Tab(
                         selected = selectedTab == 5,
                         onClick = { selectedTab = 5 },
-                        text = { Text("إدارة معامل التحاليل") },
+                        text = { Text(bi(isEn, "إدارة معامل التحاليل", "Medical Labs")) },
                         modifier = Modifier.testTag("admin_labs_tab"),
                     )
                 }
@@ -294,14 +301,14 @@ fun SuperAdminDashboardScreen(
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("إضافة دكتور / عيادة خاصة جديدة")
+                            Text(bi(isEn, "إضافة دكتور / عيادة خاصة جديدة", "Add New Doctor / Private Clinic"))
                         }
                     }
                     item {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("ابحث بالاسم أو التخصص أو العيادة...") },
+                            placeholder = { Text(bi(isEn, "ابحث بالاسم أو التخصص أو العيادة...", "Search name, specialty, or clinic...")) },
                             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
@@ -311,6 +318,8 @@ fun SuperAdminDashboardScreen(
                     items(privateDoctors, key = { it.id }) { doc ->
                         AdminDoctorManageCard(
                             doctor = doc,
+                            isEn = isEn,
+                            currencyLabel = currencyLabel,
                             onEdit = { doctorToEdit = doc },
                             onDelete = { doctorToDelete = doc },
                         )
@@ -332,12 +341,14 @@ fun SuperAdminDashboardScreen(
                         ) {
                             Icon(Icons.Filled.LocalHospital, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("إضافة قسم / طبيب في المستشفى التخصصي")
+                            Text(bi(isEn, "إضافة قسم / طبيب في المستشفى التخصصي", "Add Hospital Department / Doctor"))
                         }
                     }
                     items(hospitalDoctors, key = { it.id }) { doc ->
                         AdminDoctorManageCard(
                             doctor = doc,
+                            isEn = isEn,
+                            currencyLabel = currencyLabel,
                             onEdit = { doctorToEdit = doc },
                             onDelete = { doctorToDelete = doc },
                         )
@@ -356,11 +367,11 @@ fun SuperAdminDashboardScreen(
                                 modifier = Modifier.padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text("حظر رقم هاتف مخالف", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(bi(isEn, "حظر رقم هاتف مخالف", "Block Phone Number"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 OutlinedTextField(
                                     value = manualBlockPhone,
                                     onValueChange = { manualBlockPhone = it },
-                                    label = { Text("رقم الهاتف المراد حظره") },
+                                    label = { Text(bi(isEn, "رقم الهاتف المراد حظره", "Phone to Block")) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                     singleLine = true,
                                     modifier = Modifier
@@ -370,7 +381,7 @@ fun SuperAdminDashboardScreen(
                                 OutlinedTextField(
                                     value = manualBlockReason,
                                     onValueChange = { manualBlockReason = it },
-                                    label = { Text("سبب الحظر") },
+                                    label = { Text(bi(isEn, "سبب الحظر", "Reason")) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -387,7 +398,7 @@ fun SuperAdminDashboardScreen(
                                 ) {
                                     Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("حظر الرقم وإلغاء حجوزاته")
+                                    Text(bi(isEn, "حظر الرقم وإلغاء حجوزاته", "Block & Cancel Bookings"))
                                 }
                             }
                         }
@@ -395,7 +406,7 @@ fun SuperAdminDashboardScreen(
 
                     if (state.blockedPhones.isNotEmpty()) {
                         item {
-                            Text("الأرقام المحظورة (${state.blockedPhones.size})", style = MaterialTheme.typography.titleMedium)
+                            Text(bi(isEn, "الأرقام المحظورة (${state.blockedPhones.size})", "Blocked Numbers (${state.blockedPhones.size})"), style = MaterialTheme.typography.titleMedium)
                         }
                         items(state.blockedPhones, key = { it.phone }) { blocked ->
                             Surface(
@@ -414,7 +425,7 @@ fun SuperAdminDashboardScreen(
                                         Text(blocked.reason, style = MaterialTheme.typography.bodySmall, color = SlotBookedText)
                                     }
                                     OutlinedButton(onClick = { onUnblockPhone(blocked.phone) }) {
-                                        Text("رفع الحظر")
+                                        Text(bi(isEn, "رفع الحظر", "Unblock"))
                                     }
                                 }
                             }
@@ -422,12 +433,19 @@ fun SuperAdminDashboardScreen(
                     }
 
                     item {
-                        Text("جميع الحجوزات النشطة في المنصة (${bookedSlots.size})", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = bi(isEn, "جميع الحجوزات النشطة في المنصة (${bookedSlots.size})", "All Active Bookings (${bookedSlots.size})"),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
 
                     if (bookedSlots.isEmpty()) {
                         item {
-                            Text("لا توجد حجوزات نشطة حالياً.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = bi(isEn, "لا توجد حجوزات نشطة حالياً.", "No active bookings at the moment."),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     } else {
                         items(bookedSlots, key = { it.id }) { slot ->
@@ -448,7 +466,7 @@ fun SuperAdminDashboardScreen(
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(slot.patientName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                            Text("هاتف: ${slot.patientPhone}", style = MaterialTheme.typography.bodySmall)
+                                            Text(bi(isEn, "هاتف: ${slot.patientPhone}", "Phone: ${slot.patientPhone}"), style = MaterialTheme.typography.bodySmall)
                                             Text(
                                                 text = "${doctor?.doctorName ?: ""} • ${doctor?.clinicName ?: ""}",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -457,7 +475,7 @@ fun SuperAdminDashboardScreen(
                                         }
                                         Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
                                             Text(
-                                                text = TimeUtils.formatMinutesAr(slot.effectiveMinutes),
+                                                text = TimeUtils.formatMinutesAr(slot.effectiveMinutes, isEn),
                                                 style = MaterialTheme.typography.labelLarge,
                                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             )
@@ -470,17 +488,17 @@ fun SuperAdminDashboardScreen(
                                         ) {
                                             Icon(Icons.Filled.Cancel, contentDescription = null, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("إلغاء الحجز")
+                                            Text(bi(isEn, "إلغاء الحجز", "Cancel Booking"))
                                         }
                                         if (slot.patientPhone.isNotBlank()) {
                                             Button(
-                                                onClick = { onBlockPhone(slot.patientPhone, "حجز وهمي متكرر") },
+                                                onClick = { onBlockPhone(slot.patientPhone, bi(isEn, "حجز وهمي متكرر", "Repeated fake bookings")) },
                                                 colors = ButtonDefaults.buttonColors(containerColor = SlotBookedBorder),
                                                 modifier = Modifier.weight(1f),
                                             ) {
                                                 Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("حظر الرقم")
+                                                Text(bi(isEn, "حظر الرقم", "Block Phone"))
                                             }
                                         }
                                     }
@@ -504,33 +522,33 @@ fun SuperAdminDashboardScreen(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Icon(Icons.Filled.Settings, contentDescription = null, tint = TealPrimary)
-                                    Text("إعدادات المنصة العامة والأمان", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text(bi(isEn, "إعدادات المنصة العامة والأمان", "Platform Settings & Security"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 }
                                 OutlinedTextField(
                                     value = cfgPlatformName,
                                     onValueChange = { cfgPlatformName = it },
-                                    label = { Text("اسم المنصة") },
+                                    label = { Text(bi(isEn, "اسم المنصة", "Platform Name")) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 OutlinedTextField(
                                     value = cfgVillageName,
                                     onValueChange = { cfgVillageName = it },
-                                    label = { Text("اسم القرية / المركز") },
+                                    label = { Text(bi(isEn, "اسم القرية / المركز", "Village / Center Name")) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 OutlinedTextField(
                                     value = cfgHospitalName,
                                     onValueChange = { cfgHospitalName = it },
-                                    label = { Text("اسم المستشفى الرئيسي") },
+                                    label = { Text(bi(isEn, "اسم المستشفى الرئيسي", "Main Hospital Name")) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 OutlinedTextField(
                                     value = cfgSupportPhone,
                                     onValueChange = { cfgSupportPhone = it },
-                                    label = { Text("رقم التواصل والدعم الفني") },
+                                    label = { Text(bi(isEn, "رقم التواصل والدعم الفني", "Support Phone")) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
@@ -538,21 +556,21 @@ fun SuperAdminDashboardScreen(
                                 OutlinedTextField(
                                     value = cfgAnnouncement,
                                     onValueChange = { cfgAnnouncement = it },
-                                    label = { Text("إعلان التنبيه بالصفحة الرئيسية (اختياري)") },
+                                    label = { Text(bi(isEn, "إعلان التنبيه بالصفحة الرئيسية (اختياري)", "Home Announcement Banner (optional)")) },
                                     minLines = 2,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 OutlinedTextField(
                                     value = cfgApkUrl,
                                     onValueChange = { cfgApkUrl = it },
-                                    label = { Text("رابط تحميل تطبيق الأندرويد المباشر (APK)") },
+                                    label = { Text(bi(isEn, "رابط تحميل تطبيق الأندرويد المباشر (APK)", "Direct Android APK Download URL")) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 OutlinedTextField(
                                     value = cfgMedsApi,
                                     onValueChange = { cfgMedsApi = it },
-                                    label = { Text("رابط API الأدوية (اختياري)") },
+                                    label = { Text(bi(isEn, "رابط API الأدوية (اختياري)", "Medications API URL (optional)")) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -560,7 +578,7 @@ fun SuperAdminDashboardScreen(
                                 PasswordOutlinedTextField(
                                     value = cfgAdminPin,
                                     onValueChange = { cfgAdminPin = it },
-                                    label = "الرقم السري للوحة التحكم (Admin PIN)",
+                                    label = bi(isEn, "الرقم السري للوحة التحكم (Admin PIN)", "Super Admin PIN"),
                                     keyboardType = KeyboardType.NumberPassword,
                                     toggleTestTag = "admin_change_pin_toggle",
                                     modifier = Modifier
@@ -572,7 +590,7 @@ fun SuperAdminDashboardScreen(
                                         onClick = onResetPlatformSettings,
                                         modifier = Modifier.weight(1f).height(48.dp),
                                     ) {
-                                        Text("استعادة الافتراضي")
+                                        Text(bi(isEn, "استعادة الافتراضي", "Reset Default"))
                                     }
                                     Button(
                                         onClick = {
@@ -592,7 +610,7 @@ fun SuperAdminDashboardScreen(
                                             .height(48.dp)
                                             .testTag("admin_save_platform_settings"),
                                     ) {
-                                        Text("حفظ وتطبيق فوراً")
+                                        Text(bi(isEn, "حفظ وتطبيق فوراً", "Save & Apply"))
                                     }
                                 }
                             }
@@ -605,6 +623,7 @@ fun SuperAdminDashboardScreen(
                         context = context,
                         brandConfig = state.brandConfig,
                         activationCodes = state.activationCodes,
+                        isEn = isEn,
                         onGenerateBatch = { count -> onGenerateOtpBatch(count, "ADMIN") },
                         onShowMessage = onShowMessage,
                     )
@@ -623,7 +642,7 @@ fun SuperAdminDashboardScreen(
                         ) {
                             Icon(Icons.Filled.Science, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("إضافة معمل تحاليل جديد في الحجايزة")
+                            Text(bi(isEn, "إضافة معمل تحاليل جديد في الحجايزة", "Add New Medical Lab"))
                         }
                     }
 
@@ -634,7 +653,11 @@ fun SuperAdminDashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    text = "لم تتم إضافة معامل تحاليل بعد. أضف معملاً لإنشاء حساب دخول خاص به.",
+                                    text = bi(
+                                        isEn,
+                                        "لم تتم إضافة معامل تحاليل بعد. أضف معملاً لإنشاء حساب دخول خاص به.",
+                                        "No medical labs added yet. Add a lab to generate its login credentials.",
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(16.dp),
@@ -645,6 +668,7 @@ fun SuperAdminDashboardScreen(
                         items(state.labs, key = { it.id }) { lab ->
                             AdminLabManageCard(
                                 lab = lab,
+                                isEn = isEn,
                                 onEdit = { labToEdit = lab },
                                 onDelete = { labToDelete = lab },
                             )
@@ -659,7 +683,9 @@ fun SuperAdminDashboardScreen(
         DoctorFormDialog(
             initialDoctor = null,
             defaultClinicType = defaultFormClinicType,
-            hospitalName = state.brandConfig.hospitalNameAr,
+            hospitalName = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn),
+            isEn = isEn,
+            currencyLabel = currencyLabel,
             onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass ->
                 onAddDoctor(name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass)
                 showAddForm = false
@@ -673,7 +699,9 @@ fun SuperAdminDashboardScreen(
         DoctorFormDialog(
             initialDoctor = editingDoc,
             defaultClinicType = editingDoc.clinicType,
-            hospitalName = state.brandConfig.hospitalNameAr,
+            hospitalName = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn),
+            isEn = isEn,
+            currencyLabel = currencyLabel,
             onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass ->
                 onUpdateDoctor(editingDoc.id, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass)
                 doctorToEdit = null
@@ -686,9 +714,15 @@ fun SuperAdminDashboardScreen(
     if (deletingDoc != null) {
         AlertDialog(
             onDismissRequest = { doctorToDelete = null },
-            title = { Text("تأكيد الحذف النهائي") },
+            title = { Text(bi(isEn, "تأكيد الحذف النهائي", "Confirm Permanent Deletion")) },
             text = {
-                Text("هل أنت متأكد من حذف ${deletingDoc.doctorName} (${deletingDoc.clinicName}) نهائياً من المنصة؟")
+                Text(
+                    bi(
+                        isEn,
+                        "هل أنت متأكد من حذف ${deletingDoc.doctorName} (${deletingDoc.clinicName}) نهائياً من المنصة؟",
+                        "Delete ${deletingDoc.doctorName} (${deletingDoc.clinicName}) permanently?",
+                    )
+                )
             },
             confirmButton = {
                 Button(
@@ -698,12 +732,12 @@ fun SuperAdminDashboardScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = SlotBookedBorder),
                 ) {
-                    Text("حذف نهائي")
+                    Text(bi(isEn, "حذف نهائي", "Delete"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { doctorToDelete = null }) {
-                    Text("تراجع")
+                    Text(bi(isEn, "تراجع", "Cancel"))
                 }
             },
         )
@@ -712,6 +746,7 @@ fun SuperAdminDashboardScreen(
     if (showAddLabForm) {
         LabFormDialog(
             initialLab = null,
+            isEn = isEn,
             onSave = { name, phone, loc, user, pass ->
                 onAddLab(name, phone, loc, user, pass)
                 showAddLabForm = false
@@ -724,6 +759,7 @@ fun SuperAdminDashboardScreen(
     if (editingLab != null) {
         LabFormDialog(
             initialLab = editingLab,
+            isEn = isEn,
             onSave = { name, phone, loc, user, pass ->
                 onUpdateLab(editingLab.id, name, phone, loc, user, pass)
                 labToEdit = null
@@ -736,8 +772,16 @@ fun SuperAdminDashboardScreen(
     if (deletingLab != null) {
         AlertDialog(
             onDismissRequest = { labToDelete = null },
-            title = { Text("تأكيد حذف المعمل") },
-            text = { Text("هل أنت متأكد من حذف ${deletingLab.labName} من بوابة معامل التحاليل؟") },
+            title = { Text(bi(isEn, "تأكيد حذف المعمل", "Confirm Lab Deletion")) },
+            text = {
+                Text(
+                    bi(
+                        isEn,
+                        "هل أنت متأكد من حذف ${deletingLab.labName} من بوابة معامل التحاليل؟",
+                        "Remove ${deletingLab.labName} from the medical lab portal?",
+                    )
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -746,12 +790,12 @@ fun SuperAdminDashboardScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = SlotBookedBorder),
                 ) {
-                    Text("حذف")
+                    Text(bi(isEn, "حذف", "Delete"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { labToDelete = null }) {
-                    Text("تراجع")
+                    Text(bi(isEn, "تراجع", "Cancel"))
                 }
             },
         )
@@ -788,6 +832,8 @@ private fun AdminMetricBox(label: String, value: String, modifier: Modifier = Mo
 @Composable
 private fun AdminDoctorManageCard(
     doctor: ClinicDoctorEntity,
+    isEn: Boolean = false,
+    currencyLabel: String = if (isEn) "EGP" else "ج.م",
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -814,7 +860,7 @@ private fun AdminDoctorManageCard(
                 }
                 Surface(color = SlotAvailableBg, shape = RoundedCornerShape(8.dp)) {
                     Text(
-                        text = if (doctor.clinicType == ClinicType.HOSPITAL) "مستشفى" else "عيادة خاصة",
+                        text = if (doctor.clinicType == ClinicType.HOSPITAL) bi(isEn, "مستشفى", "Hospital") else bi(isEn, "عيادة خاصة", "Private"),
                         style = MaterialTheme.typography.labelSmall,
                         color = SlotAvailableText,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -827,7 +873,11 @@ private fun AdminDoctorManageCard(
             }
 
             Text(
-                text = "📍 ${doctor.locationLabel} • الكشف: ${doctor.feeEgp} ج.م • 🕒 ${TimeUtils.formatMinutesAr(doctor.workStartMinutes)} - ${TimeUtils.formatMinutesAr(doctor.workEndMinutes)}",
+                text = bi(
+                    isEn,
+                    "📍 ${doctor.locationLabel} • الكشف: ${doctor.feeEgp} $currencyLabel • 🕒 ${TimeUtils.formatMinutesAr(doctor.workStartMinutes, false)} - ${TimeUtils.formatMinutesAr(doctor.workEndMinutes, false)}",
+                    "📍 ${doctor.locationLabel} • Fee: ${doctor.feeEgp} $currencyLabel • 🕒 ${TimeUtils.formatMinutesAr(doctor.workStartMinutes, true)} - ${TimeUtils.formatMinutesAr(doctor.workEndMinutes, true)}",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -841,8 +891,8 @@ private fun AdminDoctorManageCard(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("المستخدم: ${doctor.username}", style = MaterialTheme.typography.labelMedium)
-                    Text("كلمة المرور: ${doctor.password}", style = MaterialTheme.typography.labelMedium)
+                    Text(bi(isEn, "المستخدم: ${doctor.username}", "User: ${doctor.username}"), style = MaterialTheme.typography.labelMedium)
+                    Text(bi(isEn, "كلمة المرور: ${doctor.password}", "Pass: ${doctor.password}"), style = MaterialTheme.typography.labelMedium)
                 }
             }
 
@@ -856,7 +906,7 @@ private fun AdminDoctorManageCard(
                 ) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("تعديل البيانات")
+                    Text(bi(isEn, "تعديل البيانات", "Edit"))
                 }
                 OutlinedButton(
                     onClick = onDelete,
@@ -866,7 +916,7 @@ private fun AdminDoctorManageCard(
                 ) {
                     Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("حذف")
+                    Text(bi(isEn, "حذف", "Delete"))
                 }
             }
         }
@@ -878,6 +928,8 @@ private fun DoctorFormDialog(
     initialDoctor: ClinicDoctorEntity?,
     defaultClinicType: String,
     hospitalName: String,
+    isEn: Boolean = false,
+    currencyLabel: String = if (isEn) "EGP" else "ج.م",
     onSave: (
         doctorName: String,
         specialty: String,
@@ -912,7 +964,12 @@ private fun DoctorFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEdit) "تعديل البيانات" else "إضافة دكتور أو قسم جديد") },
+        title = {
+            Text(
+                if (isEdit) bi(isEn, "تعديل البيانات", "Edit Clinic")
+                else bi(isEn, "إضافة دكتور أو قسم جديد", "Add Doctor / Department")
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -921,14 +978,14 @@ private fun DoctorFormDialog(
                 OutlinedTextField(
                     value = doctorName,
                     onValueChange = { doctorName = it },
-                    label = { Text("اسم الدكتور") },
+                    label = { Text(bi(isEn, "اسم الدكتور", "Doctor Name")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = specialty,
                     onValueChange = { specialty = it },
-                    label = { Text("التخصص الطبي") },
+                    label = { Text(bi(isEn, "التخصص الطبي", "Medical Specialty")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -936,7 +993,7 @@ private fun DoctorFormDialog(
                     FilterChip(
                         selected = clinicType == ClinicType.PRIVATE,
                         onClick = { clinicType = ClinicType.PRIVATE },
-                        label = { Text("عيادة خاصة") },
+                        label = { Text(bi(isEn, "عيادة خاصة", "Private Clinic")) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = TealPrimary,
                             selectedLabelColor = Color.White,
@@ -945,7 +1002,7 @@ private fun DoctorFormDialog(
                     FilterChip(
                         selected = clinicType == ClinicType.HOSPITAL,
                         onClick = { clinicType = ClinicType.HOSPITAL },
-                        label = { Text("المستشفى التخصصي") },
+                        label = { Text(bi(isEn, "المستشفى التخصصي", "Hospital Dept")) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = TealPrimary,
                             selectedLabelColor = Color.White,
@@ -957,32 +1014,37 @@ private fun DoctorFormDialog(
                     onValueChange = { clinicName = it },
                     label = {
                         Text(
-                            if (clinicType == ClinicType.HOSPITAL) "اسم القسم بالمستشفى"
-                            else "اسم العيادة"
+                            if (clinicType == ClinicType.HOSPITAL) bi(isEn, "اسم القسم بالمستشفى", "Department Name")
+                            else bi(isEn, "اسم العيادة", "Clinic Name")
                         )
                     },
-                    placeholder = { Text(if (clinicType == ClinicType.HOSPITAL) "$hospitalName - قسم ..." else "") },
+                    placeholder = {
+                        Text(
+                            if (clinicType == ClinicType.HOSPITAL) "$hospitalName - ${bi(isEn, "قسم ...", "Dept ...")}"
+                            else ""
+                        )
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = bio,
                     onValueChange = { bio = it },
-                    label = { Text("نبذة عن الدكتور") },
+                    label = { Text(bi(isEn, "نبذة عن الدكتور", "Doctor Bio")) },
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = locationLabel,
                     onValueChange = { locationLabel = it },
-                    label = { Text("عنوان العيادة بالتفصيل") },
+                    label = { Text(bi(isEn, "عنوان العيادة بالتفصيل", "Clinic Address")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = feeText,
                     onValueChange = { feeText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("سعر الكشف (ج.م)") },
+                    label = { Text(bi(isEn, "سعر الكشف ($currencyLabel)", "Consultation Fee ($currencyLabel)")) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -990,28 +1052,34 @@ private fun DoctorFormDialog(
                 OutlinedTextField(
                     value = mapsUrl,
                     onValueChange = { mapsUrl = it },
-                    label = { Text("رابط موقع العيادة على خرائط جوجل (Google Maps)") },
+                    label = { Text(bi(isEn, "رابط موقع العيادة على خرائط جوجل (Google Maps)", "Google Maps Link (optional)")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Text("بداية العمل: ${TimeUtils.formatMinutesAr(startHour * 60)}", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = bi(isEn, "بداية العمل: ${TimeUtils.formatMinutesAr(startHour * 60, false)}", "Start: ${TimeUtils.formatMinutesAr(startHour * 60, true)}"),
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(listOf(10, 12, 14, 15, 16, 17, 18)) { hr ->
                         FilterChip(
                             selected = startHour == hr,
                             onClick = { startHour = hr },
-                            label = { Text(TimeUtils.formatMinutesAr(hr * 60)) },
+                            label = { Text(TimeUtils.formatMinutesAr(hr * 60, isEn)) },
                         )
                     }
                 }
-                Text("نهاية العمل: ${TimeUtils.formatMinutesAr(endHour * 60)}", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = bi(isEn, "نهاية العمل: ${TimeUtils.formatMinutesAr(endHour * 60, false)}", "End: ${TimeUtils.formatMinutesAr(endHour * 60, true)}"),
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(listOf(18, 19, 20, 21, 22, 23)) { hr ->
                         FilterChip(
                             selected = endHour == hr,
                             onClick = { endHour = hr },
-                            label = { Text(TimeUtils.formatMinutesAr(hr * 60)) },
+                            label = { Text(TimeUtils.formatMinutesAr(hr * 60, isEn)) },
                         )
                     }
                 }
@@ -1020,24 +1088,28 @@ private fun DoctorFormDialog(
                         FilterChip(
                             selected = slotDuration == dur,
                             onClick = { slotDuration = dur },
-                            label = { Text("$dur د") },
+                            label = { Text(bi(isEn, "$dur د", "${dur}m")) },
                         )
                     }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Text("حساب تسجيل دخول الدكتور للوحة العيادة:", style = MaterialTheme.typography.titleSmall, color = TealPrimary)
+                Text(
+                    text = bi(isEn, "حساب تسجيل دخول الدكتور للوحة العيادة:", "Doctor Portal Login Credentials:"),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TealPrimary,
+                )
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("اسم المستخدم أو رقم الهاتف للدكتور") },
+                    label = { Text(bi(isEn, "اسم المستخدم أو رقم الهاتف للدكتور", "Username or Phone")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 PasswordOutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = "كلمة المرور للدكتور",
+                    label = bi(isEn, "كلمة المرور للدكتور", "Doctor Password"),
                     toggleTestTag = "admin_doc_password_toggle",
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1065,12 +1137,12 @@ private fun DoctorFormDialog(
                     )
                 }
             ) {
-                Text(if (isEdit) "حفظ التعديلات" else "إضافة ونشر فوراً")
+                Text(if (isEdit) bi(isEn, "حفظ التعديلات", "Save Changes") else bi(isEn, "إضافة ونشر فوراً", "Add & Publish"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("إلغاء")
+                Text(bi(isEn, "إلغاء", "Cancel"))
             }
         },
     )
@@ -1079,6 +1151,7 @@ private fun DoctorFormDialog(
 @Composable
 private fun AdminLabManageCard(
     lab: MedicalLabEntity,
+    isEn: Boolean = false,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -1102,14 +1175,14 @@ private fun AdminLabManageCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(lab.labName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        text = "📍 ${lab.locationLabel.ifBlank { "قرية الحجايزة" }}${if (lab.phone.isNotBlank()) " • ${lab.phone}" else ""}",
+                        text = "📍 ${lab.locationLabel.ifBlank { bi(isEn, "قرية الحجايزة", "Al-Hajayzah") }}${if (lab.phone.isNotBlank()) " • ${lab.phone}" else ""}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Surface(color = Color(0xFFE0E7FF), shape = RoundedCornerShape(8.dp)) {
                     Text(
-                        text = "معمل تحاليل",
+                        text = bi(isEn, "معمل تحاليل", "Medical Lab"),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF3730A3),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -1125,8 +1198,8 @@ private fun AdminLabManageCard(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("المستخدم: ${lab.username}", style = MaterialTheme.typography.labelMedium)
-                    Text("كلمة المرور: ${lab.password}", style = MaterialTheme.typography.labelMedium)
+                    Text(bi(isEn, "المستخدم: ${lab.username}", "User: ${lab.username}"), style = MaterialTheme.typography.labelMedium)
+                    Text(bi(isEn, "كلمة المرور: ${lab.password}", "Pass: ${lab.password}"), style = MaterialTheme.typography.labelMedium)
                 }
             }
             Row(
@@ -1139,7 +1212,7 @@ private fun AdminLabManageCard(
                 ) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("تعديل")
+                    Text(bi(isEn, "تعديل", "Edit"))
                 }
                 OutlinedButton(
                     onClick = onDelete,
@@ -1149,7 +1222,7 @@ private fun AdminLabManageCard(
                 ) {
                     Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("حذف")
+                    Text(bi(isEn, "حذف", "Delete"))
                 }
             }
         }
@@ -1159,6 +1232,7 @@ private fun AdminLabManageCard(
 @Composable
 private fun LabFormDialog(
     initialLab: MedicalLabEntity?,
+    isEn: Boolean = false,
     onSave: (labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1171,7 +1245,7 @@ private fun LabFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEdit) "تعديل بيانات المعمل" else "إضافة معمل تحاليل جديد") },
+        title = { Text(if (isEdit) bi(isEn, "تعديل بيانات المعمل", "Edit Medical Lab") else bi(isEn, "إضافة معمل تحاليل جديد", "Add New Medical Lab")) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -1180,14 +1254,14 @@ private fun LabFormDialog(
                 OutlinedTextField(
                     value = labName,
                     onValueChange = { labName = it },
-                    label = { Text("اسم معمل التحاليل *") },
+                    label = { Text(bi(isEn, "اسم معمل التحاليل *", "Lab Name *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("lab_form_name_input"),
                 )
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("رقم هاتف المعمل") },
+                    label = { Text(bi(isEn, "رقم هاتف المعمل", "Lab Phone")) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -1195,21 +1269,21 @@ private fun LabFormDialog(
                 OutlinedTextField(
                     value = locationLabel,
                     onValueChange = { locationLabel = it },
-                    label = { Text("العنوان بالتفصيل") },
+                    label = { Text(bi(isEn, "العنوان بالتفصيل", "Address")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("اسم المستخدم للدخول *") },
+                    label = { Text(bi(isEn, "اسم المستخدم للدخول *", "Login Username *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("lab_form_username_input"),
                 )
                 PasswordOutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = "كلمة المرور للدخول *",
+                    label = bi(isEn, "كلمة المرور للدخول *", "Login Password *"),
                     toggleTestTag = "lab_form_password_toggle",
                     modifier = Modifier.fillMaxWidth().testTag("lab_form_password_input"),
                 )
@@ -1220,12 +1294,12 @@ private fun LabFormDialog(
                 onClick = { onSave(labName, phone, locationLabel, username, password) },
                 modifier = Modifier.testTag("lab_form_save_button"),
             ) {
-                Text(if (isEdit) "حفظ التعديلات" else "إضافة المعمل")
+                Text(if (isEdit) bi(isEn, "حفظ التعديلات", "Save Changes") else bi(isEn, "إضافة المعمل", "Add Lab"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("إلغاء")
+                Text(bi(isEn, "إلغاء", "Cancel"))
             }
         },
     )

@@ -87,6 +87,7 @@ import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
 import com.example.ui.TebUiState
+import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
 import com.example.ui.theme.TealPrimary
 import com.example.util.ImageStorageHelper
@@ -130,6 +131,7 @@ fun MedicalFileScreen(
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val isEn = state.isEn
     val activeMember = state.activeMember
     val records = remember(state.medicalRecords, activeMember) {
         state.recordsForMember(activeMember)
@@ -153,7 +155,7 @@ fun MedicalFileScreen(
                 pendingFileName = saved.displayName
                 showUploadDialog = true
             } else {
-                onShowMessage("تعذر قراءة الملف أو الصورة المختارة")
+                onShowMessage(bi(isEn, "تعذر قراءة الملف أو الصورة المختارة", "Could not read selected file or image"))
             }
         }
     }
@@ -169,7 +171,7 @@ fun MedicalFileScreen(
                 pendingFileName = saved.displayName
                 showUploadDialog = true
             } else {
-                onShowMessage("تعذر قراءة الصورة المختارة")
+                onShowMessage(bi(isEn, "تعذر قراءة الصورة المختارة", "Could not read selected image"))
             }
         }
     }
@@ -183,10 +185,10 @@ fun MedicalFileScreen(
             if (savedPath != null) {
                 pendingFilePath = savedPath
                 pendingFileMime = "image/jpeg"
-                pendingFileName = "صورة_مرفقة.jpg"
+                pendingFileName = if (isEn) "attached_photo.jpg" else "صورة_مرفقة.jpg"
                 showUploadDialog = true
             } else {
-                onShowMessage("تعذر حفظ صورة الكاميرا")
+                onShowMessage(bi(isEn, "تعذر حفظ صورة الكاميرا", "Could not save camera photo"))
             }
         }
     }
@@ -202,11 +204,15 @@ fun MedicalFileScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "ملفي الطبي الموحد",
+                        text = bi(isEn, "ملفي الطبي الموحد", "Unified Medical File"),
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Text(
-                        text = "سجل العائلة الكامل للروشتات، الزيارات الخارجية، ونتائج المعامل والأشعة مع الملخص الطبي التلقائي.",
+                        text = bi(
+                            isEn,
+                            "سجل العائلة الكامل للروشتات، الزيارات الخارجية، ونتائج المعامل والأشعة مع الملخص الطبي التلقائي.",
+                            "Complete family history of prescriptions, external visits, and lab/imaging results with smart summary.",
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -228,19 +234,27 @@ fun MedicalFileScreen(
                         ) {
                             Image(
                                 painter = painterResource(id = state.brandConfig.medicalRecordIllustRes),
-                                contentDescription = "ملف طبي موحد",
+                                contentDescription = bi(isEn, "ملف طبي موحد", "Unified Medical Record"),
                                 modifier = Modifier
                                     .height(140.dp)
                                     .clip(RoundedCornerShape(14.dp)),
                                 contentScale = ContentScale.Fit,
                             )
                             Text(
-                                text = "سجّل الدخول أو أنشئ حساباً للوصول إلى ملفك الطبي",
+                                text = bi(
+                                    isEn,
+                                    "سجّل الدخول أو أنشئ حساباً للوصول إلى ملفك الطبي",
+                                    "Sign in or create an account to access your medical file",
+                                ),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "يتم حفظ سجل الزيارات الخاصة ونتائج المعامل والروشتات بشكل مستقل لكل فرد في عائلتك.",
+                                text = bi(
+                                    isEn,
+                                    "يتم حفظ سجل الزيارات الخاصة ونتائج المعامل والروشتات بشكل مستقل لكل فرد في عائلتك.",
+                                    "External visits, lab results, and prescriptions are saved separately for each family member.",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -253,7 +267,7 @@ fun MedicalFileScreen(
                             ) {
                                 Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("تسجيل الدخول / إنشاء حساب")
+                                Text(bi(isEn, "تسجيل الدخول / إنشاء حساب", "Sign In / Create Account"))
                             }
                         }
                     }
@@ -281,6 +295,7 @@ fun MedicalFileScreen(
                     AiMedicalSummaryCard(
                         patientName = activeMember.fullName,
                         records = records,
+                        isEn = isEn,
                     )
                 }
 
@@ -300,7 +315,10 @@ fun MedicalFileScreen(
                     ) {
                         Icon(Icons.Filled.LocalHospital, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("➕ تسجيل زيارة طبيب خارجي / خاص", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = bi(isEn, "➕ تسجيل زيارة طبيب خارجي / خاص", "➕ Log External / Private Visit"),
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
                 }
 
@@ -325,11 +343,15 @@ fun MedicalFileScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "إضافة تحاليل أو أشعة (صورة أو PDF)",
+                                        text = bi(isEn, "إضافة تحاليل أو أشعة (صورة أو PDF)", "Add Lab / Radiology Result (Image or PDF)"),
                                         style = MaterialTheme.typography.titleMedium,
                                     )
                                     Text(
-                                        text = "تُضغط الصور تلقائياً وتظهر فوراً للأطباء عند الكشف",
+                                        text = bi(
+                                            isEn,
+                                            "تُضغط الصور تلقائياً وتظهر فوراً للأطباء عند الكشف",
+                                            "Images compress automatically and become visible to your doctors during visits",
+                                        ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -346,9 +368,9 @@ fun MedicalFileScreen(
                                             tempCameraFile = file
                                             cameraLauncher.launch(uri)
                                         } catch (_: ActivityNotFoundException) {
-                                            onShowMessage("لا توجد كاميرا متاحة، اختر صورة من المعرض")
+                                            onShowMessage(bi(isEn, "لا توجد كاميرا متاحة، اختر صورة من المعرض", "No camera available; pick an image from gallery"))
                                         } catch (_: Exception) {
-                                            onShowMessage("تعذر فتح الكاميرا")
+                                            onShowMessage(bi(isEn, "تعذر فتح الكاميرا", "Could not open camera"))
                                         }
                                     },
                                     modifier = Modifier
@@ -358,7 +380,7 @@ fun MedicalFileScreen(
                                 ) {
                                     Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("كاميرا", maxLines = 1)
+                                    Text(bi(isEn, "كاميرا", "Camera"), maxLines = 1)
                                 }
                                 OutlinedButton(
                                     onClick = {
@@ -373,7 +395,7 @@ fun MedicalFileScreen(
                                 ) {
                                     Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("صورة", maxLines = 1)
+                                    Text(bi(isEn, "صورة", "Image"), maxLines = 1)
                                 }
                                 OutlinedButton(
                                     onClick = {
@@ -407,18 +429,22 @@ fun MedicalFileScreen(
                             ) {
                                 Image(
                                     painter = painterResource(id = state.brandConfig.medicalRecordIllustRes),
-                                    contentDescription = "ملف طبي فارغ",
+                                    contentDescription = bi(isEn, "ملف طبي فارغ", "Empty medical record"),
                                     modifier = Modifier
                                         .height(140.dp)
                                         .clip(RoundedCornerShape(14.dp)),
                                     contentScale = ContentScale.Fit,
                                 )
                                 Text(
-                                    text = "لا توجد سجلات طبية مسجلة لـ ${activeMember.fullName} بعد",
+                                    text = bi(isEn, "لا توجد سجلات طبية مسجلة لـ ${activeMember.fullName} بعد", "No medical records for ${activeMember.fullName} yet"),
                                     style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
-                                    text = "ستظهر هنا كل الروشتات، الزيارات الخارجية، ونتائج المعامل والتحاليل.",
+                                    text = bi(
+                                        isEn,
+                                        "ستظهر هنا كل الروشتات، الزيارات الخارجية، ونتائج المعامل والتحاليل.",
+                                        "All prescriptions, external visits, and lab results will appear here.",
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -430,6 +456,7 @@ fun MedicalFileScreen(
                         MedicalRecordTimelineCard(
                             record = record,
                             brandConfig = state.brandConfig,
+                            isEn = isEn,
                             onPreviewImage = onPreviewImage,
                             onShowMessage = onShowMessage,
                         )
@@ -446,7 +473,7 @@ fun MedicalFileScreen(
 
         AlertDialog(
             onDismissRequest = { showUploadDialog = false },
-            title = { Text("حفظ التحليل / الأشعة في الملف الطبي") },
+            title = { Text(bi(isEn, "حفظ التحليل / الأشعة في الملف الطبي", "Save Lab / Imaging Result")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (pendingFilePath.isNotEmpty()) {
@@ -462,13 +489,13 @@ fun MedicalFileScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Icon(Icons.Filled.PictureAsPdf, contentDescription = null, tint = Color(0xFF0369A1))
-                                    Text(pendingFileName.ifBlank { "ملف PDF مرفق" }, style = MaterialTheme.typography.bodyMedium)
+                                    Text(pendingFileName.ifBlank { bi(isEn, "ملف PDF مرفق", "Attached PDF") }, style = MaterialTheme.typography.bodyMedium)
                                 }
                             }
                         } else {
                             AsyncImage(
                                 model = File(pendingFilePath),
-                                contentDescription = "معاينة الصورة",
+                                contentDescription = bi(isEn, "معاينة الصورة", "Image preview"),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(150.dp)
@@ -480,14 +507,14 @@ fun MedicalFileScreen(
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
-                        label = { Text("اسم التحليل أو الأشعة (مثال: صورة دم كاملة)") },
+                        label = { Text(bi(isEn, "اسم التحليل أو الأشعة (مثال: صورة دم كاملة)", "Test or scan title (e.g., CBC)")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
-                        label = { Text("ملاحظات إضافية للطبيب (اختياري)") },
+                        label = { Text(bi(isEn, "ملاحظات إضافية للطبيب (اختياري)", "Extra notes for doctor (optional)")) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -506,12 +533,12 @@ fun MedicalFileScreen(
                         showUploadDialog = false
                     }
                 ) {
-                    Text("حفظ في ملفي الطبي")
+                    Text(bi(isEn, "حفظ في ملفي الطبي", "Save to Medical File"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUploadDialog = false }) {
-                    Text("إلغاء")
+                    Text(bi(isEn, "إلغاء", "Cancel"))
                 }
             },
         )
@@ -520,6 +547,7 @@ fun MedicalFileScreen(
     if (showExternalVisitDialog && activeMember != null) {
         ExternalDoctorVisitDialog(
             member = activeMember,
+            isEn = isEn,
             onSave = { docName, specialty, dateLabel, diagnosis, medsText, notes, attPath, attMime, attName ->
                 onAddExternalDoctorVisit(
                     activeMember,
@@ -545,6 +573,7 @@ fun MedicalFileScreen(
 @Composable
 private fun ExternalDoctorVisitDialog(
     member: FamilyMemberEntity,
+    isEn: Boolean = false,
     onSave: (
         doctorName: String,
         specialty: String,
@@ -561,9 +590,16 @@ private fun ExternalDoctorVisitDialog(
 ) {
     val context = LocalContext.current
     var doctorName by remember { mutableStateOf("") }
-    var visitDate by remember { mutableStateOf(TimeUtils.formatTodayLabelAr()) }
-    var specialty by remember { mutableStateOf(MedicalSummaryAnalyzer.EXTERNAL_SPECIALTIES.first()) }
+    var visitDate by remember { mutableStateOf(TimeUtils.formatTodayLabelAr(isEn)) }
+    val specialtyOptions = if (isEn) {
+        MedicalSummaryAnalyzer.EXTERNAL_SPECIALTIES_EN
+    } else {
+        MedicalSummaryAnalyzer.EXTERNAL_SPECIALTIES.map { it to it }
+    }
+    var selectedSpecialtyCanonical by remember { mutableStateOf(MedicalSummaryAnalyzer.EXTERNAL_SPECIALTIES.first()) }
     var specialtyExpanded by remember { mutableStateOf(false) }
+    val selectedSpecialtyDisplay = specialtyOptions.firstOrNull { it.second == selectedSpecialtyCanonical }?.first
+        ?: selectedSpecialtyCanonical
     var diagnosis by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
 
@@ -587,7 +623,7 @@ private fun ExternalDoctorVisitDialog(
                 attachmentMime = saved.mimeType
                 attachmentName = saved.displayName
             } else {
-                onShowMessage("تعذر قراءة الملف المرفق")
+                onShowMessage(bi(isEn, "تعذر قراءة الملف المرفق", "Could not read attached file"))
             }
         }
     }
@@ -601,7 +637,7 @@ private fun ExternalDoctorVisitDialog(
             if (saved != null) {
                 attachmentPath = saved
                 attachmentMime = "image/jpeg"
-                attachmentName = "روشتة_خارجية.jpg"
+                attachmentName = if (isEn) "external_rx.jpg" else "روشتة_خارجية.jpg"
             }
         }
     }
@@ -629,19 +665,27 @@ private fun ExternalDoctorVisitDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("تسجيل زيارة طبيب خارجي / خاص", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("للمريض: ${member.fullName}", style = MaterialTheme.typography.bodySmall, color = TealPrimary)
+                        Text(
+                            text = bi(isEn, "تسجيل زيارة طبيب خارجي / خاص", "Log External / Private Doctor Visit"),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = bi(isEn, "للمريض: ${member.fullName}", "Patient: ${member.fullName}"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TealPrimary,
+                        )
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "إغلاق")
+                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
 
                 OutlinedTextField(
                     value = doctorName,
                     onValueChange = { doctorName = it },
-                    label = { Text("اسم الطبيب المعالج *") },
-                    placeholder = { Text("مثال: د. أيمن فؤاد") },
+                    label = { Text(bi(isEn, "اسم الطبيب المعالج *", "Doctor Name *")) },
+                    placeholder = { Text(bi(isEn, "مثال: د. أيمن فؤاد", "e.g., Dr. Ayman Fouad")) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -651,7 +695,7 @@ private fun ExternalDoctorVisitDialog(
                 OutlinedTextField(
                     value = visitDate,
                     onValueChange = { visitDate = it },
-                    label = { Text("تاريخ الزيارة") },
+                    label = { Text(bi(isEn, "تاريخ الزيارة", "Visit Date")) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -663,10 +707,10 @@ private fun ExternalDoctorVisitDialog(
                     onExpandedChange = { specialtyExpanded = !specialtyExpanded },
                 ) {
                     OutlinedTextField(
-                        value = specialty,
+                        value = selectedSpecialtyDisplay,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("تخصص الطبيب") },
+                        label = { Text(bi(isEn, "تخصص الطبيب", "Specialty")) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = specialtyExpanded) },
                         modifier = Modifier
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable)
@@ -677,11 +721,11 @@ private fun ExternalDoctorVisitDialog(
                         expanded = specialtyExpanded,
                         onDismissRequest = { specialtyExpanded = false },
                     ) {
-                        MedicalSummaryAnalyzer.EXTERNAL_SPECIALTIES.forEach { specOption ->
+                        specialtyOptions.forEach { (displayLabel, canonicalValue) ->
                             DropdownMenuItem(
-                                text = { Text(specOption) },
+                                text = { Text(displayLabel) },
                                 onClick = {
-                                    specialty = specOption
+                                    selectedSpecialtyCanonical = canonicalValue
                                     specialtyExpanded = false
                                 },
                             )
@@ -692,7 +736,7 @@ private fun ExternalDoctorVisitDialog(
                 OutlinedTextField(
                     value = diagnosis,
                     onValueChange = { diagnosis = it },
-                    label = { Text("التشخيص / ملخص الكشف *") },
+                    label = { Text(bi(isEn, "التشخيص / ملخص الكشف *", "Diagnosis / Visit Notes *")) },
                     minLines = 2,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -700,7 +744,11 @@ private fun ExternalDoctorVisitDialog(
                 )
 
                 HorizontalDivider()
-                Text("الأدوية الموصوفة في الزيارة (${medDrafts.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    text = bi(isEn, "الأدوية الموصوفة في الزيارة (${medDrafts.size})", "Prescribed Medications (${medDrafts.size})"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
 
                 if (medDrafts.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -724,7 +772,7 @@ private fun ExternalDoctorVisitDialog(
                                         onClick = { medDrafts.removeAt(idx) },
                                         modifier = Modifier.size(36.dp),
                                     ) {
-                                        Icon(Icons.Filled.Delete, contentDescription = "حذف الدواء", tint = Color(0xFFDC2626))
+                                        Icon(Icons.Filled.Delete, contentDescription = bi(isEn, "حذف الدواء", "Remove drug"), tint = Color(0xFFDC2626))
                                     }
                                 }
                             }
@@ -744,7 +792,7 @@ private fun ExternalDoctorVisitDialog(
                         OutlinedTextField(
                             value = medNameInput,
                             onValueChange = { medNameInput = it },
-                            label = { Text("اسم الدواء") },
+                            label = { Text(bi(isEn, "اسم الدواء", "Medication Name")) },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -757,16 +805,16 @@ private fun ExternalDoctorVisitDialog(
                             OutlinedTextField(
                                 value = medDosageInput,
                                 onValueChange = { medDosageInput = it },
-                                label = { Text("الجرعة") },
-                                placeholder = { Text("قرص كل 12 ساعة") },
+                                label = { Text(bi(isEn, "الجرعة", "Dosage")) },
+                                placeholder = { Text(bi(isEn, "قرص كل 12 ساعة", "1 tab every 12h")) },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f),
                             )
                             OutlinedTextField(
                                 value = medDurationInput,
                                 onValueChange = { medDurationInput = it },
-                                label = { Text("المدة") },
-                                placeholder = { Text("7 أيام") },
+                                label = { Text(bi(isEn, "المدة", "Duration")) },
+                                placeholder = { Text(bi(isEn, "7 أيام", "7 days")) },
                                 singleLine = true,
                                 modifier = Modifier.weight(0.8f),
                             )
@@ -775,12 +823,12 @@ private fun ExternalDoctorVisitDialog(
                             onClick = {
                                 val cleanDrug = medNameInput.trim()
                                 if (cleanDrug.isEmpty()) {
-                                    onShowMessage("اكتب اسم الدواء أولاً")
+                                    onShowMessage(bi(isEn, "اكتب اسم الدواء أولاً", "Enter medication name first"))
                                 } else {
                                     medDrafts.add(
                                         ExternalMedDraft(
                                             drugName = cleanDrug,
-                                            dosage = medDosageInput.trim().ifBlank { "حسب إرشادات الطبيب" },
+                                            dosage = medDosageInput.trim().ifBlank { bi(isEn, "حسب إرشادات الطبيب", "As directed") },
                                             duration = medDurationInput.trim(),
                                         )
                                     )
@@ -796,7 +844,7 @@ private fun ExternalDoctorVisitDialog(
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("إضافة دواء +")
+                            Text(bi(isEn, "إضافة دواء +", "Add Medication +"))
                         }
                     }
                 }
@@ -804,7 +852,7 @@ private fun ExternalDoctorVisitDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("ملاحظات إضافية (اختياري)") },
+                    label = { Text(bi(isEn, "ملاحظات إضافية (اختياري)", "Extra notes (optional)")) },
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -819,14 +867,14 @@ private fun ExternalDoctorVisitDialog(
                                 tempCameraFile = file
                                 extCamera.launch(uri)
                             } catch (_: Exception) {
-                                onShowMessage("تعذر فتح الكاميرا")
+                                onShowMessage(bi(isEn, "تعذر فتح الكاميرا", "Could not open camera"))
                             }
                         },
                         modifier = Modifier.weight(1f).height(46.dp),
                     ) {
                         Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("تصوير روشتة", maxLines = 1)
+                        Text(bi(isEn, "تصوير روشتة", "Camera Rx"), maxLines = 1)
                     }
                     OutlinedButton(
                         onClick = { extPicker.launch(arrayOf("image/*", "application/pdf")) },
@@ -834,13 +882,13 @@ private fun ExternalDoctorVisitDialog(
                     ) {
                         Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("صورة أو PDF", maxLines = 1)
+                        Text(bi(isEn, "صورة أو PDF", "Image / PDF"), maxLines = 1)
                     }
                 }
 
                 if (attachmentPath.isNotEmpty()) {
                     Text(
-                        text = "✓ تم إرفاق: ${attachmentName.ifBlank { "ملف مرفق" }}",
+                        text = bi(isEn, "✓ تم إرفاق: ${attachmentName.ifBlank { "ملف مرفق" }}", "✓ Attached: ${attachmentName.ifBlank { "file" }}"),
                         style = MaterialTheme.typography.labelMedium,
                         color = TealPrimary,
                     )
@@ -854,18 +902,18 @@ private fun ExternalDoctorVisitDialog(
                             allMeds.add(
                                 ExternalMedDraft(
                                     drugName = medNameInput.trim(),
-                                    dosage = medDosageInput.trim().ifBlank { "حسب إرشادات الطبيب" },
+                                    dosage = medDosageInput.trim().ifBlank { bi(isEn, "حسب إرشادات الطبيب", "As directed") },
                                     duration = medDurationInput.trim(),
                                 )
                             )
                         }
                         val medsFormatted = allMeds.joinToString("\n") { d ->
-                            val dur = if (d.duration.isNotBlank()) " — المدة: ${d.duration}" else ""
+                            val dur = if (d.duration.isNotBlank()) bi(isEn, " — المدة: ${d.duration}", " — ${d.duration}") else ""
                             "• ${d.drugName} — ${d.dosage}$dur"
                         }
                         onSave(
                             doctorName,
-                            specialty,
+                            selectedSpecialtyCanonical,
                             visitDate,
                             diagnosis,
                             medsFormatted,
@@ -880,7 +928,7 @@ private fun ExternalDoctorVisitDialog(
                         .height(50.dp)
                         .testTag("ext_visit_save_button"),
                 ) {
-                    Text("حفظ الزيارة وتحديث الملخص الطبي")
+                    Text(bi(isEn, "حفظ الزيارة وتحديث الملخص الطبي", "Save Visit & Update Summary"))
                 }
             }
         }
@@ -891,6 +939,7 @@ private fun ExternalDoctorVisitDialog(
 fun MedicalRecordTimelineCard(
     record: MedicalRecordEntity,
     brandConfig: PlatformBrandConfig,
+    isEn: Boolean = false,
     onPreviewImage: (path: String, title: String) -> Unit,
     onShowMessage: (String) -> Unit = {},
 ) {
@@ -908,10 +957,10 @@ fun MedicalRecordTimelineCard(
     }
 
     val badgeLabel = when (record.recordType) {
-        MedicalRecordType.LAB_RESULT -> "نتيجة معمل"
-        MedicalRecordType.EXTERNAL_VISIT -> "طبيب خارجي"
-        MedicalRecordType.PATIENT_UPLOAD -> "رفع المريض"
-        else -> "عيادة بالمنصة"
+        MedicalRecordType.LAB_RESULT -> bi(isEn, "نتيجة معمل", "Lab Result")
+        MedicalRecordType.EXTERNAL_VISIT -> bi(isEn, "طبيب خارجي", "External Doctor")
+        MedicalRecordType.PATIENT_UPLOAD -> bi(isEn, "رفع المريض", "Patient Upload")
+        else -> bi(isEn, "عيادة بالمنصة", "Platform Clinic")
     }
 
     Card(
@@ -993,9 +1042,9 @@ fun MedicalRecordTimelineCard(
                 ) {
                     Text(
                         text = when {
-                            isLabResult -> "اسم التحليل / الفحص: ${record.diagnosis}"
-                            isUpload -> "العنوان: ${record.diagnosis}"
-                            else -> "التشخيص الطبي: ${record.diagnosis}"
+                            isLabResult -> bi(isEn, "اسم التحليل / الفحص: ${record.diagnosis}", "Lab Test: ${record.diagnosis}")
+                            isUpload -> bi(isEn, "العنوان: ${record.diagnosis}", "Title: ${record.diagnosis}")
+                            else -> bi(isEn, "التشخيص الطبي: ${record.diagnosis}", "Diagnosis: ${record.diagnosis}")
                         },
                         style = MaterialTheme.typography.titleSmall,
                     )
@@ -1018,7 +1067,7 @@ fun MedicalRecordTimelineCard(
                     }
                     if (record.notes.isNotBlank()) {
                         Text(
-                            text = "ملاحظات: ${record.notes}",
+                            text = bi(isEn, "ملاحظات: ${record.notes}", "Notes: ${record.notes}"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1044,7 +1093,7 @@ fun MedicalRecordTimelineCard(
                     ) {
                         Icon(Icons.Filled.PictureAsPdf, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("فتح ملف PDF: ${record.attachmentName.ifBlank { "نتيجة التحليل" }}")
+                        Text(bi(isEn, "فتح ملف PDF: ${record.attachmentName.ifBlank { "نتيجة التحليل" }}", "Open PDF: ${record.attachmentName.ifBlank { "Lab Report" }}"))
                     }
                 } else {
                     Box(
@@ -1056,7 +1105,7 @@ fun MedicalRecordTimelineCard(
                     ) {
                         AsyncImage(
                             model = File(record.attachmentPath),
-                            contentDescription = "صورة الروشتة أو التحليل",
+                            contentDescription = bi(isEn, "صورة الروشتة أو التحليل", "Prescription or lab image"),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -1079,7 +1128,7 @@ fun MedicalRecordTimelineCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "اضغط للتكبير",
+                                    text = bi(isEn, "اضغط للتكبير", "Tap to zoom"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White,
                                 )
@@ -1106,7 +1155,7 @@ fun MedicalRecordTimelineCard(
                 ) {
                     Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("طباعة الروشتة (Print / PDF)")
+                    Text(bi(isEn, "طباعة الروشتة (Print / PDF)", "Print Prescription (PDF)"))
                 }
             }
         }

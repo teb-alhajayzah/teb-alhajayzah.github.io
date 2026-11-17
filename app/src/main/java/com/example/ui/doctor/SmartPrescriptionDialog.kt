@@ -77,6 +77,7 @@ import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
 import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
+import com.example.ui.bi
 import com.example.ui.theme.SlotAvailableBg
 import com.example.ui.theme.SlotAvailableBorder
 import com.example.ui.theme.SlotAvailableText
@@ -102,6 +103,7 @@ fun SmartPrescriptionDialog(
     medications: List<EgyptianMedication>,
     isLiveRemoteMeds: Boolean,
     favoriteMedIds: Set<String>,
+    isEn: Boolean = false,
     onToggleFavorite: (String) -> Unit,
     onSaveAndComplete: (
         diagnosis: String,
@@ -121,7 +123,7 @@ fun SmartPrescriptionDialog(
     var medFilterMode by remember { mutableIntStateOf(0) }
     var selectedSpecialtyChip by remember { mutableStateOf<String?>(null) }
     var customMedName by remember { mutableStateOf("") }
-    var customMedDosage by remember { mutableStateOf("قرص كل 12 ساعة") }
+    var customMedDosage by remember { mutableStateOf(bi(isEn, "قرص كل 12 ساعة", "1 tab every 12h")) }
     var attachmentPath by remember { mutableStateOf("") }
     var tempCameraFile by remember { mutableStateOf<File?>(null) }
 
@@ -135,7 +137,7 @@ fun SmartPrescriptionDialog(
             if (saved != null) {
                 attachmentPath = saved
             } else {
-                onShowMessage("تعذر قراءة صورة الروشتة")
+                onShowMessage(bi(isEn, "تعذر قراءة صورة الروشتة", "Could not read prescription image"))
             }
         }
     }
@@ -149,7 +151,7 @@ fun SmartPrescriptionDialog(
             if (saved != null) {
                 attachmentPath = saved
             } else {
-                onShowMessage("تعذر حفظ صورة الكاميرا")
+                onShowMessage(bi(isEn, "تعذر حفظ صورة الكاميرا", "Could not save camera photo"))
             }
         }
     }
@@ -183,14 +185,14 @@ fun SmartPrescriptionDialog(
     fun buildMedicationsText(): String {
         return selectedItems.joinToString("\n") { item ->
             val strengthPart = if (item.strength.isNotBlank()) " ${item.strength}" else ""
-            "• ${item.tradeName}$strengthPart — ${item.dosage.ifBlank { "حسب إرشادات الطبيب" }}"
+            "• ${item.tradeName}$strengthPart — ${item.dosage.ifBlank { bi(isEn, "حسب إرشادات الطبيب", "As directed") }}"
         }
     }
 
     fun addMedicationToRx(med: EgyptianMedication) {
         val existingIdx = selectedItems.indexOfFirst { it.uid == med.id }
         if (existingIdx >= 0) {
-            onShowMessage("الدواء مضاف بالفعل إلى الروشتة")
+            onShowMessage(bi(isEn, "الدواء مضاف بالفعل إلى الروشتة", "Medication already added"))
             return
         }
         selectedItems.add(
@@ -228,11 +230,15 @@ fun SmartPrescriptionDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "الروشتة الإلكترونية الذكية",
+                            text = bi(isEn, "الروشتة الإلكترونية الذكية", "Smart Electronic Prescription"),
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
-                            text = "المريض: ${slot.patientName} • ${TimeUtils.formatMinutesAr(slot.effectiveMinutes)}",
+                            text = bi(
+                                isEn,
+                                "المريض: ${slot.patientName} • ${TimeUtils.formatMinutesAr(slot.effectiveMinutes, false)}",
+                                "Patient: ${slot.patientName} • ${TimeUtils.formatMinutesAr(slot.effectiveMinutes, true)}",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -241,7 +247,7 @@ fun SmartPrescriptionDialog(
                         onClick = onDismiss,
                         modifier = Modifier.size(48.dp),
                     ) {
-                        Icon(Icons.Filled.Close, contentDescription = "إغلاق")
+                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
 
@@ -268,9 +274,9 @@ fun SmartPrescriptionDialog(
                         )
                         Text(
                             text = if (isLiveRemoteMeds) {
-                                "متصل بقاعدة الأدوية المصرية (${medications.size} دواء)"
+                                bi(isEn, "متصل بقاعدة الأدوية المصرية (${medications.size} دواء)", "Connected to Egyptian Meds API (${medications.size} drugs)")
                             } else {
-                                "قاعدة الأدوية المصرية المدمجة Offline (${medications.size} دواء مصنف)"
+                                bi(isEn, "قاعدة الأدوية المصرية المدمجة Offline (${medications.size} دواء مصنف)", "Built-in Egyptian Meds Database (${medications.size} drugs)")
                             },
                             style = MaterialTheme.typography.labelMedium,
                             color = if (isLiveRemoteMeds) SlotAvailableText else MaterialTheme.colorScheme.onPrimaryContainer,
@@ -282,8 +288,8 @@ fun SmartPrescriptionDialog(
                 OutlinedTextField(
                     value = diagnosis,
                     onValueChange = { diagnosis = it },
-                    label = { Text("التشخيص الطبي *") },
-                    placeholder = { Text("مثال: التهاب بالحلق / ارتجاع مريئي / تسوس ضرس...") },
+                    label = { Text(bi(isEn, "التشخيص الطبي *", "Medical Diagnosis *")) },
+                    placeholder = { Text(bi(isEn, "مثال: التهاب بالحلق / ارتجاع مريئي / تسوس ضرس...", "e.g., Acute pharyngitis / GERD...")) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -294,13 +300,13 @@ fun SmartPrescriptionDialog(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    label = { Text("بحث في قاعدة الأدوية المصرية") },
-                    placeholder = { Text("ابحث بالاسم التجاري أو المادة الفعالة أو التركيز...") },
+                    label = { Text(bi(isEn, "بحث في قاعدة الأدوية المصرية", "Search Egyptian Medications")) },
+                    placeholder = { Text(bi(isEn, "ابحث بالاسم التجاري أو المادة الفعالة أو التركيز...", "Search trade name, ingredient, or strength...")) },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Close, contentDescription = "مسح البحث")
+                                Icon(Icons.Filled.Close, contentDescription = bi(isEn, "مسح البحث", "Clear search"))
                             }
                         }
                     },
@@ -318,7 +324,7 @@ fun SmartPrescriptionDialog(
                     FilterChip(
                         selected = medFilterMode == 0,
                         onClick = { medFilterMode = 0 },
-                        label = { Text("تخصص العيادة") },
+                        label = { Text(bi(isEn, "تخصص العيادة", "Specialty")) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = TealPrimary,
                             selectedLabelColor = Color.White,
@@ -327,7 +333,7 @@ fun SmartPrescriptionDialog(
                     FilterChip(
                         selected = medFilterMode == 1,
                         onClick = { medFilterMode = 1 },
-                        label = { Text("المفضلة ⭐ (${favoriteMedIds.size})") },
+                        label = { Text(bi(isEn, "المفضلة ⭐ (${favoriteMedIds.size})", "Favorites ⭐ (${favoriteMedIds.size})")) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = TealPrimary,
                             selectedLabelColor = Color.White,
@@ -337,7 +343,7 @@ fun SmartPrescriptionDialog(
                     FilterChip(
                         selected = medFilterMode == 2,
                         onClick = { medFilterMode = 2 },
-                        label = { Text("كل التخصصات") },
+                        label = { Text(bi(isEn, "كل التخصصات", "All")) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = TealPrimary,
                             selectedLabelColor = Color.White,
@@ -351,7 +357,7 @@ fun SmartPrescriptionDialog(
                             FilterChip(
                                 selected = selectedSpecialtyChip == null,
                                 onClick = { selectedSpecialtyChip = null },
-                                label = { Text("الكل") },
+                                label = { Text(bi(isEn, "الكل", "All")) },
                             )
                         }
                         items(MedicationCatalog.specialtiesOrder) { spec ->
@@ -385,9 +391,9 @@ fun SmartPrescriptionDialog(
                         ) {
                             Text(
                                 text = if (medFilterMode == 1) {
-                                    "لا توجد أدوية في قائمة المفضلة لهذا الطبيب بعد"
+                                    bi(isEn, "لا توجد أدوية في قائمة المفضلة لهذا الطبيب بعد", "No favorite medications saved yet")
                                 } else {
-                                    "لا توجد أدوية مطابقة لبحثك"
+                                    bi(isEn, "لا توجد أدوية مطابقة لبحثك", "No medications match your search")
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -423,7 +429,7 @@ fun SmartPrescriptionDialog(
                                         ) {
                                             Icon(
                                                 imageVector = if (isFav) Icons.Filled.Star else Icons.Filled.StarOutline,
-                                                contentDescription = if (isFav) "إزالة من المفضلة" else "إضافة للمفضلة",
+                                                contentDescription = if (isFav) bi(isEn, "إزالة من المفضلة", "Remove favorite") else bi(isEn, "إضافة للمفضلة", "Add favorite"),
                                                 tint = if (isFav) Color(0xFFEAB308) else MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
@@ -465,7 +471,7 @@ fun SmartPrescriptionDialog(
                                                 modifier = Modifier.size(16.dp),
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text(if (isAdded) "مضاف" else "إضافة")
+                                            Text(if (isAdded) bi(isEn, "مضاف", "Added") else bi(isEn, "إضافة", "Add"))
                                         }
                                     }
                                 }
@@ -481,14 +487,14 @@ fun SmartPrescriptionDialog(
                 ) {
                     Icon(Icons.Filled.LocalPharmacy, contentDescription = null, tint = TealPrimary)
                     Text(
-                        text = "الأدوية المختارة بالروشتة (${selectedItems.size})",
+                        text = bi(isEn, "الأدوية المختارة بالروشتة (${selectedItems.size})", "Selected Prescription Items (${selectedItems.size})"),
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
 
                 if (selectedItems.isEmpty()) {
                     Text(
-                        text = "اضغط (إضافة) بجانب أي دواء أعلاه أو أضف دواءً مخصصاً أدناه.",
+                        text = bi(isEn, "اضغط (إضافة) بجانب أي دواء أعلاه أو أضف دواءً مخصصاً أدناه.", "Tap Add next to a medication above or enter a custom drug below."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -521,7 +527,7 @@ fun SmartPrescriptionDialog(
                                         ) {
                                             Icon(
                                                 Icons.Filled.Delete,
-                                                contentDescription = "حذف الدواء",
+                                                contentDescription = bi(isEn, "حذف الدواء", "Remove drug"),
                                                 tint = SlotBookedBorder,
                                             )
                                         }
@@ -531,7 +537,7 @@ fun SmartPrescriptionDialog(
                                         onValueChange = { updated ->
                                             selectedItems[index] = rxItem.copy(dosage = updated)
                                         },
-                                        label = { Text("الجرعة وطريقة الاستخدام") },
+                                        label = { Text(bi(isEn, "الجرعة وطريقة الاستخدام", "Dosage & Instructions")) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
                                     )
@@ -562,7 +568,7 @@ fun SmartPrescriptionDialog(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = "إضافة دواء خارج القائمة (اختياري):",
+                            text = bi(isEn, "إضافة دواء خارج القائمة (اختياري):", "Add Custom Medication (optional):"),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(
@@ -573,14 +579,14 @@ fun SmartPrescriptionDialog(
                             OutlinedTextField(
                                 value = customMedName,
                                 onValueChange = { customMedName = it },
-                                label = { Text("اسم الدواء") },
+                                label = { Text(bi(isEn, "اسم الدواء", "Medication Name")) },
                                 singleLine = true,
                                 modifier = Modifier.weight(1.2f),
                             )
                             OutlinedTextField(
                                 value = customMedDosage,
                                 onValueChange = { customMedDosage = it },
-                                label = { Text("الجرعة") },
+                                label = { Text(bi(isEn, "الجرعة", "Dosage")) },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f),
                             )
@@ -592,7 +598,7 @@ fun SmartPrescriptionDialog(
                                                 uid = "custom_${System.currentTimeMillis()}",
                                                 tradeName = customMedName.trim(),
                                                 strength = "",
-                                                dosage = customMedDosage.trim().ifBlank { "حسب إرشادات الطبيب" },
+                                                dosage = customMedDosage.trim().ifBlank { bi(isEn, "حسب إرشادات الطبيب", "As directed") },
                                             )
                                         )
                                         customMedName = ""
@@ -600,7 +606,7 @@ fun SmartPrescriptionDialog(
                                 },
                                 modifier = Modifier.size(48.dp),
                             ) {
-                                Icon(Icons.Filled.Add, contentDescription = "إضافة دواء مخصص", tint = TealPrimary)
+                                Icon(Icons.Filled.Add, contentDescription = bi(isEn, "إضافة دواء مخصص", "Add custom drug"), tint = TealPrimary)
                             }
                         }
                     }
@@ -609,7 +615,7 @@ fun SmartPrescriptionDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("تعليمات وملاحظات للمريض (اختياري)") },
+                    label = { Text(bi(isEn, "تعليمات وملاحظات للمريض (اختياري)", "Notes for Patient (optional)")) },
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -625,9 +631,9 @@ fun SmartPrescriptionDialog(
                                 tempCameraFile = file
                                 cameraLauncher.launch(uri)
                             } catch (_: ActivityNotFoundException) {
-                                onShowMessage("لا توجد كاميرا متاحة، اختر صورة من المعرض")
+                                onShowMessage(bi(isEn, "لا توجد كاميرا متاحة، اختر صورة من المعرض", "No camera available; pick from gallery"))
                             } catch (_: Exception) {
-                                onShowMessage("تعذر فتح الكاميرا")
+                                onShowMessage(bi(isEn, "تعذر فتح الكاميرا", "Could not open camera"))
                             }
                         },
                         modifier = Modifier
@@ -636,7 +642,7 @@ fun SmartPrescriptionDialog(
                     ) {
                         Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("تصوير روشتة ورقية")
+                        Text(bi(isEn, "تصوير روشتة ورقية", "Capture Paper Rx"))
                     }
                     OutlinedButton(
                         onClick = {
@@ -650,14 +656,14 @@ fun SmartPrescriptionDialog(
                     ) {
                         Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("إرفاق صورة")
+                        Text(bi(isEn, "إرفاق صورة", "Attach Image"))
                     }
                 }
 
                 if (attachmentPath.isNotEmpty()) {
                     AsyncImage(
                         model = File(attachmentPath),
-                        contentDescription = "صورة الروشتة المرفقة",
+                        contentDescription = bi(isEn, "صورة الروشتة المرفقة", "Attached prescription image"),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(120.dp)
@@ -679,8 +685,8 @@ fun SmartPrescriptionDialog(
                             doctorId = doctor.id,
                             doctorName = doctor.doctorName,
                             specialty = doctor.specialty,
-                            visitDateLabel = TimeUtils.formatTodayLabelAr(),
-                            diagnosis = diagnosis.ifBlank { "كشف طبي عام" },
+                            visitDateLabel = TimeUtils.formatTodayLabelAr(isEn),
+                            diagnosis = diagnosis.ifBlank { bi(isEn, "كشف طبي عام", "General Consultation") },
                             medications = buildMedicationsText(),
                             notes = notes,
                             attachmentPath = attachmentPath,
@@ -701,7 +707,7 @@ fun SmartPrescriptionDialog(
                 ) {
                     Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("طباعة الروشتة (Print / PDF)")
+                    Text(bi(isEn, "طباعة الروشتة (Print / PDF)", "Print Prescription (PDF)"))
                 }
 
                 // Save and Send to Patient EMR Button
@@ -722,7 +728,7 @@ fun SmartPrescriptionDialog(
                 ) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("إرسال لملف المريض وإنهاء الكشف")
+                    Text(bi(isEn, "إرسال لملف المريض وإنهاء الكشف", "Send to Patient File & Complete"))
                 }
             }
         }
