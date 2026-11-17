@@ -23,6 +23,8 @@ object BookingSource {
 object MedicalRecordType {
     const val PRESCRIPTION = "PRESCRIPTION"
     const val PATIENT_UPLOAD = "PATIENT_UPLOAD"
+    const val EXTERNAL_VISIT = "EXTERNAL_VISIT"
+    const val LAB_RESULT = "LAB_RESULT"
 }
 
 @Entity(tableName = "patient_accounts")
@@ -98,6 +100,8 @@ data class MedicalRecordEntity(
     val medications: String,
     val notes: String,
     val attachmentPath: String = "",
+    val attachmentMimeType: String = "",
+    val attachmentName: String = "",
     val recordType: String = MedicalRecordType.PRESCRIPTION,
     val createdAtMillis: Long = System.currentTimeMillis(),
 )
@@ -139,4 +143,15 @@ data class ActivationOtpCodeEntity(
     val usedByPhone: String = "",
     val usedAtMillis: Long = 0L,
     val generatedBy: String = "ADMIN",
+)
+
+@Entity(tableName = "medical_labs")
+data class MedicalLabEntity(
+    @PrimaryKey val id: String,
+    val labName: String,
+    val phone: String = "",
+    val locationLabel: String = "",
+    val username: String,
+    val password: String,
+    val createdAtMillis: Long = System.currentTimeMillis(),
 )

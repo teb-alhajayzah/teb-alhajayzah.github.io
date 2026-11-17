@@ -18,8 +18,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DoctorFavoriteMedEntity::class,
         BlockedPhoneEntity::class,
         ActivationOtpCodeEntity::class,
+        MedicalLabEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -87,16 +88,41 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `medical_labs` (
+                        `id` TEXT NOT NULL,
+                        `labName` TEXT NOT NULL,
+                        `phone` TEXT NOT NULL DEFAULT '',
+                        `locationLabel` TEXT NOT NULL DEFAULT '',
+                        `username` TEXT NOT NULL,
+                        `password` TEXT NOT NULL,
+                        `createdAtMillis` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `attachmentMimeType` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `attachmentName` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    TebDatabase::class.java,
-                    "teb_al_hajayzah.db",
-                )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
-                    .build()
-                    .also { INSTANCE = it }
+                INSTANCE ?: run {
+                    val appCtx = context.applicationContext
+                    // حذف قاعدة البيانات التجريبية القديمة تلقائياً لضمان عدم بقاء أي بيانات وهمية على الجهاز أو المحاكي
+                    appCtx.deleteDatabase("teb_al_hajayzah.db")
+                    Room.databaseBuilder(
+                        appCtx,
+                        TebDatabase::class.java,
+                        "teb_al_hajayzah_prod_v100.db",
+                    )
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                        .build()
+                }.also { INSTANCE = it }
             }
         }
     }

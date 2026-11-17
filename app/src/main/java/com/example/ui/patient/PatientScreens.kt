@@ -462,14 +462,48 @@ fun PatientHomeScreen(
                 )
             }
 
-            items(state.doctors.take(4), key = { it.id }) { doctor ->
-                val doctorSlots = state.slotsForDoctor(doctor.id)
-                DoctorDirectoryCard(
-                    doctor = doctor,
-                    availableCount = doctorSlots.count { it.status == SlotStatus.AVAILABLE },
-                    bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
-                    onBookClick = { onOpenDoctorBooking(doctor.id) },
-                )
+            if (state.doctors.isEmpty()) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(18.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(22.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.LocalHospital,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(34.dp),
+                            )
+                            Text(
+                                text = "لا توجد عيادات أو أقسام مضافة حالياً",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = "يمكن للإدارة إضافة العيادات والأطباء من لوحة إدارة المنصة لتظهر هنا فوراً.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(state.doctors.take(4), key = { it.id }) { doctor ->
+                    val doctorSlots = state.slotsForDoctor(doctor.id)
+                    DoctorDirectoryCard(
+                        doctor = doctor,
+                        availableCount = doctorSlots.count { it.status == SlotStatus.AVAILABLE },
+                        bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
+                        onBookClick = { onOpenDoctorBooking(doctor.id) },
+                    )
+                }
             }
 
             // بطاقة التحميل المباشر وتحديث تطبيق طب الحجايزة (الإصدار v1.0.0) في أسفل الصفحة الرئيسية
@@ -1162,8 +1196,10 @@ fun DoctorBookingScreen(
     slots: List<AppointmentSlotEntity>,
     familyMembers: List<FamilyMemberEntity>,
     activeMember: FamilyMemberEntity?,
+    isAccountVerified: Boolean = false,
     isBookingSubmitting: Boolean = false,
     onSelectFamilyMember: (String) -> Unit,
+    onRequireAccountForBooking: () -> Unit = {},
     onBookSlot: (slotId: String, member: FamilyMemberEntity) -> Unit,
     onCancelSlot: (slotId: String) -> Unit,
     onBack: () -> Unit,
@@ -1294,18 +1330,42 @@ fun DoctorBookingScreen(
                         text = "احجز الموعد لصالح:",
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(familyMembers, key = { it.id }) { member ->
-                            val selected = member.id == activeMember?.id
-                            FilterChip(
-                                selected = selected,
-                                onClick = { onSelectFamilyMember(member.id) },
-                                label = { Text("${member.fullName} (${member.relation.substringBefore(" ")})") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                ),
+                    if (familyMembers.isEmpty() || !isAccountVerified) {
+                        Surface(
+                            color = DelayWarningBg,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, DelayWarningBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onRequireAccountForBooking),
+                        ) {
+                            Text(
+                                text = if (familyMembers.isEmpty()) {
+                                    "تصفح المواعيد مجاناً — لإتمام الحجز اضغط هنا لتسجيل الدخول وتفعيل الحساب بكود (OTP)."
+                                } else {
+                                    "حسابك غير مفعّل بعد — اضغط هنا لإدخال كود التفعيل (OTP) وإتمام الحجز."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DelayWarningText,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(12.dp),
                             )
+                        }
+                    }
+                    if (familyMembers.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(familyMembers, key = { it.id }) { member ->
+                                val selected = member.id == activeMember?.id
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { onSelectFamilyMember(member.id) },
+                                    label = { Text("${member.fullName} (${member.relation.substringBefore(" ")})") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = Color.White,
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -1379,7 +1439,11 @@ fun DoctorBookingScreen(
                                 .widthIn(min = 104.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable(enabled = slot.status == SlotStatus.AVAILABLE) {
-                                    slotPendingConfirm = slot
+                                    if (!isAccountVerified || activeMember == null) {
+                                        onRequireAccountForBooking()
+                                    } else {
+                                        slotPendingConfirm = slot
+                                    }
                                 }
                                 .testTag("slot_tile_${slot.id}"),
                         ) {

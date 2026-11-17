@@ -17,6 +17,9 @@ interface TebDao {
     @Query("SELECT * FROM patient_accounts")
     fun observeAllAccounts(): Flow<List<PatientAccountEntity>>
 
+    @Query("SELECT * FROM patient_accounts ORDER BY fullName ASC")
+    suspend fun getAllAccountsOnce(): List<PatientAccountEntity>
+
     @Query("SELECT * FROM patient_accounts WHERE nationalId = :nationalId LIMIT 1")
     suspend fun findAccountByNationalId(nationalId: String): PatientAccountEntity?
 
@@ -31,6 +34,9 @@ interface TebDao {
 
     @Query("SELECT * FROM family_members WHERE accountId = :accountId ORDER BY id ASC")
     fun observeFamilyMembers(accountId: String): Flow<List<FamilyMemberEntity>>
+
+    @Query("SELECT * FROM family_members WHERE accountId = :accountId ORDER BY id ASC")
+    suspend fun getFamilyMembersOnce(accountId: String): List<FamilyMemberEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFamilyMember(member: FamilyMemberEntity)
@@ -197,4 +203,22 @@ interface TebDao {
         markAccountPhoneVerified(accountId)
         return true
     }
+
+    @Query("SELECT * FROM medical_labs ORDER BY labName ASC")
+    fun observeLabs(): Flow<List<MedicalLabEntity>>
+
+    @Query("SELECT * FROM medical_labs WHERE id = :labId LIMIT 1")
+    suspend fun getLabById(labId: String): MedicalLabEntity?
+
+    @Query("SELECT * FROM medical_labs WHERE username = :username LIMIT 1")
+    suspend fun findLabByUsername(username: String): MedicalLabEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLab(lab: MedicalLabEntity)
+
+    @Update
+    suspend fun updateLab(lab: MedicalLabEntity)
+
+    @Query("DELETE FROM medical_labs WHERE id = :labId")
+    suspend fun deleteLabById(labId: String)
 }

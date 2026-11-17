@@ -70,6 +70,7 @@ import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
+import com.example.ui.components.AiMedicalSummaryCard
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.patient.MedicalRecordTimelineCard
@@ -182,7 +183,7 @@ fun DoctorLoginGateScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "تُنشأ حسابات الأطباء وتُدار من لوحة الإدارة العليا ($adminOwnerName). مثال تجريبي: 01001001001 / 1234",
+                        text = "تُنشأ حسابات الأطباء والعيادات وتُدار مباشرة من لوحة الإدارة العليا ($adminOwnerName).",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(10.dp),
@@ -815,24 +816,32 @@ private fun PatientEmrViewerDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                if (records.isEmpty()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "لا توجد زيارات سابقة أو تحاليل مرفوعة لهذا المريض حتى الآن.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(24.dp),
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.height(470.dp),
+                ) {
+                    item(key = "emr_ai_summary") {
+                        AiMedicalSummaryCard(
+                            patientName = patientName,
+                            records = records,
                         )
                     }
-                } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.height(440.dp),
-                    ) {
+                    if (records.isEmpty()) {
+                        item(key = "emr_empty") {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = "لا توجد زيارات سابقة أو تحاليل مرفوعة لهذا المريض حتى الآن.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(24.dp),
+                                )
+                            }
+                        }
+                    } else {
                         items(records, key = { it.id }) { rec ->
                             MedicalRecordTimelineCard(
                                 record = rec,

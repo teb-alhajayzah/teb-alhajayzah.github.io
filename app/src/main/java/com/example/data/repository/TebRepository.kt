@@ -17,6 +17,7 @@ import com.example.data.local.ClinicType
 import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.DoctorFavoriteMedEntity
 import com.example.data.local.FamilyMemberEntity
+import com.example.data.local.MedicalLabEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
 import com.example.data.local.PatientAccountEntity
@@ -35,6 +36,11 @@ import java.util.UUID
 
 private val Context.tebDataStore by preferencesDataStore(name = "teb_prefs")
 
+data class LabPatientSearchResult(
+    val account: PatientAccountEntity,
+    val familyMembers: List<FamilyMemberEntity>,
+)
+
 class TebRepository(
     private val dao: TebDao,
     private val appContext: Context,
@@ -46,6 +52,7 @@ class TebRepository(
     private val activeMemberKey = stringPreferencesKey("active_member_id")
     private val activeDoctorPortalKey = stringPreferencesKey("active_doctor_portal_id")
     private val loggedInDoctorIdKey = stringPreferencesKey("logged_in_doctor_id")
+    private val loggedInLabIdKey = stringPreferencesKey("logged_in_lab_id")
     private val adminUsernameKey = stringPreferencesKey("admin_username")
     private val adminPasswordKey = stringPreferencesKey("admin_password")
     private val adminPinKey = stringPreferencesKey("admin_pin")
@@ -58,21 +65,21 @@ class TebRepository(
     private val cfgAnnouncementKey = stringPreferencesKey("cfg_home_announcement")
     private val cfgApkUrlKey = stringPreferencesKey("cfg_apk_url")
     private val cfgMedsApiKey = stringPreferencesKey("cfg_meds_api_url")
-    private val cfgSmsGateServerUrlKey = stringPreferencesKey("cfg_smsgate_server_url")
-    private val cfgSmsGateUsernameKey = stringPreferencesKey("cfg_smsgate_username")
-    private val cfgSmsGatePasswordKey = stringPreferencesKey("cfg_smsgate_password")
 
     val activeAccountIdFlow: Flow<String> = appContext.tebDataStore.data
-        .map { prefs -> prefs[activeAccountKey] ?: DEFAULT_ACCOUNT_ID }
+        .map { prefs -> prefs[activeAccountKey].orEmpty() }
 
     val activeMemberIdFlow: Flow<String> = appContext.tebDataStore.data
-        .map { prefs -> prefs[activeMemberKey] ?: DEFAULT_MEMBER_SELF_ID }
+        .map { prefs -> prefs[activeMemberKey].orEmpty() }
 
     val activeDoctorPortalIdFlow: Flow<String> = appContext.tebDataStore.data
-        .map { prefs -> prefs[activeDoctorPortalKey] ?: "doc_batna_1" }
+        .map { prefs -> prefs[activeDoctorPortalKey].orEmpty() }
 
     val loggedInDoctorIdFlow: Flow<String?> = appContext.tebDataStore.data
         .map { prefs -> prefs[loggedInDoctorIdKey]?.takeIf { it.isNotBlank() } }
+
+    val loggedInLabIdFlow: Flow<String?> = appContext.tebDataStore.data
+        .map { prefs -> prefs[loggedInLabIdKey]?.takeIf { it.isNotBlank() } }
 
     val adminUsernameFlow: Flow<String> = appContext.tebDataStore.data
         .map { prefs -> prefs[adminUsernameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminUsername }
@@ -93,9 +100,6 @@ class TebRepository(
                 adminUsername = prefs[adminUsernameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminUsername,
                 adminPassword = prefs[adminPasswordKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPassword,
                 adminPin = prefs[adminPinKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPin,
-                smsGateServerUrl = prefs[cfgSmsGateServerUrlKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.smsGateServerUrl,
-                smsGateUsername = prefs[cfgSmsGateUsernameKey] ?: AppConfig.defaultBrand.smsGateUsername,
-                smsGatePassword = prefs[cfgSmsGatePasswordKey] ?: AppConfig.defaultBrand.smsGatePassword,
             )
         }
 
@@ -105,6 +109,7 @@ class TebRepository(
         }
 
     val doctorsFlow: Flow<List<ClinicDoctorEntity>> = dao.observeDoctors()
+    val labsFlow: Flow<List<MedicalLabEntity>> = dao.observeLabs()
     val allSlotsFlow: Flow<List<AppointmentSlotEntity>> = dao.observeAllSlots()
     val allAccountsFlow: Flow<List<PatientAccountEntity>> = dao.observeAllAccounts()
     val allMedicalRecordsFlow: Flow<List<MedicalRecordEntity>> = dao.observeAllMedicalRecords()
@@ -202,19 +207,6 @@ class TebRepository(
         }
     }
 
-    suspend fun updateSmsGateSettings(
-        serverUrl: String,
-        username: String,
-        password: String,
-    ) {
-        val cleanUrl = serverUrl.trim().ifEmpty { AppConfig.defaultBrand.smsGateServerUrl }
-        appContext.tebDataStore.edit { prefs ->
-            prefs[cfgSmsGateServerUrlKey] = cleanUrl
-            prefs[cfgSmsGateUsernameKey] = username.trim()
-            prefs[cfgSmsGatePasswordKey] = password.trim()
-        }
-    }
-
     suspend fun resetFullPlatformConfig() {
         appContext.tebDataStore.edit { prefs ->
             prefs.remove(cfgPlatformNameKey)
@@ -227,9 +219,6 @@ class TebRepository(
             prefs.remove(adminPinKey)
             prefs.remove(adminUsernameKey)
             prefs.remove(adminPasswordKey)
-            prefs.remove(cfgSmsGateServerUrlKey)
-            prefs.remove(cfgSmsGateUsernameKey)
-            prefs.remove(cfgSmsGatePasswordKey)
         }
     }
 
@@ -343,6 +332,114 @@ class TebRepository(
     suspend fun logoutDoctor() {
         appContext.tebDataStore.edit { prefs ->
             prefs.remove(loggedInDoctorIdKey)
+        }
+    }
+
+    suspend fun addLabByAdmin(
+        labName: String,
+        phone: String,
+        locationLabel: String,
+        username: String,
+        password: String,
+    ): Result<MedicalLabEntity> {
+        val cleanLab = labName.trim()
+        val cleanUser = username.trim()
+        val cleanPass = password.trim()
+        if (cleanLab.isEmpty() || cleanUser.isEmpty() || cleanPass.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال اسم المعمل واسم المستخدم وكلمة المرور"))
+        }
+        if (dao.findLabByUsername(cleanUser) != null) {
+            return Result.failure(IllegalArgumentException("اسم المستخدم مسجل بالفعل لمعمل آخر"))
+        }
+        val lab = MedicalLabEntity(
+            id = "lab_${UUID.randomUUID()}",
+            labName = cleanLab,
+            phone = phone.trim(),
+            locationLabel = locationLabel.trim().ifEmpty { "قرية الحجايزة" },
+            username = cleanUser,
+            password = cleanPass,
+            createdAtMillis = System.currentTimeMillis(),
+        )
+        dao.insertLab(lab)
+        return Result.success(lab)
+    }
+
+    suspend fun updateLabByAdmin(
+        labId: String,
+        labName: String,
+        phone: String,
+        locationLabel: String,
+        username: String,
+        password: String,
+    ): Result<MedicalLabEntity> {
+        val existing = dao.getLabById(labId)
+            ?: return Result.failure(IllegalStateException("المعمل غير موجود"))
+        val cleanLab = labName.trim()
+        val cleanUser = username.trim()
+        val cleanPass = password.trim().ifEmpty { existing.password }
+        if (cleanLab.isEmpty() || cleanUser.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال اسم المعمل واسم المستخدم"))
+        }
+        val conflict = dao.findLabByUsername(cleanUser)
+        if (conflict != null && conflict.id != labId) {
+            return Result.failure(IllegalArgumentException("اسم المستخدم مسجل بالفعل لمعمل آخر"))
+        }
+        val updated = existing.copy(
+            labName = cleanLab,
+            phone = phone.trim(),
+            locationLabel = locationLabel.trim().ifEmpty { existing.locationLabel },
+            username = cleanUser,
+            password = cleanPass,
+        )
+        dao.updateLab(updated)
+        return Result.success(updated)
+    }
+
+    suspend fun deleteLabByAdmin(labId: String) {
+        dao.deleteLabById(labId)
+        appContext.tebDataStore.edit { prefs ->
+            if (prefs[loggedInLabIdKey] == labId) {
+                prefs.remove(loggedInLabIdKey)
+            }
+        }
+    }
+
+    suspend fun loginLab(username: String, password: String): Result<MedicalLabEntity> {
+        val cleanUser = username.trim()
+        val cleanPass = password.trim()
+        if (cleanUser.isEmpty() || cleanPass.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال اسم المستخدم وكلمة المرور للمعمل"))
+        }
+        val lab = dao.findLabByUsername(cleanUser)
+            ?: return Result.failure(IllegalArgumentException("لم يتم العثور على معمل تحاليل بهذا الاسم"))
+        if (lab.password != cleanPass) {
+            return Result.failure(IllegalArgumentException("كلمة مرور المعمل غير صحيحة"))
+        }
+        appContext.tebDataStore.edit { prefs ->
+            prefs[loggedInLabIdKey] = lab.id
+        }
+        return Result.success(lab)
+    }
+
+    suspend fun logoutLab() {
+        appContext.tebDataStore.edit { prefs ->
+            prefs.remove(loggedInLabIdKey)
+        }
+    }
+
+    suspend fun searchPatientsByPhoneForLab(rawPhoneQuery: String): List<LabPatientSearchResult> {
+        val qDigits = normalizePhoneDigits(rawPhoneQuery)
+        val qText = rawPhoneQuery.trim()
+        if (qDigits.length < 4 && qText.length < 4) return emptyList()
+        val accounts = dao.getAllAccountsOnce()
+        val matched = accounts.filter { acc ->
+            val accDigits = normalizePhoneDigits(acc.phone)
+            (qDigits.isNotEmpty() && (accDigits.contains(qDigits) || qDigits.contains(accDigits))) ||
+                acc.phone.contains(qText, ignoreCase = true)
+        }
+        return matched.map { acc ->
+            val members = dao.getFamilyMembersOnce(acc.id)
+            LabPatientSearchResult(account = acc, familyMembers = members)
         }
     }
 
@@ -489,342 +586,53 @@ class TebRepository(
         return EgyptianMedicationService.fetchMedications(apiUrl)
     }
 
+    /**
+     * تهيئة نظيفة لبيئة الإنتاج:
+     * تبدأ بدون أي بيانات وهمية أو حسابات مسبقة، وتجهز فقط دفعة أكواد تفعيل نظامية عند الحاجة.
+     */
     suspend fun ensureSeeded() {
         seedMutex.withLock {
+            val existingAccounts = dao.getAllAccountsOnce()
+            val prefs = appContext.tebDataStore.data.first()
+            val savedAccountId = prefs[activeAccountKey].orEmpty()
+            val savedDoctorId = prefs[loggedInDoctorIdKey].orEmpty()
+            val savedLabId = prefs[loggedInLabIdKey].orEmpty()
+            val accountMissing = savedAccountId.isNotEmpty() && existingAccounts.none { it.id == savedAccountId }
+            val doctorMissing = savedDoctorId.isNotEmpty() && dao.getDoctorById(savedDoctorId) == null
+            val labMissing = savedLabId.isNotEmpty() && dao.getLabById(savedLabId) == null
+            if (accountMissing || doctorMissing || labMissing) {
+                appContext.tebDataStore.edit { editPrefs ->
+                    if (accountMissing) {
+                        editPrefs.remove(activeAccountKey)
+                        editPrefs.remove(activeMemberKey)
+                    }
+                    if (doctorMissing) editPrefs.remove(loggedInDoctorIdKey)
+                    if (labMissing) editPrefs.remove(loggedInLabIdKey)
+                }
+            }
             if (dao.getAllActivationCodesOnce().isEmpty()) {
                 generateActivationCodeBatch(5, "SYSTEM")
             }
-            if (dao.countDoctors() > 0) return
-
-            val defaultAccount = PatientAccountEntity(
-                id = DEFAULT_ACCOUNT_ID,
-                fullName = "أحمد محمد السيد",
-                phone = "01012345678",
-                nationalId = "29005141200451",
-                password = "1234",
-            )
-            dao.insertAccount(defaultAccount)
-
-            val familyMembers = listOf(
-                FamilyMemberEntity(
-                    id = DEFAULT_MEMBER_SELF_ID,
-                    accountId = DEFAULT_ACCOUNT_ID,
-                    fullName = "أحمد محمد السيد",
-                    relation = "نفسي (صاحب الحساب)",
-                    age = 36,
-                    phone = "01012345678",
-                ),
-                FamilyMemberEntity(
-                    id = "mem_mother",
-                    accountId = DEFAULT_ACCOUNT_ID,
-                    fullName = "سعاد حسن عبد الله",
-                    relation = "الأم",
-                    age = 62,
-                    phone = "01012345678",
-                ),
-                FamilyMemberEntity(
-                    id = "mem_wife",
-                    accountId = DEFAULT_ACCOUNT_ID,
-                    fullName = "فاطمة علي محمود",
-                    relation = "الزوجة",
-                    age = 31,
-                    phone = "01098765432",
-                ),
-                FamilyMemberEntity(
-                    id = "mem_son",
-                    accountId = DEFAULT_ACCOUNT_ID,
-                    fullName = "كريم أحمد محمد",
-                    relation = "الابن",
-                    age = 9,
-                    phone = "01012345678",
-                ),
-            )
-            dao.insertFamilyMembers(familyMembers)
-
-            val hospitalName = AppConfig.defaultBrand.hospitalNameAr
-            val defaultMapsUrl = "https://maps.google.com/?q=الحجايزة+السنبلاوين+الدقهلية"
-            val doctors = listOf(
-                ClinicDoctorEntity(
-                    id = "doc_batna_1",
-                    doctorName = "د. محمد عبد الرحمن",
-                    specialty = "باطنة وجهاز هضمي",
-                    clinicName = "عيادة الشفاء التخصصية",
-                    clinicType = ClinicType.PRIVATE,
-                    locationLabel = "شارع المستشفى، الحجايزة",
-                    feeEgp = 150,
-                    workStartMinutes = 17 * 60,
-                    workEndMinutes = 21 * 60,
-                    slotDurationMinutes = 20,
-                    rating = 4.9f,
-                    experienceYears = 15,
-                    bio = "أخصائي أمراض الباطنة والجهاز الهضمي والكبد — خبرة 15 عاماً.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001001",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_kids_1",
-                    doctorName = "د. سارة محمود النجار",
-                    specialty = "أطفال وحديثي الولادة",
-                    clinicName = "عيادة براعم الحجايزة",
-                    clinicType = ClinicType.PRIVATE,
-                    locationLabel = "بجوار المسجد الكبير، الحجايزة",
-                    feeEgp = 130,
-                    workStartMinutes = 16 * 60,
-                    workEndMinutes = 20 * 60,
-                    slotDurationMinutes = 20,
-                    rating = 4.9f,
-                    experienceYears = 11,
-                    bio = "أخصائي طب الأطفال وحديثي الولادة ومتابعة النمو والتغذية.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001002",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_ortho_1",
-                    doctorName = "د. طارق حسن الشافعي",
-                    specialty = "عظام ومفاصل",
-                    clinicName = "$hospitalName - قسم العظام",
-                    clinicType = ClinicType.HOSPITAL,
-                    locationLabel = "$hospitalName - الدور الأول",
-                    feeEgp = 100,
-                    workStartMinutes = 17 * 60,
-                    workEndMinutes = 21 * 60,
-                    slotDurationMinutes = 20,
-                    rating = 4.8f,
-                    experienceYears = 14,
-                    bio = "استشاري جراحة العظام والكسور والمفاصل وإصابات الملاعب.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001003",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_obgyn_1",
-                    doctorName = "د. نادية إبراهيم زكي",
-                    specialty = "نساء وتوليد",
-                    clinicName = "$hospitalName - قسم النساء",
-                    clinicType = ClinicType.HOSPITAL,
-                    locationLabel = "$hospitalName - الدور الثاني",
-                    feeEgp = 120,
-                    workStartMinutes = 18 * 60,
-                    workEndMinutes = 21 * 60 + 20,
-                    slotDurationMinutes = 20,
-                    rating = 4.9f,
-                    experienceYears = 16,
-                    bio = "أخصائي أمراض النساء والتوليد ومتابعة الحمل بالسونار.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001004",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_dental_1",
-                    doctorName = "د. كريم طارق المنصوري",
-                    specialty = "أسنان",
-                    clinicName = "عيادة الابتسامة للأسنان",
-                    clinicType = ClinicType.PRIVATE,
-                    locationLabel = "أمام الوحدة المحلية، الحجايزة",
-                    feeEgp = 150,
-                    workStartMinutes = 16 * 60,
-                    workEndMinutes = 20 * 60,
-                    slotDurationMinutes = 20,
-                    rating = 4.9f,
-                    experienceYears = 10,
-                    bio = "طب وجراحة الفم والأسنان وعلاج الجذور والتركيبات.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001005",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_cardio_1",
-                    doctorName = "د. خالد مصطفى العطار",
-                    specialty = "قلب وأوعية دموية",
-                    clinicName = "$hospitalName - وحدة القلب",
-                    clinicType = ClinicType.HOSPITAL,
-                    locationLabel = "$hospitalName - الدور الأرضي",
-                    feeEgp = 160,
-                    workStartMinutes = 17 * 60,
-                    workEndMinutes = 20 * 60,
-                    slotDurationMinutes = 20,
-                    rating = 4.8f,
-                    experienceYears = 18,
-                    bio = "استشاري أمراض القلب والأوعية الدموية ورسم القلب والإيكو.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001006",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_eye_1",
-                    doctorName = "د. هالة فؤاد سلامة",
-                    specialty = "رمد وجراحة عيون",
-                    clinicName = "مركز النور للعيون",
-                    clinicType = ClinicType.PRIVATE,
-                    locationLabel = "ميدان الحجايزة الرئيسي",
-                    feeEgp = 140,
-                    workStartMinutes = 17 * 60 + 20,
-                    workEndMinutes = 20 * 60 + 40,
-                    slotDurationMinutes = 20,
-                    rating = 4.7f,
-                    experienceYears = 10,
-                    bio = "أخصائي طب وجراحة العيون وفحص قاع العين والنظارات.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001007",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_ent_1",
-                    doctorName = "د. عمرو يحيى البنا",
-                    specialty = "أنف وأذن وحنجرة",
-                    clinicName = "$hospitalName - عيادة 4",
-                    clinicType = ClinicType.HOSPITAL,
-                    locationLabel = "$hospitalName - الدور الأول",
-                    feeEgp = 100,
-                    workStartMinutes = 16 * 60,
-                    workEndMinutes = 19 * 60 + 20,
-                    slotDurationMinutes = 20,
-                    rating = 4.7f,
-                    experienceYears = 9,
-                    bio = "أخصائي جراحة الأنف والأذن والحنجرة وعلاج الجيوب الأنفية.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001008",
-                    password = "1234",
-                ),
-                ClinicDoctorEntity(
-                    id = "doc_derm_1",
-                    doctorName = "د. ريم عادل الدسوقي",
-                    specialty = "جلدية وتجميل",
-                    clinicName = "عيادة الندى للجلدية",
-                    clinicType = ClinicType.PRIVATE,
-                    locationLabel = "طريق المركز، الحجايزة",
-                    feeEgp = 120,
-                    workStartMinutes = 17 * 60,
-                    workEndMinutes = 20 * 60 + 20,
-                    slotDurationMinutes = 20,
-                    rating = 4.8f,
-                    experienceYears = 8,
-                    bio = "أخصائي الأمراض الجلدية والتناسلية والعناية بالبشرة والشعر.",
-                    mapsUrl = defaultMapsUrl,
-                    username = "01001001009",
-                    password = "1234",
-                ),
-            )
-            dao.insertDoctors(doctors)
-
-            // Seed default doctor favorites
-            listOf(
-                DoctorFavoriteMedEntity("doc_batna_1", "med_controloc"),
-                DoctorFavoriteMedEntity("doc_batna_1", "med_gaviscon"),
-                DoctorFavoriteMedEntity("doc_batna_1", "med_motilium"),
-                DoctorFavoriteMedEntity("doc_kids_1", "med_augmentin_ped"),
-                DoctorFavoriteMedEntity("doc_kids_1", "med_brufen_ped"),
-                DoctorFavoriteMedEntity("doc_dental_1", "med_augmentin_1g"),
-                DoctorFavoriteMedEntity("doc_dental_1", "med_catafast"),
-            ).forEach { dao.insertFavoriteMed(it) }
-
-            val allSlots = mutableListOf<AppointmentSlotEntity>()
-            doctors.forEach { doc ->
-                allSlots += buildSlotsForDoctor(
-                    doctor = doc,
-                    preBookedIndices = when (doc.id) {
-                        "doc_batna_1" -> mapOf(
-                            0 to Triple("محمود إبراهيم علي", "01022334455", SlotStatus.COMPLETED),
-                            1 to Triple("أحمد محمد السيد", "01012345678", SlotStatus.BOOKED),
-                            4 to Triple("سيد عبد الفتاح", "01144556677", SlotStatus.BOOKED),
-                        )
-                        "doc_kids_1" -> mapOf(
-                            2 to Triple("كريم أحمد محمد", "01012345678", SlotStatus.BOOKED),
-                        )
-                        "doc_ortho_1" -> mapOf(
-                            1 to Triple("سعاد حسن عبد الله", "01012345678", SlotStatus.BOOKED),
-                            3 to Triple("حسن عبد القادر", "01288990011", SlotStatus.BOOKED),
-                        )
-                        else -> mapOf(
-                            1 to Triple("علاء فتحي سالم", "01077889900", SlotStatus.BOOKED),
-                        )
-                    },
-                )
-            }
-            dao.insertSlots(allSlots)
-
-            val now = System.currentTimeMillis()
-            val sampleRecords = listOf(
-                MedicalRecordEntity(
-                    id = "rec_1",
-                    familyMemberId = DEFAULT_MEMBER_SELF_ID,
-                    patientName = "أحمد محمد السيد",
-                    patientPhone = "01012345678",
-                    doctorId = "doc_batna_1",
-                    doctorName = "د. محمد عبد الرحمن",
-                    specialty = "باطنة وجهاز هضمي",
-                    visitDateLabel = "10 نوفمبر 2026",
-                    diagnosis = "التهاب بسيط بالمعدة وارتجاع مريئي",
-                    medications = "• كونترولوك (Controloc) 40 مجم — قرص قبل الفطار بنصف ساعة\n• جافيسكون (Gaviscon) — ملعقة كبيرة بعد الأكل وعند اللزوم\n• موتيليوم (Motilium) 10 مجم — قرص قبل الغداء والعشاء",
-                    notes = "الابتعاد عن الأطعمة الدسمة والمشروبات الغازية لمدة أسبوعين.",
-                    recordType = MedicalRecordType.PRESCRIPTION,
-                    createdAtMillis = now - 5 * 86_400_000L,
-                ),
-                MedicalRecordEntity(
-                    id = "rec_2",
-                    familyMemberId = "mem_mother",
-                    patientName = "سعاد حسن عبد الله",
-                    patientPhone = "01012345678",
-                    doctorId = "doc_cardio_1",
-                    doctorName = "د. خالد مصطفى العطار",
-                    specialty = "قلب وأوعية دموية",
-                    visitDateLabel = "3 نوفمبر 2026",
-                    diagnosis = "متابعة ضغط الدم المرتفع (مستقر)",
-                    medications = "• كونكور (Concor) 5 مجم — قرص صباحاً يومياً\n• أسبوسيد (Aspocid) 75 مجم — قرص بعد الغداء",
-                    notes = "قياس الضغط مرتين أسبوعياً وتقليل الملح في الطعام.",
-                    recordType = MedicalRecordType.PRESCRIPTION,
-                    createdAtMillis = now - 12 * 86_400_000L,
-                ),
-                MedicalRecordEntity(
-                    id = "rec_3",
-                    familyMemberId = "mem_son",
-                    patientName = "كريم أحمد محمد",
-                    patientPhone = "01012345678",
-                    doctorId = "doc_kids_1",
-                    doctorName = "د. سارة محمود النجار",
-                    specialty = "أطفال وحديثي الولادة",
-                    visitDateLabel = "28 أكتوبر 2026",
-                    diagnosis = "نزلة شعبية حادة مع ارتفاع طفيف في الحرارة",
-                    medications = "• أوجمنتين شراب (Augmentin) 457 مجم/5 مل — 5 سم كل 12 ساعة لمدة 7 أيام\n• بروفين شراب (Brufen) 100 مجم/5 مل — عند اللزوم لخفض الحرارة\n• فاركولين محلول (Farcolin) — جلسة بخار صباحاً ومساءً",
-                    notes = "شرب سوائل دافئة والراحة التامة.",
-                    recordType = MedicalRecordType.PRESCRIPTION,
-                    createdAtMillis = now - 18 * 86_400_000L,
-                ),
-            )
-            dao.insertMedicalRecords(sampleRecords)
         }
     }
 
-    private fun buildSlotsForDoctor(
-        doctor: ClinicDoctorEntity,
-        preBookedIndices: Map<Int, Triple<String, String, String>> = emptyMap(),
-    ): List<AppointmentSlotEntity> {
+    private fun buildSlotsForDoctor(doctor: ClinicDoctorEntity): List<AppointmentSlotEntity> {
         val list = mutableListOf<AppointmentSlotEntity>()
         var current = doctor.workStartMinutes
         var index = 0
         while (current < doctor.workEndMinutes) {
-            val pre = preBookedIndices[index]
-            val familyMemberId = when (pre?.first) {
-                "أحمد محمد السيد" -> DEFAULT_MEMBER_SELF_ID
-                "سعاد حسن عبد الله" -> "mem_mother"
-                "فاطمة علي محمود" -> "mem_wife"
-                "كريم أحمد محمد" -> "mem_son"
-                else -> ""
-            }
             list += AppointmentSlotEntity(
                 id = "${doctor.id}_today_$index",
                 doctorId = doctor.id,
                 dateLabel = "اليوم",
                 startMinutes = current,
                 delayMinutes = 0,
-                status = pre?.third ?: SlotStatus.AVAILABLE,
-                patientName = pre?.first ?: "",
-                patientPhone = pre?.second ?: "",
-                familyMemberId = familyMemberId,
-                bookingSource = if (pre != null) BookingSource.APP else BookingSource.NONE,
-                bookedAtMillis = if (pre != null) System.currentTimeMillis() else 0L,
+                status = SlotStatus.AVAILABLE,
+                patientName = "",
+                patientPhone = "",
+                familyMemberId = "",
+                bookingSource = BookingSource.NONE,
+                bookedAtMillis = 0L,
             )
             current += doctor.slotDurationMinutes
             index++
@@ -949,6 +757,8 @@ class TebRepository(
             medications = medications.trim(),
             notes = notes.trim(),
             attachmentPath = attachmentPath,
+            attachmentMimeType = if (attachmentPath.isNotBlank()) "image/jpeg" else "",
+            attachmentName = if (attachmentPath.isNotBlank()) "روشتة_ورقية.jpg" else "",
             recordType = MedicalRecordType.PRESCRIPTION,
             createdAtMillis = System.currentTimeMillis(),
         )
@@ -963,6 +773,8 @@ class TebRepository(
         title: String,
         notes: String,
         attachmentPath: String,
+        attachmentMimeType: String = "image/jpeg",
+        attachmentName: String = "",
     ) {
         val record = MedicalRecordEntity(
             id = "upload_${UUID.randomUUID()}",
@@ -973,14 +785,99 @@ class TebRepository(
             doctorName = "رفع شخصي من المريض",
             specialty = "تحاليل وأشعة",
             visitDateLabel = TimeUtils.formatTodayLabelAr(),
-            diagnosis = title.trim().ifEmpty { "صورة تحليل / أشعة" },
+            diagnosis = title.trim().ifEmpty { "صورة / ملف تحليل أو أشعة" },
             medications = "",
             notes = notes.trim(),
             attachmentPath = attachmentPath,
+            attachmentMimeType = attachmentMimeType,
+            attachmentName = attachmentName,
             recordType = MedicalRecordType.PATIENT_UPLOAD,
             createdAtMillis = System.currentTimeMillis(),
         )
         dao.insertMedicalRecord(record)
+    }
+
+    suspend fun addExternalDoctorVisitRecord(
+        familyMemberId: String,
+        patientName: String,
+        patientPhone: String,
+        doctorName: String,
+        specialty: String,
+        visitDateLabel: String,
+        diagnosis: String,
+        medicationsText: String,
+        notes: String,
+        attachmentPath: String,
+        attachmentMimeType: String = "",
+        attachmentName: String = "",
+    ): Result<MedicalRecordEntity> {
+        val cleanDoc = doctorName.trim()
+        val cleanDiag = diagnosis.trim()
+        if (cleanDoc.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة اسم الطبيب الخارجي"))
+        }
+        if (cleanDiag.isEmpty() && medicationsText.isBlank()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة التشخيص أو إضافة دواء واحد على الأقل"))
+        }
+        val record = MedicalRecordEntity(
+            id = "ext_${UUID.randomUUID()}",
+            familyMemberId = familyMemberId,
+            patientName = patientName,
+            patientPhone = patientPhone,
+            doctorId = "external",
+            doctorName = if (cleanDoc.startsWith("د.") || cleanDoc.startsWith("د ")) cleanDoc else "د. $cleanDoc",
+            specialty = "${specialty.trim().ifEmpty { "تخصصات أخرى" }} (زيارة خارجية)",
+            visitDateLabel = visitDateLabel.trim().ifEmpty { TimeUtils.formatTodayLabelAr() },
+            diagnosis = cleanDiag.ifEmpty { "متابعة لدى طبيب خارجي" },
+            medications = medicationsText.trim(),
+            notes = notes.trim(),
+            attachmentPath = attachmentPath,
+            attachmentMimeType = attachmentMimeType,
+            attachmentName = attachmentName,
+            recordType = MedicalRecordType.EXTERNAL_VISIT,
+            createdAtMillis = System.currentTimeMillis(),
+        )
+        dao.insertMedicalRecord(record)
+        return Result.success(record)
+    }
+
+    suspend fun addLabResultRecord(
+        lab: MedicalLabEntity,
+        member: FamilyMemberEntity,
+        accountPhone: String,
+        testTitle: String,
+        notes: String,
+        attachmentPath: String,
+        attachmentMimeType: String,
+        attachmentName: String,
+    ): Result<MedicalRecordEntity> {
+        val cleanTitle = testTitle.trim()
+        if (cleanTitle.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة اسم التحليل أو الفحص"))
+        }
+        if (attachmentPath.isBlank()) {
+            return Result.failure(IllegalArgumentException("يرجى إرفاق ملف نتيجة التحليل (PDF أو صورة)"))
+        }
+        val record = MedicalRecordEntity(
+            id = "labrec_${UUID.randomUUID()}",
+            familyMemberId = member.id,
+            patientName = member.fullName,
+            patientPhone = accountPhone.ifBlank { member.phone },
+            doctorId = lab.id,
+            doctorName = lab.labName,
+            specialty = "نتيجة معمل تحاليل معتمد",
+            visitDateLabel = TimeUtils.formatTodayLabelAr(),
+            diagnosis = cleanTitle,
+            medications = "",
+            notes = notes.trim(),
+            attachmentPath = attachmentPath,
+            attachmentMimeType = attachmentMimeType,
+            attachmentName = attachmentName,
+            recordType = MedicalRecordType.LAB_RESULT,
+            createdAtMillis = System.currentTimeMillis(),
+        )
+        dao.insertMedicalRecord(record)
+        return Result.success(record)
     }
 
     suspend fun addFamilyMember(
@@ -1025,6 +922,13 @@ class TebRepository(
             prefs[activeMemberKey] = members.firstOrNull()?.id ?: account.id
         }
         return Result.success(account)
+    }
+
+    suspend fun logoutPatient() {
+        appContext.tebDataStore.edit { prefs ->
+            prefs.remove(activeAccountKey)
+            prefs.remove(activeMemberKey)
+        }
     }
 
     suspend fun registerPatientAccount(
@@ -1073,9 +977,16 @@ class TebRepository(
         dao.markAllNotificationsRead()
     }
 
+    private fun normalizePhoneDigits(phone: String): String {
+        val digits = phone.filter { it.isDigit() }
+        return when {
+            digits.startsWith("0020") -> "0${digits.substring(4)}"
+            digits.startsWith("20") && digits.length >= 12 -> "0${digits.substring(2)}"
+            else -> digits
+        }
+    }
+
     companion object {
-        const val DEFAULT_ACCOUNT_ID = "acc_ahmed"
-        const val DEFAULT_MEMBER_SELF_ID = "mem_self_ahmed"
         const val MAX_ADMIN_PIN_ATTEMPTS = 3
         const val ADMIN_LOCKOUT_MILLIS = 15 * 60_000L
     }

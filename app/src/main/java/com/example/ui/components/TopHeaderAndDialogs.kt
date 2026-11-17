@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Chat
@@ -37,7 +38,6 @@ import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -83,14 +83,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
-import com.example.auth.OtpChallenge
 import com.example.config.PlatformBrandConfig
 import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.PatientAccountEntity
 import com.example.ui.AppRoleMode
-import com.example.ui.SmsDispatchStatus
-import com.example.ui.SmsOtpUiState
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
 import com.example.ui.theme.DelayWarningText
@@ -313,28 +310,27 @@ fun AccountAndFamilyDialog(
     activeAccount: PatientAccountEntity?,
     familyMembers: List<FamilyMemberEntity>,
     activeMemberId: String,
-    activeOtpChallenge: OtpChallenge?,
-    smsOtpUiState: SmsOtpUiState = SmsOtpUiState(),
-    supportPhone: String = "01125002428",
     otpWhatsappPhone: String = "01141271027",
     appVersionLabel: String,
     onSelectMember: (String) -> Unit,
     onAddFamilyMember: (name: String, relation: String, age: Int, phone: String) -> Unit,
     onLogin: (identifier: String, password: String) -> Unit,
     onRegister: (name: String, phone: String, nationalId: String, password: String) -> Unit,
-    onSendOrResendOtp: () -> Unit = {},
+    onLogoutPatient: () -> Unit = {},
     onVerifyOtp: (code: String) -> Unit,
     onTriggerHiddenAdmin: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember(activeAccount?.id) {
+        mutableIntStateOf(if (activeAccount == null) 1 else 0)
+    }
     var newMemberName by remember { mutableStateOf("") }
     var newMemberRelation by remember { mutableStateOf("الابن") }
     var newMemberAge by remember { mutableStateOf("") }
-    var newMemberPhone by remember { mutableStateOf(activeAccount?.phone ?: "") }
+    var newMemberPhone by remember(activeAccount?.phone) { mutableStateOf(activeAccount?.phone ?: "") }
 
-    var loginIdentifier by remember { mutableStateOf(activeAccount?.phone ?: "01012345678") }
+    var loginIdentifier by remember(activeAccount?.phone) { mutableStateOf(activeAccount?.phone ?: "") }
     var loginPassword by remember { mutableStateOf("") }
 
     var regName by remember { mutableStateOf("") }
@@ -405,10 +401,19 @@ fun AccountAndFamilyDialog(
                                         color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer else SlotBookedText,
                                     )
                                     Text(
-                                        text = "الهاتف: ${activeAccount.phone}  •  ${if (isVerified) "موثق ✓" else "بانتظار تأكيد OTP"}",
+                                        text = "الهاتف: ${activeAccount.phone}  •  ${if (isVerified) "موثق ✓" else "بانتظار كود التفعيل (OTP)"}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else SlotBookedText,
                                     )
+                                }
+                                TextButton(onClick = onLogoutPatient) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ExitToApp,
+                                        contentDescription = "تسجيل الخروج",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("خروج")
                                 }
                             }
 
@@ -424,17 +429,17 @@ fun AccountAndFamilyDialog(
                                         verticalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Filled.Sms, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(20.dp))
+                                            Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "تأكيد رقم الهاتف برمز التحقق (OTP)",
+                                                text = "تفعيل الحساب لإتمام الحجز (OTP)",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 color = TealPrimary,
                                                 fontWeight = FontWeight.Bold,
                                             )
                                         }
                                         Text(
-                                            text = "يتم إرسال كود تفعيل من 6 أرقام إلى هاتفك تلقائياً عبر بوابة الرسائل، وفي حال تعذر الإرسال خلال 25 ثانية يظهر زر استلام الكود عبر واتساب.",
+                                            text = "أرسل بياناتك عبر واتساب لأخذ كود التفعيل المكون من 6 أرقام (صالح للاستخدام مرة واحدة)، أو استلمه مباشرة من سكرتيرة العيادة / الطبيب:",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -443,105 +448,27 @@ fun AccountAndFamilyDialog(
                                         val waOtpPhone = if (cleanOtpDigits.startsWith("2")) cleanOtpDigits else "2$cleanOtpDigits"
                                         val waMessage = "مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ${activeAccount.fullName} - الرقم: ${activeAccount.phone}"
 
-                                        when (smsOtpUiState.status) {
-                                            SmsDispatchStatus.SENDING -> {
-                                                Surface(
-                                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    ) {
-                                                        CircularProgressIndicator(
-                                                            strokeWidth = 2.dp,
-                                                            modifier = Modifier.size(18.dp),
-                                                            color = TealPrimary,
-                                                        )
-                                                        Text(
-                                                            text = "جاري إرسال كود التفعيل إلى هاتفك عبر بوابة الرسائل... (${smsOtpUiState.remainingSeconds} ثانية)",
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = TealPrimary,
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            SmsDispatchStatus.SENT -> {
-                                                Surface(
-                                                    color = SlotAvailableBg,
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    border = BorderStroke(1.dp, SlotAvailableBorder),
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                ) {
-                                                    Text(
-                                                        text = "✓ تم إرسال كود التفعيل المكون من 6 أرقام إلى هاتفك عبر SMS. أدخله بالأسفل لتفعيل الحساب.",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = SlotAvailableText,
-                                                        modifier = Modifier.padding(10.dp),
-                                                    )
-                                                }
-                                            }
-
-                                            SmsDispatchStatus.FAILED -> {
-                                                Surface(
-                                                    color = SlotBookedBg,
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    border = BorderStroke(1.dp, SlotBookedBorder),
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                ) {
-                                                    Text(
-                                                        text = "⚠️ ${smsOtpUiState.errorMessage.ifBlank { "تعذر إرسال الرسالة خلال 25 ثانية. يمكنك استلام الكود عبر واتساب فوراً." }}",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = SlotBookedText,
-                                                        modifier = Modifier.padding(10.dp),
-                                                    )
-                                                }
-                                            }
-
-                                            SmsDispatchStatus.IDLE -> Unit
-                                        }
-
-                                        if (smsOtpUiState.status == SmsDispatchStatus.FAILED || smsOtpUiState.status == SmsDispatchStatus.IDLE) {
-                                            Button(
-                                                onClick = {
-                                                    val encoded = URLEncoder.encode(waMessage, "UTF-8")
-                                                    val intent = Intent(
-                                                        Intent.ACTION_VIEW,
-                                                        Uri.parse("https://wa.me/$waOtpPhone?text=$encoded"),
-                                                    )
-                                                    context.startActivity(intent)
-                                                },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = SlotAvailableBorder,
-                                                    contentColor = Color.White,
-                                                ),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(48.dp)
-                                                    .testTag("otp_whatsapp_request_button"),
-                                            ) {
-                                                Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("استلم الكود عبر واتساب")
-                                            }
-                                        }
-
-                                        OutlinedButton(
-                                            onClick = onSendOrResendOtp,
-                                            enabled = smsOtpUiState.status != SmsDispatchStatus.SENDING,
+                                        Button(
+                                            onClick = {
+                                                val encoded = URLEncoder.encode(waMessage, "UTF-8")
+                                                val intent = Intent(
+                                                    Intent.ACTION_VIEW,
+                                                    Uri.parse("https://wa.me/$waOtpPhone?text=$encoded"),
+                                                )
+                                                context.startActivity(intent)
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = SlotAvailableBorder,
+                                                contentColor = Color.White,
+                                            ),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(46.dp)
-                                                .testTag("otp_resend_sms_button"),
+                                                .height(48.dp)
+                                                .testTag("otp_whatsapp_request_button"),
                                         ) {
-                                            Icon(Icons.Filled.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text(if (activeOtpChallenge != null) "إعادة إرسال كود التفعيل (SMS)" else "إرسال كود التفعيل عبر SMS")
+                                            Text("أرسل بياناتك على واتساب لأخذ كود التفعيل (OTP)")
                                         }
 
                                         OutlinedTextField(
@@ -601,125 +528,133 @@ fun AccountAndFamilyDialog(
                 ) {
                     when (selectedTab) {
                         0 -> {
-                            Text(
-                                text = "اختر الفرد الذي تحجز أو تستعرض ملفه الطبي، أو أضف فرداً جديداً:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            familyMembers.forEach { member ->
-                                val isSelected = member.id == activeMemberId
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isSelected) {
-                                            MaterialTheme.colorScheme.primaryContainer
+                            if (activeAccount == null) {
+                                Text(
+                                    text = "يرجى تسجيل الدخول أو إنشاء حساب جديد أولاً لإدارة أفراد الأسرة.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                Text(
+                                    text = "اختر الفرد الذي تحجز أو تستعرض ملفه الطبي، أو أضف فرداً جديداً:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                familyMembers.forEach { member ->
+                                    val isSelected = member.id == activeMemberId
+                                    Card(
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected) {
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                            }
+                                        ),
+                                        border = if (isSelected) {
+                                            BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
                                         } else {
-                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                                        }
-                                    ),
-                                    border = if (isSelected) {
-                                        BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                                    } else {
-                                        null
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onSelectMember(member.id)
-                                            onDismiss()
+                                            null
                                         },
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onSelectMember(member.id)
+                                                onDismiss()
+                                            },
                                     ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = member.fullName,
-                                                style = MaterialTheme.typography.titleMedium,
-                                            )
-                                            Text(
-                                                text = "${member.relation} • ${member.age} سنة",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        if (isSelected) {
-                                            Text(
-                                                text = "نشط ✓",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                color = MaterialTheme.colorScheme.primary,
-                                            )
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = member.fullName,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                )
+                                                Text(
+                                                    text = "${member.relation} • ${member.age} سنة",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                            if (isSelected) {
+                                                Text(
+                                                    text = "نشط ✓",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "إضافة فرد جديد من العائلة",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            OutlinedTextField(
-                                value = newMemberName,
-                                onValueChange = { newMemberName = it },
-                                label = { Text("الاسم الكامل") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                OutlinedTextField(
-                                    value = newMemberRelation,
-                                    onValueChange = { newMemberRelation = it },
-                                    label = { Text("صلة القرابة (الأب/الأم/الابن)") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1.4f),
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "إضافة فرد جديد من العائلة",
+                                    style = MaterialTheme.typography.titleMedium,
                                 )
                                 OutlinedTextField(
-                                    value = newMemberAge,
-                                    onValueChange = { newMemberAge = it.filter { ch -> ch.isDigit() } },
-                                    label = { Text("العمر") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    value = newMemberName,
+                                    onValueChange = { newMemberName = it },
+                                    label = { Text("الاسم الكامل") },
                                     singleLine = true,
-                                    modifier = Modifier.weight(0.8f),
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
-                            }
-                            OutlinedTextField(
-                                value = newMemberPhone,
-                                onValueChange = { newMemberPhone = it },
-                                label = { Text("رقم الهاتف") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Button(
-                                onClick = {
-                                    onAddFamilyMember(
-                                        newMemberName,
-                                        newMemberRelation,
-                                        newMemberAge.toIntOrNull() ?: 25,
-                                        newMemberPhone.ifBlank { activeAccount?.phone ?: "" },
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    OutlinedTextField(
+                                        value = newMemberRelation,
+                                        onValueChange = { newMemberRelation = it },
+                                        label = { Text("صلة القرابة (الأب/الأم/الابن)") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1.4f),
                                     )
-                                    newMemberName = ""
-                                    newMemberAge = ""
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp)
-                                    .testTag("add_family_member_button"),
-                            ) {
-                                Icon(Icons.Filled.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("إضافة إلى العائلة")
+                                    OutlinedTextField(
+                                        value = newMemberAge,
+                                        onValueChange = { newMemberAge = it.filter { ch -> ch.isDigit() } },
+                                        label = { Text("العمر") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        modifier = Modifier.weight(0.8f),
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = newMemberPhone,
+                                    onValueChange = { newMemberPhone = it },
+                                    label = { Text("رقم الهاتف") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Button(
+                                    onClick = {
+                                        onAddFamilyMember(
+                                            newMemberName,
+                                            newMemberRelation,
+                                            newMemberAge.toIntOrNull() ?: 25,
+                                            newMemberPhone.ifBlank { activeAccount.phone },
+                                        )
+                                        newMemberName = ""
+                                        newMemberAge = ""
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp)
+                                        .testTag("add_family_member_button"),
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("إضافة إلى العائلة")
+                                }
                             }
                         }
 
                         1 -> {
                             Text(
-                                text = "سجّل الدخول برقم الهاتف أو الرقم القومي (الحساب التجريبي: 01012345678 / 1234)",
+                                text = "سجّل الدخول برقم الهاتف أو الرقم القومي المسجل:",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

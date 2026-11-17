@@ -30,16 +30,14 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -69,8 +67,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
+import com.example.data.local.MedicalLabEntity
 import com.example.data.local.SlotStatus
-import com.example.ui.SmsOtpUiState
 import com.example.ui.TebUiState
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.components.otpCodeGeneratorItems
@@ -134,8 +132,9 @@ fun SuperAdminDashboardScreen(
     ) -> Unit,
     onResetPlatformSettings: () -> Unit,
     onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
-    onSaveSmsGateSettings: (serverUrl: String, username: String, password: String) -> Unit,
-    onTestSmsGate: (serverUrl: String, username: String, password: String, testPhone: String) -> Unit,
+    onAddLab: (labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
+    onUpdateLab: (labId: String, labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
+    onDeleteLab: (labId: String) -> Unit,
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -146,6 +145,10 @@ fun SuperAdminDashboardScreen(
     var showAddForm by remember { mutableStateOf(false) }
     var doctorToEdit by remember { mutableStateOf<ClinicDoctorEntity?>(null) }
     var doctorToDelete by remember { mutableStateOf<ClinicDoctorEntity?>(null) }
+
+    var showAddLabForm by remember { mutableStateOf(false) }
+    var labToEdit by remember { mutableStateOf<MedicalLabEntity?>(null) }
+    var labToDelete by remember { mutableStateOf<MedicalLabEntity?>(null) }
 
     var manualBlockPhone by remember { mutableStateOf("") }
     var manualBlockReason by remember { mutableStateOf("حجز وهمي / مخالفة") }
@@ -159,12 +162,6 @@ fun SuperAdminDashboardScreen(
     var cfgApkUrl by remember(state.brandConfig.apkDownloadUrl) { mutableStateOf(state.brandConfig.apkDownloadUrl) }
     var cfgMedsApi by remember(state.brandConfig.medicationsApiUrl) { mutableStateOf(state.brandConfig.medicationsApiUrl) }
     var cfgAdminPin by remember(state.brandConfig.adminPin) { mutableStateOf(state.brandConfig.adminPin) }
-
-    // SMSGate settings & test phone state
-    var smsServerUrl by remember(state.brandConfig.smsGateServerUrl) { mutableStateOf(state.brandConfig.smsGateServerUrl) }
-    var smsUsername by remember(state.brandConfig.smsGateUsername) { mutableStateOf(state.brandConfig.smsGateUsername) }
-    var smsPassword by remember(state.brandConfig.smsGatePassword) { mutableStateOf(state.brandConfig.smsGatePassword) }
-    var smsTestPhone by remember { mutableStateOf("") }
 
     val q = searchQuery.trim()
     val privateDoctors = remember(state.doctors, q) {
@@ -237,9 +234,10 @@ fun SuperAdminDashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    AdminMetricBox("العيادات الخاصة", state.privateClinics.size.toString(), Modifier.weight(1f))
-                    AdminMetricBox("أقسام المستشفى", state.hospitalClinics.size.toString(), Modifier.weight(1f))
-                    AdminMetricBox("حجوزات اليوم", bookedSlots.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox("العيادات", state.privateClinics.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox("المستشفى", state.hospitalClinics.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox("المعامل", state.labs.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox("الحجوزات", bookedSlots.size.toString(), Modifier.weight(1f))
                 }
             }
 
@@ -274,8 +272,8 @@ fun SuperAdminDashboardScreen(
                     Tab(
                         selected = selectedTab == 5,
                         onClick = { selectedTab = 5 },
-                        text = { Text("إعدادات بوابة الرسائل (SMSGate)") },
-                        modifier = Modifier.testTag("admin_smsgate_tab"),
+                        text = { Text("إدارة معامل التحاليل") },
+                        modifier = Modifier.testTag("admin_labs_tab"),
                     )
                 }
             }
@@ -614,169 +612,42 @@ fun SuperAdminDashboardScreen(
 
                 5 -> {
                     item {
-                        Card(
-                            shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
+                        Button(
+                            onClick = { showAddLabForm = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4338CA)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("admin_add_lab_button"),
+                            shape = RoundedCornerShape(14.dp),
                         ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Icon(Icons.Filled.Sms, contentDescription = null, tint = TealPrimary)
-                                    Text(
-                                        text = "إعدادات بوابة الرسائل (SMSGate)",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                }
-                                Text(
-                                    text = "ربط حساب SMSGate لإرسال كود التفعيل (6 أرقام) تلقائياً للمرضى عند التسجيل، مع ظهور زر استلام الكود عبر واتساب تلقائياً إذا تعذر الإرسال خلال 25 ثانية.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                OutlinedTextField(
-                                    value = smsServerUrl,
-                                    onValueChange = { smsServerUrl = it },
-                                    label = { Text("رابط الخادم (Server URL)") },
-                                    placeholder = { Text("https://sms-gate.app") },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("smsgate_server_url_input"),
-                                )
-                                OutlinedTextField(
-                                    value = smsUsername,
-                                    onValueChange = { smsUsername = it },
-                                    label = { Text("اسم المستخدم (Username)") },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("smsgate_username_input"),
-                                )
-                                PasswordOutlinedTextField(
-                                    value = smsPassword,
-                                    onValueChange = { smsPassword = it },
-                                    label = "كلمة المرور (Password)",
-                                    toggleTestTag = "smsgate_password_toggle",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("smsgate_password_input"),
-                                )
-                                Button(
-                                    onClick = { onSaveSmsGateSettings(smsServerUrl, smsUsername, smsPassword) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp)
-                                        .testTag("smsgate_save_button"),
-                                ) {
-                                    Text("حفظ الإعدادات")
-                                }
-                            }
+                            Icon(Icons.Filled.Science, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("إضافة معمل تحاليل جديد في الحجايزة")
                         }
                     }
 
-                    item {
-                        val smsUi = state.smsOtpUiState
-                        Card(
-                            shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    if (state.labs.isEmpty()) {
+                        item {
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    text = "اختبار الإرسال (Test SMS)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TealPrimary,
-                                )
-                                Text(
-                                    text = "أدخل رقم هاتف تجربة لإرسال رسالة فورية بكود التفعيل التجريبي (123456) عبر SMSGate.",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = "لم تتم إضافة معامل تحاليل بعد. أضف معملاً لإنشاء حساب دخول خاص به.",
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp),
                                 )
-                                OutlinedTextField(
-                                    value = smsTestPhone,
-                                    onValueChange = { smsTestPhone = it },
-                                    label = { Text("رقم هاتف التجربة") },
-                                    placeholder = { Text("010xxxxxxxx") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("smsgate_test_phone_input"),
-                                )
-                                Button(
-                                    onClick = {
-                                        onTestSmsGate(smsServerUrl, smsUsername, smsPassword, smsTestPhone)
-                                    },
-                                    enabled = !smsUi.isTestingSms,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = SlotAvailableBorder,
-                                        contentColor = Color.White,
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp)
-                                        .testTag("smsgate_test_button"),
-                                ) {
-                                    if (smsUi.isTestingSms) {
-                                        CircularProgressIndicator(
-                                            color = Color.White,
-                                            strokeWidth = 2.dp,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("جاري إرسال الرسالة التجريبية...")
-                                    } else {
-                                        Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("إرسال رسالة تجريبية")
-                                    }
-                                }
-                                if (smsUi.testFeedbackMessage.isNotBlank()) {
-                                    val isOk = smsUi.testSuccess == true
-                                    val isErr = smsUi.testSuccess == false
-                                    Surface(
-                                        color = when {
-                                            isOk -> SlotAvailableBg
-                                            isErr -> SlotBookedBg
-                                            else -> MaterialTheme.colorScheme.primaryContainer
-                                        },
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            when {
-                                                isOk -> SlotAvailableBorder
-                                                isErr -> SlotBookedBorder
-                                                else -> TealPrimary
-                                            },
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text(
-                                            text = smsUi.testFeedbackMessage,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = when {
-                                                isOk -> SlotAvailableText
-                                                isErr -> SlotBookedText
-                                                else -> TealPrimary
-                                            },
-                                            fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.padding(10.dp),
-                                        )
-                                    }
-                                }
                             }
+                        }
+                    } else {
+                        items(state.labs, key = { it.id }) { lab ->
+                            AdminLabManageCard(
+                                lab = lab,
+                                onEdit = { labToEdit = lab },
+                                onDelete = { labToDelete = lab },
+                            )
                         }
                     }
                 }
@@ -832,6 +703,54 @@ fun SuperAdminDashboardScreen(
             },
             dismissButton = {
                 TextButton(onClick = { doctorToDelete = null }) {
+                    Text("تراجع")
+                }
+            },
+        )
+    }
+
+    if (showAddLabForm) {
+        LabFormDialog(
+            initialLab = null,
+            onSave = { name, phone, loc, user, pass ->
+                onAddLab(name, phone, loc, user, pass)
+                showAddLabForm = false
+            },
+            onDismiss = { showAddLabForm = false },
+        )
+    }
+
+    val editingLab = labToEdit
+    if (editingLab != null) {
+        LabFormDialog(
+            initialLab = editingLab,
+            onSave = { name, phone, loc, user, pass ->
+                onUpdateLab(editingLab.id, name, phone, loc, user, pass)
+                labToEdit = null
+            },
+            onDismiss = { labToEdit = null },
+        )
+    }
+
+    val deletingLab = labToDelete
+    if (deletingLab != null) {
+        AlertDialog(
+            onDismissRequest = { labToDelete = null },
+            title = { Text("تأكيد حذف المعمل") },
+            text = { Text("هل أنت متأكد من حذف ${deletingLab.labName} من بوابة معامل التحاليل؟") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteLab(deletingLab.id)
+                        labToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SlotBookedBorder),
+                ) {
+                    Text("حذف")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { labToDelete = null }) {
                     Text("تراجع")
                 }
             },
@@ -1147,6 +1066,161 @@ private fun DoctorFormDialog(
                 }
             ) {
                 Text(if (isEdit) "حفظ التعديلات" else "إضافة ونشر فوراً")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        },
+    )
+}
+
+@Composable
+private fun AdminLabManageCard(
+    lab: MedicalLabEntity,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, Color(0xFF4338CA).copy(alpha = 0.35f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("admin_manage_lab_${lab.id}"),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(lab.labName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "📍 ${lab.locationLabel.ifBlank { "قرية الحجايزة" }}${if (lab.phone.isNotBlank()) " • ${lab.phone}" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(color = Color(0xFFE0E7FF), shape = RoundedCornerShape(8.dp)) {
+                    Text(
+                        text = "معمل تحاليل",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF3730A3),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("المستخدم: ${lab.username}", style = MaterialTheme.typography.labelMedium)
+                    Text("كلمة المرور: ${lab.password}", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onEdit,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("تعديل")
+                }
+                OutlinedButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SlotBookedBorder),
+                    border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
+                    modifier = Modifier.height(46.dp),
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("حذف")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabFormDialog(
+    initialLab: MedicalLabEntity?,
+    onSave: (labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isEdit = initialLab != null
+    var labName by remember { mutableStateOf(initialLab?.labName ?: "") }
+    var phone by remember { mutableStateOf(initialLab?.phone ?: "") }
+    var locationLabel by remember { mutableStateOf(initialLab?.locationLabel ?: "") }
+    var username by remember { mutableStateOf(initialLab?.username ?: "") }
+    var password by remember { mutableStateOf(initialLab?.password ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isEdit) "تعديل بيانات المعمل" else "إضافة معمل تحاليل جديد") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = labName,
+                    onValueChange = { labName = it },
+                    label = { Text("اسم معمل التحاليل *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("lab_form_name_input"),
+                )
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("رقم هاتف المعمل") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = locationLabel,
+                    onValueChange = { locationLabel = it },
+                    label = { Text("العنوان بالتفصيل") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("اسم المستخدم للدخول *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("lab_form_username_input"),
+                )
+                PasswordOutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = "كلمة المرور للدخول *",
+                    toggleTestTag = "lab_form_password_toggle",
+                    modifier = Modifier.fillMaxWidth().testTag("lab_form_password_input"),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(labName, phone, locationLabel, username, password) },
+                modifier = Modifier.testTag("lab_form_save_button"),
+            ) {
+                Text(if (isEdit) "حفظ التعديلات" else "إضافة المعمل")
             }
         },
         dismissButton = {

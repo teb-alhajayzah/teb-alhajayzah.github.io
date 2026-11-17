@@ -6,12 +6,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,8 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -52,6 +56,7 @@ import com.example.data.local.TebDatabase
 import com.example.data.repository.TebRepository
 import com.example.ui.AppRoleMode
 import com.example.ui.PatientTab
+import com.example.ui.StaffPortalTab
 import com.example.ui.TebViewModel
 import com.example.ui.admin.SuperAdminDashboardScreen
 import com.example.ui.components.AccountAndFamilyDialog
@@ -61,6 +66,8 @@ import com.example.ui.components.NotificationsDialog
 import com.example.ui.components.TebTopHeader
 import com.example.ui.doctor.DoctorDashboardScreen
 import com.example.ui.doctor.DoctorLoginGateScreen
+import com.example.ui.lab.LabDashboardScreen
+import com.example.ui.lab.LabLoginGateCard
 import com.example.ui.patient.ClinicsDirectoryScreen
 import com.example.ui.patient.DoctorBookingScreen
 import com.example.ui.patient.MedicalFileScreen
@@ -221,8 +228,12 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         slots = state.slotsForDoctor(bookingDoctor.id),
                                         familyMembers = state.familyMembers,
                                         activeMember = state.activeMember,
+                                        isAccountVerified = state.isAccountVerified,
                                         isBookingSubmitting = state.isBookingSubmitting,
                                         onSelectFamilyMember = viewModel::selectActiveFamilyMember,
+                                        onRequireAccountForBooking = {
+                                            viewModel.openAccountDialogForVerification()
+                                        },
                                         onBookSlot = viewModel::bookAppointmentAsPatient,
                                         onCancelSlot = viewModel::cancelAppointment,
                                         onBack = viewModel::closeDoctorBooking,
@@ -290,7 +301,31 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                             MedicalFileScreen(
                                                 state = state,
                                                 onSelectFamilyMember = viewModel::selectActiveFamilyMember,
-                                                onUploadAttachment = viewModel::uploadPatientMedicalAttachment,
+                                                onOpenAccountDialog = { showAccountDialog = true },
+                                                onUploadAttachment = { member, title, notes, path, mimeType, displayName ->
+                                                    viewModel.uploadPatientMedicalAttachment(
+                                                        member = member,
+                                                        title = title,
+                                                        notes = notes,
+                                                        attachmentPath = path,
+                                                        attachmentMimeType = mimeType,
+                                                        attachmentName = displayName,
+                                                    )
+                                                },
+                                                onAddExternalDoctorVisit = { member, docName, specialty, visitDate, diagnosis, medsText, notes, path, mimeType, displayName ->
+                                                    viewModel.addExternalDoctorVisit(
+                                                        member = member,
+                                                        doctorName = docName,
+                                                        specialty = specialty,
+                                                        visitDateLabel = visitDate,
+                                                        diagnosis = diagnosis,
+                                                        medicationsText = medsText,
+                                                        notes = notes,
+                                                        attachmentPath = path,
+                                                        attachmentMimeType = mimeType,
+                                                        attachmentName = displayName,
+                                                    )
+                                                },
                                                 onPreviewImage = { path, title -> previewImage = path to title },
                                                 onShowMessage = showMessage,
                                             )
@@ -303,25 +338,81 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                 BackHandler {
                                     viewModel.switchRoleMode(AppRoleMode.PATIENT)
                                 }
-                                if (state.loggedInDoctor == null) {
-                                    DoctorLoginGateScreen(
-                                        adminOwnerName = state.brandConfig.adminOwnerName,
-                                        onLoginDoctor = viewModel::loginDoctor,
-                                    )
-                                } else {
-                                    DoctorDashboardScreen(
-                                        state = state,
-                                        onLogoutDoctor = viewModel::logoutDoctor,
-                                        onBookManualPhoneSlot = viewModel::bookManualPhoneSlot,
-                                        onCancelSlot = viewModel::cancelAppointment,
-                                        onDelayDoctor = viewModel::delayDoctorAppointments,
-                                        onGenerateSchedule = viewModel::generateSchedule,
-                                        onCompleteVisit = viewModel::completeVisitWithPrescription,
-                                        onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
-                                        onGenerateOtpBatch = viewModel::generateActivationCodes,
-                                        onPreviewImage = { path, title -> previewImage = path to title },
-                                        onShowMessage = showMessage,
-                                    )
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    TabRow(
+                                        selectedTabIndex = if (state.staffPortalTab == StaffPortalTab.DOCTOR) 0 else 1,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Tab(
+                                            selected = state.staffPortalTab == StaffPortalTab.DOCTOR,
+                                            onClick = { viewModel.switchStaffPortalTab(StaffPortalTab.DOCTOR) },
+                                            text = { Text(StaffPortalTab.DOCTOR.labelAr) },
+                                            modifier = Modifier.testTag("staff_tab_doctor"),
+                                        )
+                                        Tab(
+                                            selected = state.staffPortalTab == StaffPortalTab.LAB,
+                                            onClick = { viewModel.switchStaffPortalTab(StaffPortalTab.LAB) },
+                                            text = { Text(StaffPortalTab.LAB.labelAr) },
+                                            modifier = Modifier.testTag("staff_tab_lab"),
+                                        )
+                                    }
+
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        when (state.staffPortalTab) {
+                                            StaffPortalTab.DOCTOR -> {
+                                                if (state.loggedInDoctor == null) {
+                                                    DoctorLoginGateScreen(
+                                                        adminOwnerName = state.brandConfig.adminOwnerName,
+                                                        onLoginDoctor = viewModel::loginDoctor,
+                                                    )
+                                                } else {
+                                                    DoctorDashboardScreen(
+                                                        state = state,
+                                                        onLogoutDoctor = viewModel::logoutDoctor,
+                                                        onBookManualPhoneSlot = viewModel::bookManualPhoneSlot,
+                                                        onCancelSlot = viewModel::cancelAppointment,
+                                                        onDelayDoctor = viewModel::delayDoctorAppointments,
+                                                        onGenerateSchedule = viewModel::generateSchedule,
+                                                        onCompleteVisit = viewModel::completeVisitWithPrescription,
+                                                        onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
+                                                        onGenerateOtpBatch = viewModel::generateActivationCodes,
+                                                        onPreviewImage = { path, title -> previewImage = path to title },
+                                                        onShowMessage = showMessage,
+                                                    )
+                                                }
+                                            }
+
+                                            StaffPortalTab.LAB -> {
+                                                val loggedLab = state.loggedInLab
+                                                if (loggedLab == null) {
+                                                    LabLoginGateCard(
+                                                        adminOwnerName = state.brandConfig.adminOwnerName,
+                                                        onLoginLab = viewModel::loginLab,
+                                                    )
+                                                } else {
+                                                    LabDashboardScreen(
+                                                        state = state,
+                                                        activeLab = loggedLab,
+                                                        onSearchByPhone = viewModel::searchPatientsForLab,
+                                                        onUploadLabResult = { member, accountPhone, testTitle, notes, path, mimeType, displayName, onDone ->
+                                                            viewModel.uploadLabResultForMember(
+                                                                member = member,
+                                                                accountPhone = accountPhone,
+                                                                testTitle = testTitle,
+                                                                notes = notes,
+                                                                attachmentPath = path,
+                                                                attachmentMimeType = mimeType,
+                                                                attachmentName = displayName,
+                                                                onUploaded = onDone,
+                                                            )
+                                                        },
+                                                        onLogoutLab = viewModel::logoutLab,
+                                                        onShowMessage = showMessage,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -341,8 +432,9 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
                                         onSavePlatformSettings = viewModel::updateBrandConfig,
                                         onResetPlatformSettings = viewModel::resetBrandConfig,
                                         onGenerateOtpBatch = viewModel::generateActivationCodes,
-                                        onSaveSmsGateSettings = viewModel::saveSmsGateSettings,
-                                        onTestSmsGate = viewModel::sendTestSmsViaSmsGate,
+                                        onAddLab = viewModel::addLabByAdmin,
+                                        onUpdateLab = viewModel::updateLabByAdmin,
+                                        onDeleteLab = viewModel::deleteLabByAdmin,
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
@@ -361,9 +453,6 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             activeAccount = activeAccount,
             familyMembers = state.familyMembers,
             activeMemberId = state.activeMemberId,
-            activeOtpChallenge = state.activeOtpChallenge,
-            smsOtpUiState = state.smsOtpUiState,
-            supportPhone = state.brandConfig.supportPhone,
             otpWhatsappPhone = state.brandConfig.otpWhatsappPhone,
             appVersionLabel = state.brandConfig.appVersionLabel,
             onSelectMember = viewModel::selectActiveFamilyMember,
@@ -374,7 +463,7 @@ fun TebAlHajayzahAppRoot(viewModel: TebViewModel) {
             },
             onLogin = viewModel::loginPatient,
             onRegister = viewModel::registerPatient,
-            onSendOrResendOtp = viewModel::sendOrResendOtpForActiveAccount,
+            onLogoutPatient = viewModel::logoutPatient,
             onVerifyOtp = viewModel::verifyActiveAccountOtp,
             onTriggerHiddenAdmin = {
                 if (state.isAdminLoggedIn) {
