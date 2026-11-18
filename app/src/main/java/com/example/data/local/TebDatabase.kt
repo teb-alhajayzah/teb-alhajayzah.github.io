@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ActivationOtpCodeEntity::class,
         MedicalLabEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -130,6 +130,15 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `otpCode` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `otpCreatedAtMillis` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `otpExpiresAtMillis` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `otpUsed` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -141,7 +150,7 @@ abstract class TebDatabase : RoomDatabase() {
                         TebDatabase::class.java,
                         "teb_al_hajayzah_prod_v100.db",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                         .build()
                 }.also { INSTANCE = it }
             }

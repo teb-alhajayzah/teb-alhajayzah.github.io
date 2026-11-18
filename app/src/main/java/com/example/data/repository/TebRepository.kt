@@ -274,9 +274,45 @@ class TebRepository(
         dao.markAccountPhoneVerified(accountId, verifiedBy, System.currentTimeMillis())
     }
 
+    private suspend fun generateUniqueUserOtpCode(): String {
+        val forbidden = HashSet<String>()
+        forbidden.add(MASTER_ADMIN_OTP)
+        dao.getAllAccountsOnce().forEach { if (it.otpCode.isNotBlank()) forbidden.add(it.otpCode) }
+        dao.getAllActivationCodesOnce().forEach { forbidden.add(it.code) }
+        repeat(80) {
+            val candidate = (100000 + secureRandom.nextInt(900000)).toString()
+            if (!forbidden.contains(candidate)) return candidate
+        }
+        return (100000 + secureRandom.nextInt(900000)).toString()
+    }
+
+    suspend fun regenerateAccountOtp(
+        accountId: String,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Result<PatientAccountEntity> {
+        val acc = dao.getAccountById(accountId)
+            ?: return Result.failure(IllegalStateException("الحساب غير موجود"))
+        val freshCode = generateUniqueUserOtpCode()
+        val expiresAt = nowMillis + OTP_TTL_MILLIS
+        dao.updateAccountOtp(
+            accountId = accountId,
+            otpCode = freshCode,
+            createdAtMillis = nowMillis,
+            expiresAtMillis = expiresAt,
+        )
+        val updated = dao.getAccountById(accountId) ?: acc.copy(
+            otpCode = freshCode,
+            otpCreatedAtMillis = nowMillis,
+            otpExpiresAtMillis = expiresAt,
+            otpUsed = false,
+        )
+        return Result.success(updated)
+    }
+
     suspend fun generateActivationCodeBatch(count: Int, generatedBy: String = "ADMIN"): Result<Int> {
         val safeCount = count.coerceIn(1, 100)
         val existingCodes = dao.getAllActivationCodesOnce().map { it.code }.toHashSet()
+        existingCodes.add(MASTER_ADMIN_OTP)
         val now = System.currentTimeMillis()
         val generated = ArrayList<ActivationOtpCodeEntity>(safeCount)
         var attempts = 0
@@ -307,17 +343,37 @@ class TebRepository(
         accountName: String,
         accountPhone: String,
         enteredCode: String,
+        nowMillis: Long = System.currentTimeMillis(),
     ): Result<Unit> {
         val cleanCode = toAsciiDigits(enteredCode).filter { it in '0'..'9' }
         if (cleanCode.length != 6) {
             return Result.failure(IllegalArgumentException("يرجى إدخال كود التفعيل المكون من 6 أرقام"))
         }
         if (cleanCode == MASTER_ADMIN_OTP) {
-            dao.markAccountPhoneVerified(accountId, "كود OTP", System.currentTimeMillis())
+            dao.markAccountPhoneVerified(accountId, "كود OTP", nowMillis)
             return Result.success(Unit)
         }
+
+        // 1) التحقق من الكود الفريد المرتبط بحساب المستخدم نفسه (صالح لمدة 24 ساعة فقط)
+        val boundAccount = dao.getAccountById(accountId)
+        if (boundAccount != null && boundAccount.otpCode.isNotBlank() && boundAccount.otpCode == cleanCode) {
+            if (boundAccount.otpUsed) {
+                return Result.failure(
+                    IllegalStateException("تم استخدام هذا الكود من قبل ومنتهي الصلاحية. اضغط على زر 'توليد كود جديد' إذا لزم الأمر.")
+                )
+            }
+            if (boundAccount.otpExpiresAtMillis <= 0L || nowMillis > boundAccount.otpExpiresAtMillis) {
+                return Result.failure(
+                    IllegalStateException("انتهت صلاحية كود التفعيل الخاص بحسابك (مضى أكثر من 24 ساعة). اضغط على زر 'توليد كود جديد'.")
+                )
+            }
+            dao.markAccountPhoneVerified(accountId, "كود OTP", nowMillis)
+            return Result.success(Unit)
+        }
+
+        // 2) التحقق الاحتياطي من سجل أكواد الإدارة المولدة مسبقاً
         val codeEntity = dao.getActivationCode(cleanCode)
-            ?: return Result.failure(IllegalArgumentException("كود التفعيل غير صحيح أو غير مسجل. اطلب الكود من السكرتيرة أو عبر واتساب."))
+            ?: return Result.failure(IllegalArgumentException("كود التفعيل غير صحيح أو غير مطابق لكود حسابك. اطلب الكود عبر واتساب أو من العيادة."))
         if (codeEntity.isUsed) {
             val usedInfo = if (codeEntity.usedByName.isNotBlank()) " (${codeEntity.usedByName})" else ""
             return Result.failure(IllegalStateException("هذا الكود تم استخدامه بالفعل ومنتهي الصلاحية$usedInfo، ولا يمكن استخدامه مجدداً."))
@@ -327,7 +383,7 @@ class TebRepository(
             accountId = accountId,
             usedByName = accountName.trim(),
             usedByPhone = accountPhone.trim(),
-            usedAtMillis = System.currentTimeMillis(),
+            usedAtMillis = nowMillis,
         )
         return if (redeemed) {
             Result.success(Unit)
@@ -374,7 +430,11 @@ class TebRepository(
             isVerified = verified,
             verifiedBy = if (verified) "الإدارة" else "",
             verifiedAtMillis = if (verified) now else 0L,
+            otpUsed = verified,
         )
+        if (!verified) {
+            regenerateAccountOtp(accountId, now)
+        }
     }
 
     suspend fun updateAccountByAdmin(
@@ -819,6 +879,11 @@ class TebRepository(
                     if (labMissing) editPrefs.remove(loggedInLabIdKey)
                 }
             }
+            existingAccounts.forEach { acc ->
+                if (!acc.isPhoneVerified && acc.otpCode.isBlank()) {
+                    regenerateAccountOtp(acc.id)
+                }
+            }
             if (dao.getAllActivationCodesOnce().isEmpty()) {
                 generateActivationCodeBatch(5, "SYSTEM")
             }
@@ -1167,6 +1232,7 @@ class TebRepository(
         phone: String,
         nationalId: String,
         password: String,
+        nowMillis: Long = System.currentTimeMillis(),
     ): Result<PatientAccountEntity> {
         val cleanPhone = toAsciiDigits(phone).trim()
         if (dao.isPhoneBlocked(cleanPhone) > 0) {
@@ -1177,6 +1243,7 @@ class TebRepository(
             return Result.failure(IllegalArgumentException("رقم الهاتف مسجل بالفعل"))
         }
         val accountId = "acc_${UUID.randomUUID()}"
+        val generatedOtp = generateUniqueUserOtpCode()
         val account = PatientAccountEntity(
             id = accountId,
             fullName = fullName.trim(),
@@ -1186,6 +1253,10 @@ class TebRepository(
             isPhoneVerified = false,
             verifiedBy = "",
             verifiedAtMillis = 0L,
+            otpCode = generatedOtp,
+            otpCreatedAtMillis = nowMillis,
+            otpExpiresAtMillis = nowMillis + OTP_TTL_MILLIS,
+            otpUsed = false,
         )
         dao.insertAccount(account)
         val selfMemberId = "mem_${UUID.randomUUID()}"
@@ -1235,5 +1306,6 @@ class TebRepository(
         const val MAX_ADMIN_PIN_ATTEMPTS = 3
         const val ADMIN_LOCKOUT_MILLIS = 15 * 60_000L
         const val MASTER_ADMIN_OTP = "999000"
+        const val OTP_TTL_MILLIS = 24L * 60L * 60L * 1000L
     }
 }

@@ -32,19 +32,28 @@ interface TebDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAccount(account: PatientAccountEntity)
 
-    @Query("UPDATE patient_accounts SET isPhoneVerified = 1, verifiedBy = :verifiedBy, verifiedAtMillis = :verifiedAtMillis WHERE id = :accountId")
+    @Query("UPDATE patient_accounts SET isPhoneVerified = 1, verifiedBy = :verifiedBy, verifiedAtMillis = :verifiedAtMillis, otpUsed = 1 WHERE id = :accountId")
     suspend fun markAccountPhoneVerified(
         accountId: String,
         verifiedBy: String = "كود OTP",
         verifiedAtMillis: Long = System.currentTimeMillis(),
     )
 
-    @Query("UPDATE patient_accounts SET isPhoneVerified = :isVerified, verifiedBy = :verifiedBy, verifiedAtMillis = :verifiedAtMillis WHERE id = :accountId")
+    @Query("UPDATE patient_accounts SET isPhoneVerified = :isVerified, verifiedBy = :verifiedBy, verifiedAtMillis = :verifiedAtMillis, otpUsed = :otpUsed WHERE id = :accountId")
     suspend fun setAccountVerificationStatus(
         accountId: String,
         isVerified: Boolean,
         verifiedBy: String,
         verifiedAtMillis: Long,
+        otpUsed: Boolean = isVerified,
+    )
+
+    @Query("UPDATE patient_accounts SET otpCode = :otpCode, otpCreatedAtMillis = :createdAtMillis, otpExpiresAtMillis = :expiresAtMillis, otpUsed = 0 WHERE id = :accountId")
+    suspend fun updateAccountOtp(
+        accountId: String,
+        otpCode: String,
+        createdAtMillis: Long,
+        expiresAtMillis: Long,
     )
 
     @Query("UPDATE patient_accounts SET fullName = :fullName, phone = :phone, password = :password WHERE id = :accountId")

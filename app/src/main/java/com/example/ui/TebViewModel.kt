@@ -847,6 +847,41 @@ class TebViewModel(
         }
     }
 
+    fun regenerateActiveAccountOtp() {
+        val acc = uiState.value.activeAccount ?: return
+        viewModelScope.launch {
+            val res = repository.regenerateAccountOtp(acc.id)
+            res.onSuccess {
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم توليد كود تفعيل جديد صالح لمدة 24 ساعة. اطلبه الآن عبر واتساب.",
+                        "✓ Generated a new 24h activation code. Request it via WhatsApp.",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر توليد كود جديد")
+            }
+        }
+    }
+
+    fun regenerateAccountOtpForAdmin(accountId: String) {
+        viewModelScope.launch {
+            val res = repository.regenerateAccountOtp(accountId)
+            res.onSuccess { updated ->
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم تجديد كود ${updated.fullName} (${updated.otpCode}) لمدة 24 ساعة",
+                        "✓ Renewed 24h OTP (${updated.otpCode}) for ${updated.fullName}",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر تجديد الكود")
+            }
+        }
+    }
+
     fun searchPatientsForClinicActivation(phoneQuery: String) {
         _clinicLastSearchQuery.value = phoneQuery
         viewModelScope.launch {
@@ -1150,7 +1185,7 @@ class TebViewModel(
             val result = repository.registerPatientAccount(fullName, phone, nationalId, password)
             result.onSuccess {
                 _openAccountForOtpEvents.tryEmit(Unit)
-                _snackbarMessages.tryEmit("تم إنشاء الحساب! اطلب كود التفعيل (OTP) عبر واتساب أو السكرتيرة.")
+                _snackbarMessages.tryEmit("تم إنشاء الحساب وتوليد كود تفعيل صالح لمدة 24 ساعة! اطلبه عبر واتساب أو من العيادة.")
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر إنشاء الحساب")
             }

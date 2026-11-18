@@ -526,6 +526,7 @@ fun TebAlHajayzahAppRoot(
                                         onUpdateLab = viewModel::updateLabByAdmin,
                                         onDeleteLab = viewModel::deleteLabByAdmin,
                                         onSetUserVerified = viewModel::setAccountVerifiedByAdmin,
+                                        onRegenerateUserOtp = viewModel::regenerateAccountOtpForAdmin,
                                         onUpdateUser = viewModel::updatePatientAccountByAdmin,
                                         onDeleteUser = viewModel::deletePatientAccountByAdmin,
                                         onShowMessage = showMessage,
@@ -559,6 +560,7 @@ fun TebAlHajayzahAppRoot(
             onRegister = viewModel::registerPatient,
             onLogoutPatient = viewModel::logoutPatient,
             onVerifyOtp = viewModel::verifyActiveAccountOtp,
+            onRegenerateOtp = viewModel::regenerateActiveAccountOtp,
             onTriggerHiddenAdmin = {
                 if (state.isAdminLoggedIn) {
                     viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN)

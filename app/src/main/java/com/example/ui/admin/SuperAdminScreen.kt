@@ -30,10 +30,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -71,11 +73,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.FamilyMemberEntity
@@ -159,12 +164,14 @@ fun SuperAdminDashboardScreen(
     onUpdateLab: (labId: String, labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
     onDeleteLab: (labId: String) -> Unit,
     onSetUserVerified: (accountId: String, verified: Boolean) -> Unit,
+    onRegenerateUserOtp: (accountId: String) -> Unit = {},
     onUpdateUser: (accountId: String, fullName: String, phone: String, newPassword: String?) -> Unit,
     onDeleteUser: (accountId: String) -> Unit,
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val isEn = state.isEn
     val currencyLabel = bi(isEn, state.brandConfig.currencyLabelAr, state.brandConfig.currencyLabelEn)
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -827,6 +834,21 @@ fun SuperAdminDashboardScreen(
                                 familyMembers = members,
                                 isEn = isEn,
                                 onToggleVerified = { onSetUserVerified(userAcc.id, !userAcc.isPhoneVerified) },
+                                onCopyOtp = {
+                                    if (userAcc.otpCode.length == 6) {
+                                        clipboardManager.setText(AnnotatedString(userAcc.otpCode))
+                                        onShowMessage(
+                                            bi(
+                                                isEn,
+                                                "تم نسخ كود التفعيل (${userAcc.otpCode}) الخاص بـ ${userAcc.fullName}",
+                                                "Copied OTP code (${userAcc.otpCode}) for ${userAcc.fullName}",
+                                            )
+                                        )
+                                    } else {
+                                        onRegenerateUserOtp(userAcc.id)
+                                    }
+                                },
+                                onRegenerateOtp = { onRegenerateUserOtp(userAcc.id) },
                                 onEdit = { userToEdit = userAcc },
                                 onDelete = { userToDelete = userAcc },
                             )
@@ -1012,11 +1034,25 @@ private fun AdminUserManageCard(
     familyMembers: List<FamilyMemberEntity>,
     isEn: Boolean = false,
     onToggleVerified: () -> Unit,
+    onCopyOtp: () -> Unit,
+    onRegenerateOtp: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val verified = account.isPhoneVerified
     val sourceLabel = if (verified) account.verifiedBy.ifBlank { "كود OTP" } else bi(isEn, "بانتظار التفعيل", "Pending")
+    val nowMillis = System.currentTimeMillis()
+    val isOtpExpired = !verified && (
+        account.otpCode.length != 6 ||
+            account.otpExpiresAtMillis <= 0L ||
+            nowMillis > account.otpExpiresAtMillis
+        )
+    val remMins = if (!verified && !isOtpExpired) {
+        (((account.otpExpiresAtMillis - nowMillis) + 59_999L) / 60_000L).coerceAtLeast(1L)
+    } else 0L
+    val remHours = remMins / 60L
+    val remM = remMins % 60L
+
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1049,6 +1085,60 @@ private fun AdminUserManageCard(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
+                }
+            }
+
+            if (!verified) {
+                Surface(
+                    color = Color(0xFFFFFBEB),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.7f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = bi(isEn, "كود التفعيل المرتبط بالحساب (24 ساعة):", "Account OTP Code (24h):"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF92400E),
+                            )
+                            Text(
+                                text = account.otpCode.ifBlank { "------" },
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 3.sp,
+                                color = TealPrimaryDark,
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = if (isOtpExpired) {
+                                    bi(isEn, "⏰ منتهي الصلاحية", "⏰ Expired")
+                                } else if (remHours > 0) {
+                                    bi(isEn, "⏳ صالح: ${remHours}س ${remM}د", "⏳ Valid: ${remHours}h ${remM}m")
+                                } else {
+                                    bi(isEn, "⏳ صالح: ${remM} دقيقة", "⏳ Valid: ${remM}m")
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isOtpExpired) SlotBookedText else SlotAvailableText,
+                            )
+                            if (isOtpExpired) {
+                                TextButton(
+                                    onClick = onRegenerateOtp,
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                ) {
+                                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(bi(isEn, "تجديد 24س", "Renew 24h"), style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1087,36 +1177,90 @@ private fun AdminUserManageCard(
                 }
             }
 
+            if (!verified) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = onToggleVerified,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SlotAvailableBorder,
+                            contentColor = Color.White,
+                        ),
+                        modifier = Modifier
+                            .weight(1.1f)
+                            .height(48.dp)
+                            .testTag("admin_user_verify_toggle_${account.id}"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.VerifiedUser,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = bi(isEn, "توثيق الحساب فوراً ✓", "Verify Account ✓"),
+                            maxLines = 1,
+                        )
+                    }
+                    Button(
+                        onClick = onCopyOtp,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1D4ED8),
+                            contentColor = Color.White,
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("admin_user_copy_otp_${account.id}"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = bi(isEn, "نسخ كود التفعيل", "Copy OTP Code"),
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Button(
-                    onClick = onToggleVerified,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (verified) SlotBookedBorder else SlotAvailableBorder,
-                    ),
-                    modifier = Modifier
-                        .weight(1.2f)
-                        .height(46.dp)
-                        .testTag("admin_user_verify_toggle_${account.id}"),
-                ) {
-                    Icon(
-                        imageVector = if (verified) Icons.Filled.Cancel else Icons.Filled.VerifiedUser,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (verified) bi(isEn, "إلغاء التفعيل", "Unverify") else bi(isEn, "✓ تفعيل يدوي", "✓ Manual Verify"),
-                        maxLines = 1,
-                    )
+                if (verified) {
+                    Button(
+                        onClick = onToggleVerified,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SlotBookedBorder,
+                        ),
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .height(48.dp)
+                            .testTag("admin_user_verify_toggle_${account.id}"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Cancel,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = bi(isEn, "إلغاء التفعيل", "Unverify"),
+                            maxLines = 1,
+                        )
+                    }
                 }
                 OutlinedButton(
                     onClick = onEdit,
                     modifier = Modifier
                         .weight(1f)
-                        .height(46.dp)
+                        .height(48.dp)
                         .testTag("admin_user_edit_${account.id}"),
                 ) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -1128,7 +1272,7 @@ private fun AdminUserManageCard(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = SlotBookedBorder),
                     border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
                     modifier = Modifier
-                        .height(46.dp)
+                        .height(48.dp)
                         .testTag("admin_user_delete_${account.id}"),
                 ) {
                     Icon(Icons.Filled.Delete, contentDescription = bi(isEn, "حذف", "Delete"), modifier = Modifier.size(16.dp))

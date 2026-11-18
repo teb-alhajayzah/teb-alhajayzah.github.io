@@ -448,6 +448,7 @@ fun AccountAndFamilyDialog(
     onRegister: (name: String, phone: String, nationalId: String, password: String) -> Unit,
     onLogoutPatient: () -> Unit = {},
     onVerifyOtp: (code: String) -> Unit,
+    onRegenerateOtp: () -> Unit = {},
     onTriggerHiddenAdmin: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -618,9 +619,68 @@ fun AccountAndFamilyDialog(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
 
+                                        val nowMillis = System.currentTimeMillis()
+                                        val isOtpExpired = activeAccount.otpCode.length != 6 ||
+                                            activeAccount.otpExpiresAtMillis <= 0L ||
+                                            nowMillis > activeAccount.otpExpiresAtMillis
+                                        if (isOtpExpired) {
+                                            Surface(
+                                                color = SlotBookedBg,
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, SlotBookedBorder),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                ) {
+                                                    Text(
+                                                        text = bi(
+                                                            isEn,
+                                                            "⏰ انتهت صلاحية كود التفعيل (مضى أكثر من 24 ساعة). اضغط لتوليد كود جديد:",
+                                                            "⏰ Your OTP code expired (> 24h). Tap below to generate a new code:",
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = SlotBookedText,
+                                                    )
+                                                    Button(
+                                                        onClick = onRegenerateOtp,
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = DelayWarningBorder,
+                                                            contentColor = Color.White,
+                                                        ),
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(48.dp)
+                                                            .testTag("otp_regenerate_button"),
+                                                    ) {
+                                                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text(bi(isEn, "توليد كود جديد", "Generate New Code"))
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            val remMins = (((activeAccount.otpExpiresAtMillis - nowMillis) + 59_999L) / 60_000L).coerceAtLeast(1L)
+                                            val remHours = remMins / 60L
+                                            val remM = remMins % 60L
+                                            val validityLabel = if (remHours > 0) {
+                                                bi(isEn, "⏳ الكود الخاص بحسابك صالح لمدة $remHours س و $remM د", "⏳ Your account OTP is valid for ${remHours}h ${remM}m")
+                                            } else {
+                                                bi(isEn, "⏳ الكود الخاص بحسابك صالح لمدة $remM دقيقة", "⏳ Your account OTP is valid for ${remM}m")
+                                            }
+                                            Text(
+                                                text = validityLabel,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = SlotAvailableText,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
+
                                         val cleanOtpDigits = otpWhatsappPhone.filter { it.isDigit() }.ifBlank { "01141271027" }
                                         val waOtpPhone = if (cleanOtpDigits.startsWith("2")) cleanOtpDigits else "2$cleanOtpDigits"
-                                        val waMessage = "مرحباً إدارة طب الحجايزة، أرجو تأكيد وتفعيل حسابي - الاسم: ${activeAccount.fullName} - رقم الهاتف: ${activeAccount.phone}"
+                                        val waMessage = "مرحباً إدارة طب الحجايزة، قمت بالتسجيل وأرجو توثيق حسابي أو إرسال كود التفعيل - الاسم: ${activeAccount.fullName} - الهاتف: ${activeAccount.phone}"
 
                                         Button(
                                             onClick = {
@@ -645,8 +705,8 @@ fun AccountAndFamilyDialog(
                                             Text(
                                                 bi(
                                                     isEn,
-                                                    "أرسل بياناتك على واتساب لتأكيد وتفعيل حسابك",
-                                                    "Send details on WhatsApp to verify & activate",
+                                                    "أرسل بياناتك على واتساب للتوثيق أو استلام الكود",
+                                                    "Send details on WhatsApp to verify or get code",
                                                 )
                                             )
                                         }

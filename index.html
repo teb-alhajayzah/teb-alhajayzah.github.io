@@ -448,6 +448,7 @@
     .btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .btn-primary { background: var(--teal); color: #fff; }
     .btn-green { background: var(--avail-border); color: #fff; }
+    .btn-blue { background: #1D4ED8; color: #fff; }
     .btn-warn { background: var(--warn-border); color: #fff; }
     .btn-outline {
       background: transparent;
@@ -1357,8 +1358,62 @@
         return list;
       }
 
+      const MASTER_ADMIN_OTP = '999000';
+      const OTP_TTL_MILLIS = 24 * 60 * 60 * 1000;
+
+      function generateUniqueAccountOtpCode(accountsList, poolList) {
+        const forbidden = new Set([MASTER_ADMIN_OTP]);
+        (accountsList || []).forEach((a) => {
+          if (a && a.otpCode) forbidden.add(String(a.otpCode));
+        });
+        (poolList || []).forEach((c) => {
+          if (c && c.code) forbidden.add(String(c.code));
+        });
+        for (let i = 0; i < 80; i++) {
+          const candidate = String(Math.floor(100000 + Math.random() * 900000));
+          if (!forbidden.has(candidate)) return candidate;
+        }
+        return String(Math.floor(100000 + Math.random() * 899999));
+      }
+
+      function assignFreshUserOtp(account, stateRef, nowOverride) {
+        if (!account) return account;
+        const now = typeof nowOverride === 'number' ? nowOverride : Date.now();
+        const accountsList = stateRef && stateRef.accounts ? stateRef.accounts : [];
+        const poolList = stateRef && stateRef.activationCodes ? stateRef.activationCodes : [];
+        account.otpCode = generateUniqueAccountOtpCode(accountsList, poolList);
+        account.otpCreatedAtMillis = now;
+        account.otpExpiresAtMillis = now + OTP_TTL_MILLIS;
+        account.otpUsed = false;
+        return account;
+      }
+
+      function isAccountOtpExpired(account, nowOverride) {
+        if (!account) return true;
+        const now = typeof nowOverride === 'number' ? nowOverride : Date.now();
+        if (!account.otpCode || !/^\d{6}$/.test(String(account.otpCode))) return true;
+        if (!account.otpExpiresAtMillis || account.otpExpiresAtMillis <= 0) return true;
+        return now > account.otpExpiresAtMillis;
+      }
+
+      function formatOtpRemainingDuration(expiresAtMillis, nowOverride) {
+        const now = typeof nowOverride === 'number' ? nowOverride : Date.now();
+        const diff = (expiresAtMillis || 0) - now;
+        if (diff <= 0) {
+          return bi('منتهي الصلاحية (تجاوز 24 ساعة)', 'Expired (> 24h)');
+        }
+        const totalMins = Math.max(1, Math.ceil(diff / 60000));
+        const hours = Math.floor(totalMins / 60);
+        const mins = totalMins % 60;
+        if (hours > 0) {
+          return bi('صالح لمدة ' + hours + ' س و ' + mins + ' د', 'Valid for ' + hours + 'h ' + mins + 'm');
+        }
+        return bi('صالح لمدة ' + mins + ' دقيقة', 'Valid for ' + mins + 'm');
+      }
+
       function generateUniqueCodeList(count, existingList, generatedBy) {
         const usedSet = new Set((existingList || []).map((c) => String(c.code)));
+        usedSet.add(MASTER_ADMIN_OTP);
         const now = Date.now();
         const created = [];
         let guard = 0;
@@ -1945,11 +2000,24 @@
                 delete parsed.config.smsGatePassword;
                 delete parsed.config.smsGateProxyUrl;
                 if (!Array.isArray(parsed.accounts)) parsed.accounts = [];
-                parsed.accounts = parsed.accounts.map((a) => Object.assign({
-                  isPhoneVerified: a && a.isPhoneVerified !== false,
-                  verifiedBy: a && a.verifiedBy ? a.verifiedBy : (a && a.isPhoneVerified !== false ? 'كود OTP' : ''),
-                  verifiedAtMillis: a && a.verifiedAtMillis ? a.verifiedAtMillis : 0
-                }, a));
+                if (!Array.isArray(parsed.activationCodes)) parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
+                let didAssignLegacyOtp = false;
+                parsed.accounts = parsed.accounts.map((a) => {
+                  const normalized = Object.assign({
+                    isPhoneVerified: a && a.isPhoneVerified !== false,
+                    verifiedBy: a && a.verifiedBy ? a.verifiedBy : (a && a.isPhoneVerified !== false ? 'كود OTP' : ''),
+                    verifiedAtMillis: a && a.verifiedAtMillis ? a.verifiedAtMillis : 0,
+                    otpCode: a && a.otpCode ? toAsciiDigits(a.otpCode).replace(/\D/g, '') : '',
+                    otpCreatedAtMillis: a && a.otpCreatedAtMillis ? a.otpCreatedAtMillis : 0,
+                    otpExpiresAtMillis: a && a.otpExpiresAtMillis ? a.otpExpiresAtMillis : 0,
+                    otpUsed: Boolean(a && a.otpUsed)
+                  }, a);
+                  if (!normalized.isPhoneVerified && (!normalized.otpCode || normalized.otpCode.length !== 6)) {
+                    assignFreshUserOtp(normalized, parsed);
+                    didAssignLegacyOtp = true;
+                  }
+                  return normalized;
+                });
                 if (parsed.account && parsed.account.id) {
                   const synced = parsed.accounts.find((a) => a.id === parsed.account.id);
                   if (synced) parsed.account = synced;
@@ -1959,10 +2027,9 @@
                 if (!Array.isArray(parsed.records)) parsed.records = [];
                 if (!Array.isArray(parsed.notifications)) parsed.notifications = [];
                 if (!Array.isArray(parsed.blockedPhones)) parsed.blockedPhones = [];
-                if (!Array.isArray(parsed.activationCodes)) parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
                 if (!parsed.doctorFavorites || typeof parsed.doctorFavorites !== 'object') parsed.doctorFavorites = {};
                 parsed.adminSecurity = Object.assign({ failedAttempts: 0, lockoutUntilMillis: 0 }, parsed.adminSecurity || {});
-                if (seedBaselineRealDoctorsOnce(parsed)) {
+                if (seedBaselineRealDoctorsOnce(parsed) || didAssignLegacyOtp) {
                   saveState(parsed);
                 }
                 return parsed;
@@ -2307,8 +2374,6 @@
         return created.length;
       }
 
-      const MASTER_ADMIN_OTP = '999000';
-
       function getVerificationSourceLabel(account) {
         if (!account || account.isPhoneVerified === false) {
           return bi('غير موثق', 'Unverified');
@@ -2338,6 +2403,7 @@
           account.isPhoneVerified = true;
           account.verifiedBy = source;
           account.verifiedAtMillis = now;
+          account.otpUsed = true;
           const accDigits = normalizePhoneDigits(account.phone);
           const idx = (db.accounts || []).findIndex((a) =>
             a.id === account.id || (accDigits && normalizePhoneDigits(a.phone) === accDigits)
@@ -2346,6 +2412,7 @@
             db.accounts[idx].isPhoneVerified = true;
             db.accounts[idx].verifiedBy = source;
             db.accounts[idx].verifiedAtMillis = now;
+            db.accounts[idx].otpUsed = true;
             if (db.account && (db.account.id === db.accounts[idx].id || normalizePhoneDigits(db.account.phone) === accDigits)) {
               db.account = db.accounts[idx];
             }
@@ -2353,12 +2420,45 @@
             db.account.isPhoneVerified = true;
             db.account.verifiedBy = source;
             db.account.verifiedAtMillis = now;
+            db.account.otpUsed = true;
           }
         }
         ui.otpChallenge = null;
       }
 
-      function verifyAndBurnActivationCode(account, rawCode) {
+      function copyTextToClipboard(text, onDone) {
+        const str = String(text || '');
+        if (!str) return;
+        if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(str).then(function () {
+            if (onDone) onDone(true);
+          }).catch(function () {
+            fallbackCopyText(str, onDone);
+          });
+        } else {
+          fallbackCopyText(str, onDone);
+        }
+      }
+
+      function fallbackCopyText(str, onDone) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = str;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          if (onDone) onDone(Boolean(ok));
+        } catch (e) {
+          if (onDone) onDone(false);
+        }
+      }
+
+      function verifyAndBurnActivationCode(account, rawCode, nowOverride) {
+        const now = typeof nowOverride === 'number' ? nowOverride : Date.now();
         const clean = toAsciiDigits(rawCode).replace(/\D/g, '');
         if (clean.length !== 6) {
           return { ok: false, error: bi('يرجى إدخال كود التفعيل المكون من 6 أرقام', 'Please enter the 6-digit OTP code') };
@@ -2368,10 +2468,45 @@
           saveState(db);
           return { ok: true, usedMaster: true };
         }
+
+        // 1) Check the unique 24-hour OTP code bound to this specific user account
+        const boundAccount = account
+          ? ((db.accounts || []).find((a) => a.id === account.id) || account)
+          : null;
+        if (boundAccount && boundAccount.otpCode) {
+          const boundCode = toAsciiDigits(boundAccount.otpCode).replace(/\D/g, '');
+          if (boundCode === clean) {
+            if (boundAccount.otpUsed) {
+              return {
+                ok: false,
+                error: bi(
+                  'تم استخدام هذا الكود من قبل. إذا احتجت كوداً جديداً اضغط "توليد كود جديد".',
+                  'This code has already been used. Click "Generate New Code" if needed.'
+                )
+              };
+            }
+            if (!boundAccount.otpExpiresAtMillis || now > boundAccount.otpExpiresAtMillis) {
+              return {
+                ok: false,
+                expired: true,
+                error: bi(
+                  'انتهت صلاحية كود التفعيل الخاص بحسابك (مرت أكثر من 24 ساعة). اضغط على زر "توليد كود جديد".',
+                  'Your account activation code has expired (> 24 hours). Click "Generate New Code".'
+                )
+              };
+            }
+            boundAccount.otpUsed = true;
+            markAccountVerified(boundAccount, 'كود OTP');
+            saveState(db);
+            return { ok: true, usedMaster: false, usedUserOtp: true };
+          }
+        }
+
+        // 2) Fallback: Check shared Admin batch single-use codes pool
         const codes = db.activationCodes || [];
         const found = codes.find((c) => toAsciiDigits(c.code).replace(/\D/g, '') === clean);
         if (!found) {
-          return { ok: false, error: bi('كود التحقق غير صحيح أو غير مطابق. تأكد من الكود أو تواصل على واتساب.', 'Verification code is invalid. Verify the code or contact WhatsApp.') };
+          return { ok: false, error: bi('كود التفعيل غير صحيح أو غير مطابق لكود حسابك. تأكد من الكود أو تواصل على واتساب.', 'Verification code does not match your account code. Contact Admin on WhatsApp.') };
         }
         if (found.isUsed) {
           return {
@@ -2385,7 +2520,7 @@
         found.isUsed = true;
         found.usedByName = (account && account.fullName) ? account.fullName : bi('مريض', 'Patient');
         found.usedByPhone = (account && account.phone) ? account.phone : '';
-        found.usedAtMillis = Date.now();
+        found.usedAtMillis = now;
         markAccountVerified(account, 'كود OTP');
         saveState(db);
         return { ok: true, usedMaster: false };
@@ -3701,8 +3836,8 @@
                     '<thead><tr>' +
                       '<th>' + esc(bi('الاسم الكامل', 'Full Name')) + '</th>' +
                       '<th>' + esc(bi('رقم الهاتف', 'Phone')) + '</th>' +
-                      '<th>' + esc(bi('أفراد الأسرة المسجلين', 'Family Members')) + '</th>' +
-                      '<th>' + esc(bi('حالة الحساب', 'Status')) + '</th>' +
+                      '<th>' + esc(bi('أفراد الأسرة', 'Family')) + '</th>' +
+                      '<th>' + esc(bi('حالة الحساب وكود التفعيل (24 ساعة)', 'Status & 24h OTP Code')) + '</th>' +
                       '<th>' + esc(bi('جهة التفعيل', 'Verified By')) + '</th>' +
                       '<th>' + esc(bi('إجراءات الإدارة', 'Admin Actions')) + '</th>' +
                     '</tr></thead>' +
@@ -3714,17 +3849,44 @@
                           ? famList.map((m) => esc(m.fullName) + ' <span style="color:var(--text-muted);font-size:0.78rem;">(' + esc(m.relation.split(' ')[0]) + ')</span>').join('<br/>')
                           : '<span style="color:var(--text-muted);">—</span>';
                         const verSource = isVer ? getVerificationSourceLabel(acc) : '—';
+                        const nowMs = Date.now();
+                        const otpExpired = isAccountOtpExpired(acc, nowMs);
+                        const otpRemLabel = formatOtpRemainingDuration(acc.otpExpiresAtMillis, nowMs);
+                        const otpAdminCell = isVer
+                          ? '<span class="badge badge-avail">' + esc(bi('موثق ✓', 'Verified ✓')) + '</span>'
+                          : '<div style="display:flex;flex-direction:column;gap:4px;">' +
+                              '<span class="badge badge-booked" style="width:fit-content;">' + esc(bi('غير موثق', 'Unverified')) + '</span>' +
+                              '<div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;padding:4px 8px;">' +
+                                '<div style="font-size:0.74rem;color:var(--warn-text);">' + esc(bi('كود التفعيل:', 'OTP Code:')) + '</div>' +
+                                '<strong dir="ltr" style="font-size:1rem;letter-spacing:2px;color:var(--teal-text);">' + esc(acc.otpCode || '------') + '</strong>' +
+                                '<div style="font-size:0.72rem;color:' + (otpExpired ? 'var(--booked-text)' : 'var(--avail-text)') + ';font-weight:700;">' +
+                                  (otpExpired ? '⏰ ' : '⏳ ') + esc(otpRemLabel) +
+                                '</div>' +
+                              '</div>' +
+                            '</div>';
                         return '<tr>' +
                           '<td><strong>' + esc(acc.fullName) + '</strong>' + (acc.nationalId ? '<div style="font-size:0.76rem;color:var(--text-muted);" dir="ltr">' + esc(acc.nationalId) + '</div>' : '') + '</td>' +
                           '<td dir="ltr"><strong>' + esc(acc.phone) + '</strong></td>' +
                           '<td>' + famSummary + '</td>' +
-                          '<td><span class="badge ' + (isVer ? 'badge-avail' : 'badge-booked') + '">' + esc(isVer ? bi('موثق ✓', 'Verified ✓') : bi('غير موثق', 'Unverified')) + '</span></td>' +
+                          '<td>' + otpAdminCell + '</td>' +
                           '<td><span style="font-weight:700;color:' + (isVer ? 'var(--teal-text)' : 'var(--text-muted)') + ';">' + esc(verSource) + '</span></td>' +
                           '<td>' +
                             '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-                              '<button class="btn ' + (isVer ? 'btn-outline' : 'btn-green') + '" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">' +
-                                esc(isVer ? bi('إلغاء التفعيل', 'Unverify') : bi('✓ تفعيل يدوي', '✓ Manual Verify')) +
-                              '</button>' +
+                              (!isVer
+                                ? '<button class="btn btn-green" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">' +
+                                    esc(bi('توثيق الحساب فوراً ✓', 'Verify Account Now ✓')) +
+                                  '</button>' +
+                                  '<button class="btn btn-blue" type="button" data-admin-copy-otp="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">📋 ' +
+                                    esc(bi('نسخ كود التفعيل', 'Copy OTP Code')) +
+                                  '</button>' +
+                                  (otpExpired
+                                    ? '<button class="btn btn-outline" type="button" data-admin-regen-otp="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🔄 ' +
+                                        esc(bi('تجديد 24س', 'Renew 24h')) +
+                                      '</button>'
+                                    : '')
+                                : '<button class="btn btn-outline" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">' +
+                                    esc(bi('إلغاء التفعيل', 'Unverify')) +
+                                  '</button>') +
                               '<button class="btn btn-outline" type="button" data-admin-edit-user="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">✏️ ' + esc(bi('تعديل', 'Edit')) + '</button>' +
                               '<button class="btn btn-danger-outline" type="button" data-admin-delete-user="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🗑️ ' + esc(bi('حذف', 'Delete')) + '</button>' +
                             '</div>' +
@@ -4089,20 +4251,29 @@
           const otpPhoneDigits = normalizePhoneDigits((db.config && db.config.otpWhatsappPhone) || DEFAULT_CONFIG.otpWhatsappPhone || '01141271027');
           const otpWaPhone = otpPhoneDigits.startsWith('2') ? otpPhoneDigits : ('2' + otpPhoneDigits);
           const otpWaText = hasAcc
-            ? encodeURIComponent('مرحباً إدارة طب الحجايزة، أرجو تأكيد وتفعيل حسابي - الاسم: ' + db.account.fullName + ' - رقم الهاتف: ' + db.account.phone)
+            ? encodeURIComponent('مرحباً إدارة طب الحجايزة، قمت بالتسجيل وأرجو توثيق حسابي أو إرسال كود التفعيل - الاسم: ' + db.account.fullName + ' - الهاتف: ' + db.account.phone)
             : '';
+
+          const otpExpired = hasAcc && !isVerified ? isAccountOtpExpired(db.account) : false;
+          const otpValidityText = hasAcc && !isVerified ? formatOtpRemainingDuration(db.account.otpExpiresAtMillis) : '';
 
           const otpCardHtml = (hasAcc && !isVerified)
             ? '<div class="card" style="background:var(--warn-bg);border:1.5px solid var(--warn-border);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                '<div style="font-weight:800;color:var(--warn-text);">🔐 ' + esc(bi('تفعيل الحساب بكود الاستخدام الواحد (6 أرقام)', 'Activate Account (6-digit OTP)')) + '</div>' +
+                '<div style="font-weight:800;color:var(--warn-text);">🔐 ' + esc(bi('تفعيل الحساب بكود التفعيل المرتبط بحسابك (صالح 24 ساعة)', 'Activate Account (24h Bound OTP Code)')) + '</div>' +
                 '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.55;">' +
                   esc(bi(
-                    'لتفعيل حسابك فوراً وحجز المواعيد، اطلب كود التفعيل عبر واتساب أو اطلب من الطبيب / السكرتيرة تفعيل رقم هاتفك مباشرة في العيادة.',
-                    'Request your 6-digit activation code via WhatsApp or ask your clinic doctor/secretary to verify your phone directly.'
+                    'لتفعيل حسابك فوراً وحجز المواعيد، اطلب توثيق حسابك أو إرسال كود التفعيل عبر واتساب، أو اطلب من الطبيب / السكرتيرة تفعيل رقم هاتفك مباشرة في العيادة.',
+                    'Request account verification or your 6-digit activation code via WhatsApp, or ask your clinic doctor/secretary to verify your phone directly.'
                   )) +
                 '</div>' +
+                (otpExpired
+                  ? '<div style="background:var(--booked-bg);border:1px solid var(--booked-border);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;">' +
+                      '<div style="font-size:0.82rem;font-weight:700;color:var(--booked-text);">⏰ ' + esc(bi('انتهت صلاحية كود التفعيل (مضى أكثر من 24 ساعة). اضغط لتوليد كود جديد.', 'Your OTP code expired (> 24 hours). Click below to generate a new code.')) + '</div>' +
+                      '<button class="btn btn-warn btn-block" id="btnRegenUserOtp" type="button" style="min-height:42px;">🔄 ' + esc(bi('توليد كود جديد', 'Generate New Code')) + '</button>' +
+                    '</div>'
+                  : '<div style="font-size:0.8rem;font-weight:700;color:var(--avail-text);">⏳ ' + esc(bi('حالة الكود الخاص بحسابك: ', 'Your account OTP status: ')) + esc(otpValidityText) + '</div>') +
                 '<a class="btn btn-whatsapp btn-block" id="btnOtpWhatsappRequest" href="https://wa.me/' + esc(otpWaPhone) + '?text=' + otpWaText + '" target="_blank" rel="noopener">💬 ' +
-                  esc(bi('أرسل بياناتك على واتساب لتأكيد وتفعيل حسابك', 'Send Your Info via WhatsApp to Verify & Activate Your Account')) +
+                  esc(bi('أرسل بياناتك على واتساب للتوثيق أو استلام الكود', 'Send Your Info via WhatsApp to Verify or Get Code')) +
                 '</a>' +
                 '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="' + esc(bi('أدخل كود التفعيل (6 أرقام)', 'Enter 6-digit OTP code')) + '" dir="ltr" />' +
                 (ui.otpErrorMsg
@@ -4225,6 +4396,20 @@
             };
           }
 
+          const regenOtpBtn = document.getElementById('btnRegenUserOtp');
+          if (regenOtpBtn) {
+            regenOtpBtn.onclick = function () {
+              if (!db.account) return;
+              assignFreshUserOtp(db.account, db);
+              const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id);
+              if (idx >= 0) db.accounts[idx] = db.account;
+              saveState(db);
+              ui.otpErrorMsg = '';
+              showToast(bi('تم توليد كود تفعيل جديد صالح لمدة 24 ساعة. اطلبه الآن عبر واتساب.', 'Generated a new 24h activation code. Request it via WhatsApp.'));
+              refreshAccountModal();
+            };
+          }
+
           const regTabBtn = document.getElementById('btnShowRegTab');
           if (regTabBtn) {
             regTabBtn.onclick = function () {
@@ -4264,7 +4449,8 @@
               ui.otpSuccessMsg = '';
               ui.otpErrorMsg = '';
               const newAccId = 'acc_' + Date.now();
-              const newAcc = {
+              const nowMs = Date.now();
+              const newAcc = assignFreshUserOtp({
                 id: newAccId,
                 fullName: fullName,
                 phone: phone,
@@ -4273,9 +4459,9 @@
                 isPhoneVerified: false,
                 verifiedBy: '',
                 verifiedAtMillis: 0
-              };
+              }, db, nowMs);
               const newSelfMem = {
-                id: 'mem_' + Date.now(),
+                id: 'mem_' + nowMs,
                 accountId: newAccId,
                 fullName: fullName,
                 relation: 'نفسي (صاحب الحساب)',
@@ -4289,7 +4475,7 @@
 
               saveState(db);
               authMode = 'NONE';
-              showToast(bi('تم إنشاء الحساب! اطلب كود التفعيل عبر واتساب أو فعّله من العيادة.', 'Account created! Verify via WhatsApp OTP or directly at the clinic.'));
+              showToast(bi('تم إنشاء الحساب وتوليد كود تفعيل صالح لمدة 24 ساعة! اطلبه عبر واتساب أو فعّل من العيادة.', 'Account created with a 24h activation code! Request it via WhatsApp or verify at clinic.'));
               refreshAccountModal();
               renderApp();
             };
@@ -5818,18 +6004,47 @@
               target.isPhoneVerified = false;
               target.verifiedBy = '';
               target.verifiedAtMillis = 0;
+              assignFreshUserOtp(target, db);
               if (db.account && db.account.id === target.id) {
-                db.account.isPhoneVerified = false;
-                db.account.verifiedBy = '';
-                db.account.verifiedAtMillis = 0;
+                db.account = target;
               }
               saveState(db);
               showToast(bi('تم إلغاء تفعيل حساب ' + target.fullName, 'Unverified ' + target.fullName));
             } else {
               markAccountVerified(target, 'الإدارة');
               saveState(db);
-              showToast(bi('تم تفعيل حساب ' + target.fullName + ' يدوياً بواسطة الإدارة', 'Manually verified ' + target.fullName));
+              showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' فوراً بواسطة الإدارة', 'Verified ' + target.fullName + ' immediately'));
             }
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-admin-copy-otp]').forEach((btn) => {
+          btn.onclick = function () {
+            const accId = btn.getAttribute('data-admin-copy-otp');
+            const target = (db.accounts || []).find((a) => a.id === accId);
+            if (!target) return;
+            if (isAccountOtpExpired(target)) {
+              assignFreshUserOtp(target, db);
+              if (db.account && db.account.id === target.id) db.account = target;
+              saveState(db);
+              renderApp();
+            }
+            copyTextToClipboard(target.otpCode, function () {
+              showToast(bi('تم نسخ كود التفعيل (' + target.otpCode + ') الخاص بـ ' + target.fullName + ' الصالح لمدة 24 ساعة', 'Copied OTP code (' + target.otpCode + ') for ' + target.fullName));
+            });
+          };
+        });
+
+        document.querySelectorAll('[data-admin-regen-otp]').forEach((btn) => {
+          btn.onclick = function () {
+            const accId = btn.getAttribute('data-admin-regen-otp');
+            const target = (db.accounts || []).find((a) => a.id === accId);
+            if (!target) return;
+            assignFreshUserOtp(target, db);
+            if (db.account && db.account.id === target.id) db.account = target;
+            saveState(db);
+            showToast(bi('تم تجديد كود ' + target.fullName + ' (' + target.otpCode + ') لمدة 24 ساعة', 'Renewed 24h OTP (' + target.otpCode + ')'));
             renderApp();
           };
         });

@@ -37,6 +37,10 @@ data class PatientAccountEntity(
     val isPhoneVerified: Boolean = true,
     val verifiedBy: String = "",
     val verifiedAtMillis: Long = 0L,
+    val otpCode: String = "",
+    val otpCreatedAtMillis: Long = 0L,
+    val otpExpiresAtMillis: Long = 0L,
+    val otpUsed: Boolean = false,
 )
 
 @Entity(tableName = "family_members")

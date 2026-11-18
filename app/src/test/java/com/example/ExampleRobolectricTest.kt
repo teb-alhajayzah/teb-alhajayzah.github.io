@@ -546,4 +546,86 @@ class ExampleRobolectricTest {
         assertFalse(repository.allAccountsFlow.first().any { it.id == accB.id })
         assertTrue(repository.allFamilyMembersFlow.first().none { it.accountId == accB.id })
     }
+
+    @Test
+    fun perUser24HourOtpAutoGenerationExpiryAndRegenerationWork() = runBlocking {
+        repository.ensureSeeded()
+        val t0 = 10_000_000_000L
+
+        // 1) Registration auto-generates a unique 6-digit OTP valid for 24h
+        val user1 = repository.registerPatientAccount(
+            fullName = "خالد عبد الرحمن",
+            phone = "01022334455",
+            nationalId = "",
+            password = "pass1",
+            nowMillis = t0,
+        ).getOrThrow()
+
+        assertEquals(6, user1.otpCode.length)
+        assertTrue(user1.otpCode.all { it.isDigit() })
+        assertFalse(user1.otpCode == TebRepository.MASTER_ADMIN_OTP)
+        assertEquals(t0 + TebRepository.OTP_TTL_MILLIS, user1.otpExpiresAtMillis)
+        assertFalse(user1.otpUsed)
+        assertFalse(user1.isPhoneVerified)
+
+        // 2) Attempting verification after 25 hours (> 24h TTL) must fail
+        val expiredRes = repository.verifyAndBurnActivationCode(
+            accountId = user1.id,
+            accountName = user1.fullName,
+            accountPhone = user1.phone,
+            enteredCode = user1.otpCode,
+            nowMillis = t0 + TebRepository.OTP_TTL_MILLIS + 3_600_000L,
+        )
+        assertTrue(expiredRes.isFailure)
+        assertFalse(repository.allAccountsFlow.first().first { it.id == user1.id }.isPhoneVerified)
+
+        // 3) Regenerate fresh 24h OTP and verify within window -> succeeds and burns code
+        val tRegen = t0 + TebRepository.OTP_TTL_MILLIS + 3_700_000L
+        val regenerated = repository.regenerateAccountOtp(user1.id, nowMillis = tRegen).getOrThrow()
+        assertEquals(6, regenerated.otpCode.length)
+        assertEquals(tRegen + TebRepository.OTP_TTL_MILLIS, regenerated.otpExpiresAtMillis)
+        assertFalse(regenerated.otpUsed)
+
+        val verifyOk = repository.verifyAndBurnActivationCode(
+            accountId = user1.id,
+            accountName = user1.fullName,
+            accountPhone = user1.phone,
+            enteredCode = regenerated.otpCode,
+            nowMillis = tRegen + 60_000L,
+        )
+        assertTrue(verifyOk.isSuccess)
+        val updatedUser1 = repository.allAccountsFlow.first().first { it.id == user1.id }
+        assertTrue(updatedUser1.isPhoneVerified)
+        assertTrue(updatedUser1.otpUsed)
+        assertEquals("كود OTP", updatedUser1.verifiedBy)
+
+        // 4) Unverified user2 cannot use user1's bound OTP code, must use their own or 999000
+        val user2 = repository.registerPatientAccount(
+            fullName = "هبة سعيد محمد",
+            phone = "01066778899",
+            nationalId = "",
+            password = "pass2",
+            nowMillis = tRegen,
+        ).getOrThrow()
+        assertFalse(user2.otpCode == regenerated.otpCode)
+        assertTrue(
+            repository.verifyAndBurnActivationCode(
+                accountId = user2.id,
+                accountName = user2.fullName,
+                accountPhone = user2.phone,
+                enteredCode = regenerated.otpCode,
+                nowMillis = tRegen + 120_000L,
+            ).isFailure
+        )
+        assertTrue(
+            repository.verifyAndBurnActivationCode(
+                accountId = user2.id,
+                accountName = user2.fullName,
+                accountPhone = user2.phone,
+                enteredCode = user2.otpCode,
+                nowMillis = tRegen + 120_000L,
+            ).isSuccess
+        )
+        assertTrue(repository.allAccountsFlow.first().first { it.id == user2.id }.isPhoneVerified)
+    }
 }
