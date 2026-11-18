@@ -71,6 +71,8 @@ data class TebUiState(
     val searchQuery: String = "",
     val brandConfig: PlatformBrandConfig = AppConfig.defaultBrand,
     val activeAccount: PatientAccountEntity? = null,
+    val allAccounts: List<PatientAccountEntity> = emptyList(),
+    val allFamilyMembers: List<FamilyMemberEntity> = emptyList(),
     val familyMembers: List<FamilyMemberEntity> = emptyList(),
     val activeMemberId: String = "",
     val doctors: List<ClinicDoctorEntity> = emptyList(),
@@ -82,6 +84,7 @@ data class TebUiState(
     val loggedInDoctorId: String? = null,
     val loggedInLabId: String? = null,
     val labSearchResults: List<LabPatientSearchResult> = emptyList(),
+    val clinicPatientSearchResults: List<LabPatientSearchResult> = emptyList(),
     val isAdminLoggedIn: Boolean = false,
     val adminFailedAttempts: Int = 0,
     val adminLockoutUntilMillis: Long = 0L,
@@ -93,6 +96,7 @@ data class TebUiState(
     val activationCodes: List<ActivationOtpCodeEntity> = emptyList(),
     val isRefreshing: Boolean = false,
     val isBookingSubmitting: Boolean = false,
+    val hasNewDataBanner: Boolean = false,
 ) {
     val isEn: Boolean
         get() = appLanguage == AppLanguage.EN
@@ -169,6 +173,10 @@ class TebViewModel(
     private val _isRefreshing = MutableStateFlow(false)
     private val _isBookingSubmitting = MutableStateFlow(false)
     private val _labSearchResults = MutableStateFlow<List<LabPatientSearchResult>>(emptyList())
+    private val _clinicPatientSearchResults = MutableStateFlow<List<LabPatientSearchResult>>(emptyList())
+    private val _clinicLastSearchQuery = MutableStateFlow("")
+    private val _hasNewDataBanner = MutableStateFlow(false)
+    private var _lastLiveWebSignature: String? = null
 
     private val _snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarMessages = _snackbarMessages.asSharedFlow()
@@ -183,13 +191,20 @@ class TebViewModel(
         }
         refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
         viewModelScope.launch {
+            val (sig, _) = repository.checkLiveWebHasUpdate(AppConfig.defaultBrand.liveWebUrl, null)
+            _lastLiveWebSignature = sig
             while (isActive) {
-                delay(30_000L)
-                val apiUrl = uiState.value.brandConfig.medicationsApiUrl
-                if (apiUrl.isNotBlank()) {
-                    val result = repository.loadEgyptianMedications(apiUrl)
+                delay(25_000L)
+                val cfg = uiState.value.brandConfig
+                if (cfg.medicationsApiUrl.isNotBlank()) {
+                    val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
                     _medications.value = result.medications
                     _isLiveMedicationsApi.value = result.isLiveRemote
+                }
+                val (newSig, changed) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
+                _lastLiveWebSignature = newSig
+                if (changed) {
+                    _hasNewDataBanner.value = true
                 }
             }
         }
@@ -217,6 +232,7 @@ class TebViewModel(
         val activeMemberId: String,
         val accounts: List<PatientAccountEntity>,
         val familyMembers: List<FamilyMemberEntity>,
+        val allFamilyMembers: List<FamilyMemberEntity>,
         val loggedInDoctorId: String?,
         val loggedInLabId: String?,
         val adminFailedAttempts: Int,
@@ -269,8 +285,9 @@ class TebViewModel(
         repository.activeMemberIdFlow,
         repository.allAccountsFlow,
         activeFamilyFlow,
-    ) { activeAccountId, activeMemberId, accounts, familyMembers ->
-        listOf(activeAccountId, activeMemberId, accounts, familyMembers)
+        repository.allFamilyMembersFlow,
+    ) { activeAccountId, activeMemberId, accounts, familyMembers, allMembers ->
+        listOf(activeAccountId, activeMemberId, accounts, familyMembers, allMembers)
     }
 
     private val authCredsFlow = combine(
@@ -288,6 +305,7 @@ class TebViewModel(
             activeMemberId = ids[1] as String,
             accounts = ids[2] as List<PatientAccountEntity>,
             familyMembers = ids[3] as List<FamilyMemberEntity>,
+            allFamilyMembers = ids[4] as List<FamilyMemberEntity>,
             loggedInDoctorId = creds[0] as String?,
             loggedInLabId = creds[1] as String?,
             adminFailedAttempts = creds[2] as Int,
@@ -328,8 +346,10 @@ class TebViewModel(
         repository.activationCodesFlow,
         _labSearchResults,
         repository.appLanguageFlow,
-    ) { activationCodes, labResults, appLang ->
-        Triple(activationCodes, labResults, appLang)
+        _clinicPatientSearchResults,
+        _hasNewDataBanner,
+    ) { activationCodes, labResults, appLang, clinicResults, hasBanner ->
+        listOf(activationCodes, labResults, appLang, clinicResults, hasBanner)
     }
 
     val uiState: StateFlow<TebUiState> = combine(
@@ -349,9 +369,18 @@ class TebViewModel(
             null
         }
 
+        @Suppress("UNCHECKED_CAST")
+        val activationCodes = adminOps[0] as List<ActivationOtpCodeEntity>
+        @Suppress("UNCHECKED_CAST")
+        val labResults = adminOps[1] as List<LabPatientSearchResult>
+        val appLang = adminOps[2] as AppLanguage
+        @Suppress("UNCHECKED_CAST")
+        val clinicResults = adminOps[3] as List<LabPatientSearchResult>
+        val hasBanner = adminOps[4] as Boolean
+
         TebUiState(
             isReady = sel.isSeeded,
-            appLanguage = adminOps.third,
+            appLanguage = appLang,
             roleMode = sel.roleMode,
             staffPortalTab = sel.staffPortalTab,
             patientTab = sel.patientTab,
@@ -360,6 +389,8 @@ class TebViewModel(
             searchQuery = sel.searchQuery,
             brandConfig = sel.brandConfig,
             activeAccount = activeAccount,
+            allAccounts = acc.accounts,
+            allFamilyMembers = acc.allFamilyMembers,
             familyMembers = if (activeAccount != null) acc.familyMembers else emptyList(),
             activeMemberId = if (activeAccount != null) acc.activeMemberId else "",
             doctors = clinic.doctors,
@@ -370,7 +401,8 @@ class TebViewModel(
             blockedPhones = clinic.blockedPhones,
             loggedInDoctorId = acc.loggedInDoctorId,
             loggedInLabId = acc.loggedInLabId,
-            labSearchResults = adminOps.second,
+            labSearchResults = labResults,
+            clinicPatientSearchResults = clinicResults,
             isAdminLoggedIn = sel.isAdminLoggedIn,
             adminFailedAttempts = acc.adminFailedAttempts,
             adminLockoutUntilMillis = acc.adminLockoutUntilMillis,
@@ -379,9 +411,10 @@ class TebViewModel(
             medications = medBundle.medications,
             isLiveMedicationsApi = medBundle.isLiveRemote,
             favoriteMedsByDoctor = favMap,
-            activationCodes = adminOps.first,
+            activationCodes = activationCodes,
             isRefreshing = medBundle.isRefreshing,
             isBookingSubmitting = medBundle.isBookingSubmitting,
+            hasNewDataBanner = hasBanner,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -395,15 +428,22 @@ class TebViewModel(
         }
     }
 
+    fun dismissNewDataBanner() {
+        _hasNewDataBanner.value = false
+    }
+
     fun smartRefreshData() {
         if (_isRefreshing.value) return
         viewModelScope.launch {
             _isRefreshing.value = true
+            _hasNewDataBanner.value = false
             try {
-                val apiUrl = uiState.value.brandConfig.medicationsApiUrl
-                val result = repository.loadEgyptianMedications(apiUrl)
+                val cfg = uiState.value.brandConfig
+                val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
                 _medications.value = result.medications
                 _isLiveMedicationsApi.value = result.isLiveRemote
+                val (newSig, _) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
+                _lastLiveWebSignature = newSig
                 _snackbarMessages.tryEmit(
                     bi(
                         uiState.value.isEn,
@@ -794,10 +834,94 @@ class TebViewModel(
                 enteredCode = enteredCode,
             )
             result.onSuccess {
-                _snackbarMessages.tryEmit("✓ تم تأكيد وتفعيل الحساب بنجاح! يمكنك الحجز الآن.")
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم تأكيد وتفعيل الحساب بنجاح! (كود OTP) يمكنك الحجز الآن.",
+                        "✓ Account verified & activated! You can book now.",
+                    )
+                )
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "كود التفعيل غير صحيح")
             }
+        }
+    }
+
+    fun searchPatientsForClinicActivation(phoneQuery: String) {
+        _clinicLastSearchQuery.value = phoneQuery
+        viewModelScope.launch {
+            val results = repository.searchAccountsByPhoneForClinic(phoneQuery)
+            _clinicPatientSearchResults.value = results
+            if (results.isEmpty() && phoneQuery.trim().length >= 3) {
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "لم يتم العثور على مريض مسجل بهذا الرقم",
+                        "No registered patient found matching this phone",
+                    )
+                )
+            }
+        }
+    }
+
+    fun activatePatientByClinic(accountId: String) {
+        val doc = uiState.value.loggedInDoctor ?: return
+        viewModelScope.launch {
+            val res = repository.activatePatientByClinic(accountId, doc.doctorName)
+            res.onSuccess { updatedAcc ->
+                if (_clinicLastSearchQuery.value.isNotBlank()) {
+                    _clinicPatientSearchResults.value = repository.searchAccountsByPhoneForClinic(_clinicLastSearchQuery.value)
+                }
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم تفعيل حساب ${updatedAcc.fullName} بنجاح بواسطة ${updatedAcc.verifiedBy}",
+                        "✓ Activated ${updatedAcc.fullName} via ${updatedAcc.verifiedBy}",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر تفعيل الحساب")
+            }
+        }
+    }
+
+    fun setAccountVerifiedByAdmin(accountId: String, verified: Boolean) {
+        viewModelScope.launch {
+            repository.setAccountVerificationByAdmin(accountId, verified)
+            _snackbarMessages.tryEmit(
+                if (verified) {
+                    bi(uiState.value.isEn, "✓ تم تفعيل حساب العميل يدوياً بواسطة الإدارة", "✓ Account manually verified by Admin")
+                } else {
+                    bi(uiState.value.isEn, "تم إلغاء توثيق حساب العميل", "Account verification revoked")
+                }
+            )
+        }
+    }
+
+    fun updatePatientAccountByAdmin(
+        accountId: String,
+        fullName: String,
+        phone: String,
+        newPassword: String?,
+    ) {
+        viewModelScope.launch {
+            val res = repository.updateAccountByAdmin(accountId, fullName, phone, newPassword)
+            res.onSuccess { updated ->
+                _snackbarMessages.tryEmit(
+                    bi(uiState.value.isEn, "✓ تم تحديث بيانات العميل ${updated.fullName}", "✓ Updated customer ${updated.fullName}")
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر تعديل بيانات العميل")
+            }
+        }
+    }
+
+    fun deletePatientAccountByAdmin(accountId: String) {
+        viewModelScope.launch {
+            repository.deleteAccountByAdmin(accountId)
+            _snackbarMessages.tryEmit(
+                bi(uiState.value.isEn, "تم حذف حساب العميل من المنصة", "Customer account deleted")
+            )
         }
     }
 

@@ -20,6 +20,9 @@ interface TebDao {
     @Query("SELECT * FROM patient_accounts ORDER BY fullName ASC")
     suspend fun getAllAccountsOnce(): List<PatientAccountEntity>
 
+    @Query("SELECT * FROM patient_accounts WHERE id = :accountId LIMIT 1")
+    suspend fun getAccountById(accountId: String): PatientAccountEntity?
+
     @Query("SELECT * FROM patient_accounts WHERE nationalId = :nationalId LIMIT 1")
     suspend fun findAccountByNationalId(nationalId: String): PatientAccountEntity?
 
@@ -29,8 +32,46 @@ interface TebDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAccount(account: PatientAccountEntity)
 
-    @Query("UPDATE patient_accounts SET isPhoneVerified = 1 WHERE id = :accountId")
-    suspend fun markAccountPhoneVerified(accountId: String)
+    @Query("UPDATE patient_accounts SET isPhoneVerified = 1, verifiedBy = :verifiedBy, verifiedAtMillis = :verifiedAtMillis WHERE id = :accountId")
+    suspend fun markAccountPhoneVerified(
+        accountId: String,
+        verifiedBy: String = "كود OTP",
+        verifiedAtMillis: Long = System.currentTimeMillis(),
+    )
+
+    @Query("UPDATE patient_accounts SET isPhoneVerified = :isVerified, verifiedBy = :verifiedBy, verifiedAtMillis = :verifiedAtMillis WHERE id = :accountId")
+    suspend fun setAccountVerificationStatus(
+        accountId: String,
+        isVerified: Boolean,
+        verifiedBy: String,
+        verifiedAtMillis: Long,
+    )
+
+    @Query("UPDATE patient_accounts SET fullName = :fullName, phone = :phone, password = :password WHERE id = :accountId")
+    suspend fun updateAccountDetails(
+        accountId: String,
+        fullName: String,
+        phone: String,
+        password: String,
+    )
+
+    @Query("UPDATE family_members SET fullName = :fullName, phone = :phone WHERE accountId = :accountId AND relation LIKE 'نفسي%'")
+    suspend fun updateSelfMemberDetails(accountId: String, fullName: String, phone: String)
+
+    @Query("DELETE FROM family_members WHERE accountId = :accountId")
+    suspend fun deleteFamilyMembersForAccount(accountId: String)
+
+    @Query("DELETE FROM patient_accounts WHERE id = :accountId")
+    suspend fun deleteAccountById(accountId: String)
+
+    @Transaction
+    suspend fun deleteAccountCascade(accountId: String) {
+        deleteFamilyMembersForAccount(accountId)
+        deleteAccountById(accountId)
+    }
+
+    @Query("SELECT * FROM family_members ORDER BY id ASC")
+    fun observeAllFamilyMembers(): Flow<List<FamilyMemberEntity>>
 
     @Query("SELECT * FROM family_members WHERE accountId = :accountId ORDER BY id ASC")
     fun observeFamilyMembers(accountId: String): Flow<List<FamilyMemberEntity>>
@@ -200,7 +241,7 @@ interface TebDao {
             usedAtMillis = usedAtMillis,
         )
         if (updatedRows <= 0) return false
-        markAccountPhoneVerified(accountId)
+        markAccountPhoneVerified(accountId, "كود OTP", usedAtMillis)
         return true
     }
 

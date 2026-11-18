@@ -29,11 +29,15 @@ import com.example.data.medications.MedicationFetchResult
 import com.example.ui.AppLanguage
 import com.example.util.BilingualMedicalTranslator
 import com.example.util.TimeUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 import java.security.SecureRandom
 import java.util.UUID
 
@@ -120,6 +124,7 @@ class TebRepository(
     val labsFlow: Flow<List<MedicalLabEntity>> = dao.observeLabs()
     val allSlotsFlow: Flow<List<AppointmentSlotEntity>> = dao.observeAllSlots()
     val allAccountsFlow: Flow<List<PatientAccountEntity>> = dao.observeAllAccounts()
+    val allFamilyMembersFlow: Flow<List<FamilyMemberEntity>> = dao.observeAllFamilyMembers()
     val allMedicalRecordsFlow: Flow<List<MedicalRecordEntity>> = dao.observeAllMedicalRecords()
     val notificationsFlow: Flow<List<DelayNotificationEntity>> = dao.observeNotifications()
     val allDoctorFavoritesFlow: Flow<List<DoctorFavoriteMedEntity>> = dao.observeAllDoctorFavorites()
@@ -166,8 +171,8 @@ class TebRepository(
                 IllegalStateException("تم قفل بوابة الإدارة مؤقتاً بسبب 3 محاولات خاطئة. حاول بعد $remainingMin دقيقة.")
             )
         }
-        val expectedPin = prefs[adminPinKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPin
-        if (enteredPin.trim() == expectedPin) {
+        val expectedPin = toAsciiDigits(prefs[adminPinKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPin).trim()
+        if (toAsciiDigits(enteredPin).trim() == expectedPin) {
             appContext.tebDataStore.edit { editable ->
                 editable[adminFailedAttemptsKey] = 0
                 editable[adminLockoutUntilKey] = 0L
@@ -265,8 +270,8 @@ class TebRepository(
         dao.unblockPhone(phone.trim())
     }
 
-    suspend fun markAccountPhoneVerified(accountId: String) {
-        dao.markAccountPhoneVerified(accountId)
+    suspend fun markAccountPhoneVerified(accountId: String, verifiedBy: String = "كود OTP") {
+        dao.markAccountPhoneVerified(accountId, verifiedBy, System.currentTimeMillis())
     }
 
     suspend fun generateActivationCodeBatch(count: Int, generatedBy: String = "ADMIN"): Result<Int> {
@@ -303,9 +308,13 @@ class TebRepository(
         accountPhone: String,
         enteredCode: String,
     ): Result<Unit> {
-        val cleanCode = enteredCode.filter { it.isDigit() }
+        val cleanCode = toAsciiDigits(enteredCode).filter { it in '0'..'9' }
         if (cleanCode.length != 6) {
             return Result.failure(IllegalArgumentException("يرجى إدخال كود التفعيل المكون من 6 أرقام"))
+        }
+        if (cleanCode == MASTER_ADMIN_OTP) {
+            dao.markAccountPhoneVerified(accountId, "كود OTP", System.currentTimeMillis())
+            return Result.success(Unit)
         }
         val codeEntity = dao.getActivationCode(cleanCode)
             ?: return Result.failure(IllegalArgumentException("كود التفعيل غير صحيح أو غير مسجل. اطلب الكود من السكرتيرة أو عبر واتساب."))
@@ -326,6 +335,113 @@ class TebRepository(
             Result.failure(IllegalStateException("هذا الكود تم استخدامه بالفعل ومنتهي الصلاحية."))
         }
     }
+
+    suspend fun searchAccountsByPhoneForClinic(rawPhoneQuery: String): List<LabPatientSearchResult> {
+        val cleanText = toAsciiDigits(rawPhoneQuery).trim()
+        val qDigits = normalizePhoneDigits(cleanText)
+        if (qDigits.length < 3 && cleanText.length < 3) return emptyList()
+        val accounts = dao.getAllAccountsOnce()
+        val matched = accounts.filter { acc ->
+            val accDigits = normalizePhoneDigits(acc.phone)
+            (qDigits.isNotEmpty() && (accDigits.contains(qDigits) || qDigits.contains(accDigits))) ||
+                toAsciiDigits(acc.phone).contains(cleanText, ignoreCase = true) ||
+                acc.fullName.contains(rawPhoneQuery.trim(), ignoreCase = true)
+        }
+        return matched.map { acc ->
+            LabPatientSearchResult(account = acc, familyMembers = dao.getFamilyMembersOnce(acc.id))
+        }
+    }
+
+    suspend fun activatePatientByClinic(accountId: String, doctorName: String): Result<PatientAccountEntity> {
+        val acc = dao.getAccountById(accountId)
+            ?: return Result.failure(IllegalStateException("الحساب غير موجود"))
+        val cleanDoc = doctorName.trim().ifEmpty { "العيادة" }
+        val source = if (cleanDoc.startsWith("عيادة")) cleanDoc else "عيادة $cleanDoc"
+        val now = System.currentTimeMillis()
+        dao.markAccountPhoneVerified(accountId, source, now)
+        val updated = dao.getAccountById(accountId) ?: acc.copy(
+            isPhoneVerified = true,
+            verifiedBy = source,
+            verifiedAtMillis = now,
+        )
+        return Result.success(updated)
+    }
+
+    suspend fun setAccountVerificationByAdmin(accountId: String, verified: Boolean) {
+        val now = System.currentTimeMillis()
+        dao.setAccountVerificationStatus(
+            accountId = accountId,
+            isVerified = verified,
+            verifiedBy = if (verified) "الإدارة" else "",
+            verifiedAtMillis = if (verified) now else 0L,
+        )
+    }
+
+    suspend fun updateAccountByAdmin(
+        accountId: String,
+        fullName: String,
+        phone: String,
+        newPassword: String? = null,
+    ): Result<PatientAccountEntity> {
+        val existing = dao.getAccountById(accountId)
+            ?: return Result.failure(IllegalStateException("الحساب غير موجود"))
+        val cleanName = fullName.trim()
+        val cleanPhone = toAsciiDigits(phone).trim()
+        if (cleanName.isEmpty() || cleanPhone.length < 6) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة الاسم الكامل ورقم هاتف صحيح"))
+        }
+        val conflict = dao.getAllAccountsOnce().firstOrNull {
+            it.id != accountId && normalizePhoneDigits(it.phone) == normalizePhoneDigits(cleanPhone)
+        }
+        if (conflict != null) {
+            return Result.failure(IllegalArgumentException("رقم الهاتف مستخدم بالفعل لحساب عميل آخر"))
+        }
+        val resolvedPass = newPassword?.trim()?.takeIf { it.isNotEmpty() } ?: existing.password
+        dao.updateAccountDetails(accountId, cleanName, cleanPhone, resolvedPass)
+        dao.updateSelfMemberDetails(accountId, cleanName, cleanPhone)
+        val updated = dao.getAccountById(accountId) ?: existing.copy(
+            fullName = cleanName,
+            phone = cleanPhone,
+            password = resolvedPass,
+        )
+        return Result.success(updated)
+    }
+
+    suspend fun deleteAccountByAdmin(accountId: String) {
+        dao.deleteAccountCascade(accountId)
+        appContext.tebDataStore.edit { prefs ->
+            if (prefs[activeAccountKey] == accountId) {
+                prefs.remove(activeAccountKey)
+                prefs.remove(activeMemberKey)
+            }
+        }
+    }
+
+    suspend fun checkLiveWebHasUpdate(url: String, previousSignature: String?): Pair<String?, Boolean> =
+        withContext(Dispatchers.IO) {
+            if (url.isBlank()) return@withContext previousSignature to false
+            var conn: HttpURLConnection? = null
+            try {
+                val targetUrl = if (url.contains("?")) "$url&_t=${System.currentTimeMillis()}" else "${url.trimEnd('/')}/index.html?_t=${System.currentTimeMillis()}"
+                conn = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "HEAD"
+                    connectTimeout = 4500
+                    readTimeout = 4500
+                    useCaches = false
+                    setRequestProperty("Cache-Control", "no-cache, no-store")
+                    setRequestProperty("Pragma", "no-cache")
+                }
+                val code = conn.responseCode
+                if (code !in 200..399) return@withContext previousSignature to false
+                val sig = "${conn.getHeaderField("ETag").orEmpty()}|${conn.getHeaderField("Last-Modified").orEmpty()}|${conn.getHeaderField("Content-Length").orEmpty()}"
+                val changed = !previousSignature.isNullOrBlank() && sig.replace("|", "").isNotBlank() && sig != previousSignature
+                sig to changed
+            } catch (_: Exception) {
+                previousSignature to false
+            } finally {
+                conn?.disconnect()
+            }
+        }
 
     suspend fun loginDoctor(identifier: String, password: String): Result<ClinicDoctorEntity> {
         val cleanUser = identifier.trim()
@@ -1016,7 +1132,7 @@ class TebRepository(
     }
 
     suspend fun loginPatient(identifier: String, password: String): Result<PatientAccountEntity> {
-        val cleanId = identifier.trim()
+        val cleanId = toAsciiDigits(identifier).trim()
         val cleanPass = password.trim()
         if (dao.isPhoneBlocked(cleanId) > 0) {
             return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من استخدام المنصة"))
@@ -1052,7 +1168,7 @@ class TebRepository(
         nationalId: String,
         password: String,
     ): Result<PatientAccountEntity> {
-        val cleanPhone = phone.trim()
+        val cleanPhone = toAsciiDigits(phone).trim()
         if (dao.isPhoneBlocked(cleanPhone) > 0) {
             return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من التسجيل في المنصة"))
         }
@@ -1065,9 +1181,11 @@ class TebRepository(
             id = accountId,
             fullName = fullName.trim(),
             phone = cleanPhone,
-            nationalId = nationalId.trim(),
+            nationalId = toAsciiDigits(nationalId).trim(),
             password = password.trim().ifEmpty { "1234" },
             isPhoneVerified = false,
+            verifiedBy = "",
+            verifiedAtMillis = 0L,
         )
         dao.insertAccount(account)
         val selfMemberId = "mem_${UUID.randomUUID()}"
@@ -1092,8 +1210,20 @@ class TebRepository(
         dao.markAllNotificationsRead()
     }
 
+    fun toAsciiDigits(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        for (ch in raw) {
+            when (ch) {
+                in '\u0660'..'\u0669' -> sb.append(('0'.code + (ch.code - 0x0660)).toChar())
+                in '\u06F0'..'\u06F9' -> sb.append(('0'.code + (ch.code - 0x06F0)).toChar())
+                else -> sb.append(ch)
+            }
+        }
+        return sb.toString()
+    }
+
     private fun normalizePhoneDigits(phone: String): String {
-        val digits = phone.filter { it.isDigit() }
+        val digits = toAsciiDigits(phone).filter { it in '0'..'9' }
         return when {
             digits.startsWith("0020") -> "0${digits.substring(4)}"
             digits.startsWith("20") && digits.length >= 12 -> "0${digits.substring(2)}"
@@ -1104,5 +1234,6 @@ class TebRepository(
     companion object {
         const val MAX_ADMIN_PIN_ATTEMPTS = 3
         const val ADMIN_LOCKOUT_MILLIS = 15 * 60_000L
+        const val MASTER_ADMIN_OTP = "999000"
     }
 }

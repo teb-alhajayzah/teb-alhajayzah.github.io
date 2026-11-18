@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ActivationOtpCodeEntity::class,
         MedicalLabEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -123,6 +123,13 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `verifiedBy` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `verifiedAtMillis` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -134,7 +141,7 @@ abstract class TebDatabase : RoomDatabase() {
                         TebDatabase::class.java,
                         "teb_al_hajayzah_prod_v100.db",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                         .build()
                 }.also { INSTANCE = it }
             }

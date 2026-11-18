@@ -469,4 +469,81 @@ class ExampleRobolectricTest {
         assertTrue(bundle.aiReportEn.contains("Acute Tonsillitis"))
         assertTrue(bundle.aiReportEn.contains("Pediatrics & Neonatology"))
     }
+
+    @Test
+    fun masterOtp999000WithArabicDigitsClinicActivationAndAdminUsersCrudWork() = runBlocking {
+        repository.ensureSeeded()
+        assertEquals("https://teb-alhajayzah.github.io/", AppConfig.defaultBrand.liveWebUrl)
+
+        // 1) Register user A and activate using Master OTP with Arabic numerals
+        val accA = repository.registerPatientAccount(
+            fullName = "أحمد مصطفى سالم",
+            phone = "01012345678",
+            nationalId = "",
+            password = "secret",
+        ).getOrThrow()
+        assertFalse(accA.isPhoneVerified)
+
+        val masterOtpRes = repository.verifyAndBurnActivationCode(
+            accountId = accA.id,
+            accountName = accA.fullName,
+            accountPhone = accA.phone,
+            enteredCode = "٩٩٩٠٠٠",
+        )
+        assertTrue(masterOtpRes.isSuccess)
+        val verifiedA = repository.allAccountsFlow.first().first { it.id == accA.id }
+        assertTrue(verifiedA.isPhoneVerified)
+        assertEquals("كود OTP", verifiedA.verifiedBy)
+        // Single-use pool remains untouched (still 5 unused)
+        assertEquals(5, repository.activationCodesFlow.first().count { !it.isUsed })
+
+        // 2) Register user B with family member, search by phone in clinic & activate directly
+        val accB = repository.registerPatientAccount(
+            fullName = "منى إبراهيم علي",
+            phone = "01199887766",
+            nationalId = "",
+            password = "passb",
+        ).getOrThrow()
+        repository.addFamilyMember(
+            accountId = accB.id,
+            fullName = "سلمى منى",
+            relation = "الابنة",
+            age = 5,
+            phone = accB.phone,
+        )
+
+        val searchResults = repository.searchAccountsByPhoneForClinic("0119988")
+        assertEquals(1, searchResults.size)
+        assertEquals(2, searchResults.first().familyMembers.size)
+
+        val clinicActRes = repository.activatePatientByClinic(accB.id, "د. محمد فكري")
+        assertTrue(clinicActRes.isSuccess)
+        val verifiedB = repository.allAccountsFlow.first().first { it.id == accB.id }
+        assertTrue(verifiedB.isPhoneVerified)
+        assertEquals("عيادة د. محمد فكري", verifiedB.verifiedBy)
+
+        // 3) Admin Users management: unverify, re-verify manually, edit details, and cascade delete
+        repository.setAccountVerificationByAdmin(accB.id, false)
+        assertFalse(repository.allAccountsFlow.first().first { it.id == accB.id }.isPhoneVerified)
+
+        repository.setAccountVerificationByAdmin(accB.id, true)
+        val adminVerifiedB = repository.allAccountsFlow.first().first { it.id == accB.id }
+        assertTrue(adminVerifiedB.isPhoneVerified)
+        assertEquals("الإدارة", adminVerifiedB.verifiedBy)
+
+        val editRes = repository.updateAccountByAdmin(
+            accountId = accB.id,
+            fullName = "منى إبراهيم المعدلة",
+            phone = "01199887700",
+            newPassword = "newpass99",
+        )
+        assertTrue(editRes.isSuccess)
+        assertEquals("منى إبراهيم المعدلة", editRes.getOrThrow().fullName)
+        assertEquals("01199887700", editRes.getOrThrow().phone)
+        assertEquals("newpass99", editRes.getOrThrow().password)
+
+        repository.deleteAccountByAdmin(accB.id)
+        assertFalse(repository.allAccountsFlow.first().any { it.id == accB.id })
+        assertTrue(repository.allFamilyMembersFlow.first().none { it.accountId == accB.id })
+    }
 }

@@ -117,6 +117,7 @@ fun TebTopHeader(
     unreadAlertsCount: Int,
     activeAccount: PatientAccountEntity?,
     isRefreshing: Boolean = false,
+    hasNewDataBanner: Boolean = false,
     onSelectLanguage: (AppLanguage) -> Unit = {},
     onRefresh: () -> Unit = {},
     onSwitchRole: (AppRoleMode) -> Unit,
@@ -244,25 +245,41 @@ fun TebTopHeader(
                         }
                     }
 
-                    IconButton(
-                        onClick = onRefresh,
-                        enabled = !isRefreshing,
+                    // Compact 🔄 تحديث Refresh Pill Button
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color.White.copy(alpha = 0.22f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.45f)),
                         modifier = Modifier
-                            .size(width = 40.dp, height = 48.dp)
+                            .clip(RoundedCornerShape(50))
+                            .clickable(enabled = !isRefreshing, onClick = onRefresh)
                             .testTag("refresh_button"),
                     ) {
-                        if (isRefreshing) {
-                            CircularProgressIndicator(
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = bi(isEn, "تحديث البيانات والمواعيد", "Refresh data & appointments"),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                            Text(
+                                text = bi(isEn, "تحديث", "Sync"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = Color.White,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = bi(isEn, "تحديث البيانات والمواعيد", "Refresh data & appointments"),
-                                tint = Color.White,
-                                modifier = Modifier.size(21.dp),
+                                maxLines = 1,
                             )
                         }
                     }
@@ -338,6 +355,39 @@ fun TebTopHeader(
                         modifier = Modifier.weight(1f),
                         onClick = { onSwitchRole(AppRoleMode.DOCTOR_ADMIN) },
                     )
+                }
+            }
+
+            if (hasNewDataBanner) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFEF3C7),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onRefresh)
+                        .testTag("live_update_banner"),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = null,
+                            tint = Color(0xFF92400E),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = bi(isEn, "تتوفر بيانات جديدة - اضغط للتحديث", "New data available - Tap to refresh"),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF92400E),
+                        )
+                    }
                 }
             }
         }
@@ -474,6 +524,17 @@ fun AccountAndFamilyDialog(
                                     tint = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer else SlotBookedText,
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
+                                val verifiedSource = activeAccount.verifiedBy.ifBlank { "كود OTP" }
+                                val verifiedLabelAr = if (verifiedSource == "كود OTP") {
+                                    "موثق ✓ (مُفعّل عبر كود OTP)"
+                                } else {
+                                    "موثق ✓ (مُفعّل بواسطة: $verifiedSource)"
+                                }
+                                val verifiedLabelEn = if (verifiedSource == "كود OTP") {
+                                    "Verified ✓ (Activated via OTP)"
+                                } else {
+                                    "Verified ✓ (By: $verifiedSource)"
+                                }
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = bi(isEn, "الحساب النشط: ${activeAccount.fullName}", "Active Account: ${activeAccount.fullName}"),
@@ -483,11 +544,11 @@ fun AccountAndFamilyDialog(
                                     Text(
                                         text = bi(
                                             isEn,
-                                            "الهاتف: ${activeAccount.phone}  •  ${if (isVerified) "موثق ✓" else "بانتظار كود التفعيل (OTP)"}",
-                                            "Phone: ${activeAccount.phone}  •  ${if (isVerified) "Verified ✓" else "Pending OTP Activation"}",
+                                            "الهاتف: ${activeAccount.phone}  •  ${if (isVerified) verifiedLabelAr else "غير موثق (بانتظار التفعيل)"}",
+                                            "Phone: ${activeAccount.phone}  •  ${if (isVerified) verifiedLabelEn else "Unverified (Pending Activation)"}",
                                         ),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else SlotBookedText,
+                                        color = if (isVerified) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f) else SlotBookedText,
                                     )
                                 }
                                 TextButton(onClick = onLogoutPatient) {
@@ -501,7 +562,32 @@ fun AccountAndFamilyDialog(
                                 }
                             }
 
-                            if (!isVerified) {
+                            if (isVerified) {
+                                Surface(
+                                    color = SlotAvailableBg,
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, SlotAvailableBorder.copy(alpha = 0.6f)),
+                                    modifier = Modifier.fillMaxWidth().testTag("otp_verified_confirmation"),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = SlotAvailableText, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = bi(
+                                                isEn,
+                                                "تم تفعيل وتوثيق حسابك بنجاح (${activeAccount.verifiedBy.ifBlank { "كود OTP" }}). يمكنك حجز جميع العيادات الآن.",
+                                                "Your account is verified & ready (${activeAccount.verifiedBy.ifBlank { "OTP" }}). You can book all clinics now.",
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SlotAvailableText,
+                                        )
+                                    }
+                                }
+                            } else {
                                 Surface(
                                     color = Color.White,
                                     shape = RoundedCornerShape(12.dp),
@@ -525,8 +611,8 @@ fun AccountAndFamilyDialog(
                                         Text(
                                             text = bi(
                                                 isEn,
-                                                "Send your details on WhatsApp to receive a single-use 6-digit activation code, or obtain it directly from the clinic secretary / doctor:",
-                                                "أرسل بياناتك عبر واتساب لأخذ كود التفعيل المكون من 6 أرقام (صالح للاستخدام مرة واحدة)، أو استلمه مباشرة من سكرتيرة العيادة / الطبيب:",
+                                                "أرسل بياناتك عبر واتساب لتأكيد وتفعيل حسابك، أو اطلب التفعيل المباشر من سكرتيرة العيادة / الطبيب برقم هاتفك:",
+                                                "Send your details on WhatsApp to confirm & activate your account, or get activated directly at any clinic:",
                                             ),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -534,7 +620,7 @@ fun AccountAndFamilyDialog(
 
                                         val cleanOtpDigits = otpWhatsappPhone.filter { it.isDigit() }.ifBlank { "01141271027" }
                                         val waOtpPhone = if (cleanOtpDigits.startsWith("2")) cleanOtpDigits else "2$cleanOtpDigits"
-                                        val waMessage = "مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ${activeAccount.fullName} - الرقم: ${activeAccount.phone}"
+                                        val waMessage = "مرحباً إدارة طب الحجايزة، أرجو تأكيد وتفعيل حسابي - الاسم: ${activeAccount.fullName} - رقم الهاتف: ${activeAccount.phone}"
 
                                         Button(
                                             onClick = {
@@ -559,8 +645,8 @@ fun AccountAndFamilyDialog(
                                             Text(
                                                 bi(
                                                     isEn,
-                                                    "أرسل بياناتك على واتساب لأخذ كود التفعيل (OTP)",
-                                                    "Send details on WhatsApp for OTP code",
+                                                    "أرسل بياناتك على واتساب لتأكيد وتفعيل حسابك",
+                                                    "Send details on WhatsApp to verify & activate",
                                                 )
                                             )
                                         }
@@ -568,7 +654,16 @@ fun AccountAndFamilyDialog(
                                         OutlinedTextField(
                                             value = otpInput,
                                             onValueChange = { ch ->
-                                                otpInput = ch.filter { it.isDigit() }.take(6)
+                                                val normalized = buildString {
+                                                    for (c in ch) {
+                                                        when (c) {
+                                                            in '\u0660'..'\u0669' -> append(('0'.code + (c.code - 0x0660)).toChar())
+                                                            in '\u06F0'..'\u06F9' -> append(('0'.code + (c.code - 0x06F0)).toChar())
+                                                            in '0'..'9' -> append(c)
+                                                        }
+                                                    }
+                                                }
+                                                otpInput = normalized.take(6)
                                             },
                                             label = { Text(bi(isEn, "أدخل كود التفعيل (6 أرقام)", "Enter 6-digit OTP Code")) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

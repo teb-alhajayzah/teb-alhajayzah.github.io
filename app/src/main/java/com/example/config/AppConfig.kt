@@ -23,6 +23,8 @@ data class PlatformBrandConfig(
     val currencyLabelEn: String = "EGP",
     val defaultSlotMinutes: Int = 20,
     val appVersionLabel: String = "v1.0.0",
+    // رابط المنصة الحية المباشر للتحديث الفوري
+    val liveWebUrl: String = "https://teb-alhajayzah.github.io/",
     // رابط التحميل المباشر لأحدث ملف APK من GitHub Releases
     val apkDownloadUrl: String = "https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk",
     // رابط واجهة الأدوية المصرية المفتوحة (workers.dev)

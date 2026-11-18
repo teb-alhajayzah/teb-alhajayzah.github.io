@@ -24,12 +24,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,7 +59,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontWeight
@@ -73,7 +75,6 @@ import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
 import com.example.ui.components.PasswordOutlinedTextField
-import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.patient.MedicalRecordTimelineCard
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
@@ -226,11 +227,11 @@ fun DoctorDashboardScreen(
         aiReportEn: String,
     ) -> Unit,
     onToggleFavoriteMed: (doctorId: String, medicationId: String) -> Unit,
-    onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
+    onSearchPatientsForActivation: (phoneQuery: String) -> Unit,
+    onActivatePatientByClinic: (accountId: String) -> Unit,
     onPreviewImage: (path: String, title: String) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
-    val context = LocalContext.current
     val isEn = state.isEn
     val activeDoctor = state.loggedInDoctor ?: return
     val slots = remember(state.allSlots, activeDoctor.id) {
@@ -242,6 +243,7 @@ fun DoctorDashboardScreen(
     val completedCount = slots.count { it.status == SlotStatus.COMPLETED }
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var activationPhoneQuery by remember { mutableStateOf("") }
     var slotForManualBooking by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForPrescription by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForEmrView by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
@@ -301,21 +303,169 @@ fun DoctorDashboardScreen(
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text(bi(isEn, "أكواد التفعيل (OTP)", "OTP Codes")) },
-                        modifier = Modifier.testTag("doctor_otp_codes_tab"),
+                        text = { Text(bi(isEn, "تفعيل حساب مريض برقم الهاتف", "Activate Patient by Phone")) },
+                        modifier = Modifier.testTag("doctor_activate_patient_tab"),
                     )
                 }
             }
 
             if (selectedTab == 1) {
-                otpCodeGeneratorItems(
-                    context = context,
-                    brandConfig = state.brandConfig,
-                    activationCodes = state.activationCodes,
-                    isEn = isEn,
-                    onGenerateBatch = { count -> onGenerateOtpBatch(count, activeDoctor.doctorName) },
-                    onShowMessage = onShowMessage,
-                )
+                item {
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = TealPrimary)
+                                Text(
+                                    text = bi(isEn, "تفعيل حساب مريض برقم الهاتف", "Direct Patient Activation by Phone"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Text(
+                                text = bi(
+                                    isEn,
+                                    "أدخل رقم هاتف المريض للبحث عن حسابه المسجل وتفعيله فوراً لكي يتمكن من الحجز بدون انتظار كود OTP (يُسجَّل التفعيل باسم عيادة ${activeDoctor.doctorName}).",
+                                    "Search a registered patient by phone number and activate their account immediately without an OTP code.",
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OutlinedTextField(
+                                    value = activationPhoneQuery,
+                                    onValueChange = {
+                                        activationPhoneQuery = it
+                                        onSearchPatientsForActivation(it)
+                                    },
+                                    label = { Text(bi(isEn, "رقم هاتف المريض أو الاسم", "Patient Phone or Name")) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("doctor_activate_phone_input"),
+                                )
+                                Button(
+                                    onClick = { onSearchPatientsForActivation(activationPhoneQuery) },
+                                    modifier = Modifier
+                                        .height(54.dp)
+                                        .testTag("doctor_activate_search_btn"),
+                                ) {
+                                    Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(bi(isEn, "بحث", "Search"))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (state.clinicPatientSearchResults.isEmpty()) {
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = if (activationPhoneQuery.trim().length < 3) {
+                                    bi(isEn, "اكتب 3 أرقام على الأقل من هاتف المريض لعرض النتائج وتفعيل الحساب.", "Type at least 3 phone digits to search and activate.")
+                                } else {
+                                    bi(isEn, "لا توجد نتائج مطابقة لهذا الرقم حتى الآن.", "No registered patient matched this phone.")
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(14.dp),
+                            )
+                        }
+                    }
+                } else {
+                    items(state.clinicPatientSearchResults, key = { it.account.id }) { result ->
+                        val acc = result.account
+                        val verified = acc.isPhoneVerified
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (verified) SlotAvailableBg.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface,
+                            ),
+                            border = BorderStroke(1.dp, if (verified) SlotAvailableBorder else TealPrimary.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(acc.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text(bi(isEn, "الهاتف: ${acc.phone}", "Phone: ${acc.phone}"), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Surface(
+                                        color = if (verified) SlotAvailableBg else SlotBookedBg,
+                                        shape = RoundedCornerShape(8.dp),
+                                    ) {
+                                        Text(
+                                            text = if (verified) {
+                                                bi(isEn, "موثق ✓ (${acc.verifiedBy.ifBlank { "كود OTP" }})", "Verified ✓ (${acc.verifiedBy.ifBlank { "OTP" }})")
+                                            } else {
+                                                bi(isEn, "غير موثق", "Unverified")
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (verified) SlotAvailableText else SlotBookedText,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                }
+
+                                if (result.familyMembers.isNotEmpty()) {
+                                    Text(
+                                        text = bi(
+                                            isEn,
+                                            "أفراد الأسرة: ${result.familyMembers.joinToString(" • ") { "${it.fullName} (${it.relation})" }}",
+                                            "Family Members: ${result.familyMembers.joinToString(" • ") { "${it.fullName} (${it.relation})" }}",
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+
+                                if (!verified) {
+                                    Button(
+                                        onClick = { onActivatePatientByClinic(acc.id) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SlotAvailableBorder),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(48.dp)
+                                            .testTag("doctor_activate_submit_${acc.id}"),
+                                    ) {
+                                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(bi(isEn, "✓ تفعيل حساب المريض فوراً", "✓ Activate Patient Account Now"))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             } else {
                 // Summary Metrics + Delay & Schedule Generator Controls
                 item {

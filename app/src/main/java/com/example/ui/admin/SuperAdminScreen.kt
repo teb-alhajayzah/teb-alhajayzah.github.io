@@ -29,12 +29,15 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -75,7 +78,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
+import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
+import com.example.data.local.PatientAccountEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.bi
@@ -153,6 +158,9 @@ fun SuperAdminDashboardScreen(
     onAddLab: (labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
     onUpdateLab: (labId: String, labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
     onDeleteLab: (labId: String) -> Unit,
+    onSetUserVerified: (accountId: String, verified: Boolean) -> Unit,
+    onUpdateUser: (accountId: String, fullName: String, phone: String, newPassword: String?) -> Unit,
+    onDeleteUser: (accountId: String) -> Unit,
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -161,6 +169,8 @@ fun SuperAdminDashboardScreen(
     val currencyLabel = bi(isEn, state.brandConfig.currencyLabelAr, state.brandConfig.currencyLabelEn)
     var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
+    var usersSearchQuery by remember { mutableStateOf("") }
+    var usersStatusFilter by remember { mutableStateOf("ALL") }
     var defaultFormClinicType by remember { mutableStateOf(ClinicType.PRIVATE) }
     var showAddForm by remember { mutableStateOf(false) }
     var doctorToEdit by remember { mutableStateOf<ClinicDoctorEntity?>(null) }
@@ -169,6 +179,9 @@ fun SuperAdminDashboardScreen(
     var showAddLabForm by remember { mutableStateOf(false) }
     var labToEdit by remember { mutableStateOf<MedicalLabEntity?>(null) }
     var labToDelete by remember { mutableStateOf<MedicalLabEntity?>(null) }
+
+    var userToEdit by remember { mutableStateOf<PatientAccountEntity?>(null) }
+    var userToDelete by remember { mutableStateOf<PatientAccountEntity?>(null) }
 
     var manualBlockPhone by remember { mutableStateOf("") }
     var manualBlockReason by remember { mutableStateOf(bi(isEn, "حجز وهمي / مخالفة", "Fake booking / Violation")) }
@@ -198,6 +211,23 @@ fun SuperAdminDashboardScreen(
     }
     val bookedSlots = remember(state.allSlots) {
         state.allSlots.filter { it.status == SlotStatus.BOOKED }.sortedBy { it.effectiveMinutes }
+    }
+    val uq = usersSearchQuery.trim()
+    val filteredUsers = remember(state.allAccounts, state.allFamilyMembers, uq, usersStatusFilter) {
+        state.allAccounts.filter { acc ->
+            val verifiedOk = when (usersStatusFilter) {
+                "VERIFIED" -> acc.isPhoneVerified
+                "UNVERIFIED" -> !acc.isPhoneVerified
+                else -> true
+            }
+            val members = state.allFamilyMembers.filter { it.accountId == acc.id }
+            val queryOk = uq.isEmpty() ||
+                acc.fullName.contains(uq, true) ||
+                acc.phone.contains(uq, true) ||
+                acc.verifiedBy.contains(uq, true) ||
+                members.any { it.fullName.contains(uq, true) }
+            verifiedOk && queryOk
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -259,7 +289,7 @@ fun SuperAdminDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     AdminMetricBox(bi(isEn, "العيادات", "Clinics"), state.privateClinics.size.toString(), Modifier.weight(1f))
-                    AdminMetricBox(bi(isEn, "المستشفى", "Hospital"), state.hospitalClinics.size.toString(), Modifier.weight(1f))
+                    AdminMetricBox(bi(isEn, "المشتركين", "Users"), state.allAccounts.size.toString(), Modifier.weight(1f))
                     AdminMetricBox(bi(isEn, "المعامل", "Labs"), state.labs.size.toString(), Modifier.weight(1f))
                     AdminMetricBox(bi(isEn, "الحجوزات", "Bookings"), bookedSlots.size.toString(), Modifier.weight(1f))
                 }
@@ -298,6 +328,12 @@ fun SuperAdminDashboardScreen(
                         onClick = { selectedTab = 5 },
                         text = { Text(bi(isEn, "إدارة معامل التحاليل", "Medical Labs")) },
                         modifier = Modifier.testTag("admin_labs_tab"),
+                    )
+                    Tab(
+                        selected = selectedTab == 6,
+                        onClick = { selectedTab = 6 },
+                        text = { Text(bi(isEn, "قائمة العملاء والمشتركين (Users)", "Users & Subscribers")) },
+                        modifier = Modifier.testTag("admin_users_tab"),
                     )
                 }
             }
@@ -692,6 +728,111 @@ fun SuperAdminDashboardScreen(
                         }
                     }
                 }
+
+                6 -> {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Icon(Icons.Filled.Group, contentDescription = null, tint = TealPrimary)
+                                    Text(
+                                        text = bi(isEn, "قائمة العملاء والمشتركين (Users)", "Registered Customers & Users"),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                val verifiedCount = state.allAccounts.count { it.isPhoneVerified }
+                                val unverifiedCount = state.allAccounts.size - verifiedCount
+                                Text(
+                                    text = bi(
+                                        isEn,
+                                        "إجمالي المشتركين: ${state.allAccounts.size}  •  موثق: $verifiedCount  •  غير موثق: $unverifiedCount",
+                                        "Total Users: ${state.allAccounts.size}  •  Verified: $verifiedCount  •  Unverified: $unverifiedCount",
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TealPrimary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                OutlinedTextField(
+                                    value = usersSearchQuery,
+                                    onValueChange = { usersSearchQuery = it },
+                                    placeholder = { Text(bi(isEn, "ابحث بالاسم أو الهاتف أو أفراد الأسرة أو جهة التفعيل...", "Search name, phone, family, or verifier...")) },
+                                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("admin_users_search"),
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilterChip(
+                                        selected = usersStatusFilter == "ALL",
+                                        onClick = { usersStatusFilter = "ALL" },
+                                        label = { Text(bi(isEn, "الكل (${state.allAccounts.size})", "All (${state.allAccounts.size})")) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = TealPrimary,
+                                            selectedLabelColor = Color.White,
+                                        ),
+                                    )
+                                    FilterChip(
+                                        selected = usersStatusFilter == "VERIFIED",
+                                        onClick = { usersStatusFilter = "VERIFIED" },
+                                        label = { Text(bi(isEn, "موثق ($verifiedCount)", "Verified ($verifiedCount)")) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = SlotAvailableBorder,
+                                            selectedLabelColor = Color.White,
+                                        ),
+                                    )
+                                    FilterChip(
+                                        selected = usersStatusFilter == "UNVERIFIED",
+                                        onClick = { usersStatusFilter = "UNVERIFIED" },
+                                        label = { Text(bi(isEn, "غير موثق ($unverifiedCount)", "Unverified ($unverifiedCount)")) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = SlotBookedBorder,
+                                            selectedLabelColor = Color.White,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (filteredUsers.isEmpty()) {
+                        item {
+                            Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = bi(isEn, "لا توجد حسابات عملاء مسجلة تطابق البحث حالياً.", "No registered customer accounts match right now."),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        items(filteredUsers, key = { it.id }) { userAcc ->
+                            val members = state.allFamilyMembers.filter { it.accountId == userAcc.id }
+                            AdminUserManageCard(
+                                account = userAcc,
+                                familyMembers = members,
+                                isEn = isEn,
+                                onToggleVerified = { onSetUserVerified(userAcc.id, !userAcc.isPhoneVerified) },
+                                onEdit = { userToEdit = userAcc },
+                                onDelete = { userToDelete = userAcc },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -817,6 +958,240 @@ fun SuperAdminDashboardScreen(
             },
         )
     }
+
+    val editingUser = userToEdit
+    if (editingUser != null) {
+        UserEditDialog(
+            account = editingUser,
+            isEn = isEn,
+            onSave = { newName, newPhone, newPass ->
+                onUpdateUser(editingUser.id, newName, newPhone, newPass)
+                userToEdit = null
+            },
+            onDismiss = { userToEdit = null },
+        )
+    }
+
+    val deletingUser = userToDelete
+    if (deletingUser != null) {
+        AlertDialog(
+            onDismissRequest = { userToDelete = null },
+            title = { Text(bi(isEn, "تأكيد حذف حساب العميل", "Confirm Account Deletion")) },
+            text = {
+                Text(
+                    bi(
+                        isEn,
+                        "هل أنت متأكد من حذف حساب العميل (${deletingUser.fullName} - ${deletingUser.phone}) وجميع أفراد الأسرة المسجلين به نهائياً؟",
+                        "Permanently delete ${deletingUser.fullName} (${deletingUser.phone}) and registered family members?",
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteUser(deletingUser.id)
+                        userToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SlotBookedBorder),
+                ) {
+                    Text(bi(isEn, "حذف الحساب", "Delete Account"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { userToDelete = null }) {
+                    Text(bi(isEn, "إلغاء", "Cancel"))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun AdminUserManageCard(
+    account: PatientAccountEntity,
+    familyMembers: List<FamilyMemberEntity>,
+    isEn: Boolean = false,
+    onToggleVerified: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val verified = account.isPhoneVerified
+    val sourceLabel = if (verified) account.verifiedBy.ifBlank { "كود OTP" } else bi(isEn, "بانتظار التفعيل", "Pending")
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, if (verified) SlotAvailableBorder.copy(alpha = 0.55f) else SlotBookedBorder.copy(alpha = 0.55f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("admin_user_card_${account.id}"),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(account.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(bi(isEn, "📞 الهاتف: ${account.phone}", "📞 Phone: ${account.phone}"), style = MaterialTheme.typography.bodySmall)
+                }
+                Surface(
+                    color = if (verified) SlotAvailableBg else SlotBookedBg,
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(
+                        text = if (verified) bi(isEn, "موثق ✓", "Verified ✓") else bi(isEn, "غير موثق", "Unverified"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (verified) SlotAvailableText else SlotBookedText,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = bi(
+                            isEn,
+                            "جهة التفعيل: $sourceLabel",
+                            "Verification Source: $sourceLabel",
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (verified) TealPrimary else SlotBookedText,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (familyMembers.isEmpty()) {
+                            bi(isEn, "أفراد الأسرة: صاحب الحساب فقط", "Family: Account holder only")
+                        } else {
+                            bi(
+                                isEn,
+                                "أفراد الأسرة (${familyMembers.size}): ${familyMembers.joinToString(" • ") { "${it.fullName} (${it.relation})" }}",
+                                "Family (${familyMembers.size}): ${familyMembers.joinToString(" • ") { "${it.fullName} (${it.relation})" }}",
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onToggleVerified,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (verified) SlotBookedBorder else SlotAvailableBorder,
+                    ),
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .height(46.dp)
+                        .testTag("admin_user_verify_toggle_${account.id}"),
+                ) {
+                    Icon(
+                        imageVector = if (verified) Icons.Filled.Cancel else Icons.Filled.VerifiedUser,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (verified) bi(isEn, "إلغاء التفعيل", "Unverify") else bi(isEn, "✓ تفعيل يدوي", "✓ Manual Verify"),
+                        maxLines = 1,
+                    )
+                }
+                OutlinedButton(
+                    onClick = onEdit,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp)
+                        .testTag("admin_user_edit_${account.id}"),
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(bi(isEn, "تعديل", "Edit"), maxLines = 1)
+                }
+                OutlinedButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SlotBookedBorder),
+                    border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
+                    modifier = Modifier
+                        .height(46.dp)
+                        .testTag("admin_user_delete_${account.id}"),
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = bi(isEn, "حذف", "Delete"), modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserEditDialog(
+    account: PatientAccountEntity,
+    isEn: Boolean = false,
+    onSave: (fullName: String, phone: String, newPassword: String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var fullName by remember { mutableStateOf(account.fullName) }
+    var phone by remember { mutableStateOf(account.phone) }
+    var newPassword by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(bi(isEn, "تعديل بيانات العميل", "Edit Customer Details")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = fullName,
+                    onValueChange = { fullName = it },
+                    label = { Text(bi(isEn, "الاسم الكامل *", "Full Name *")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("admin_edit_user_name"),
+                )
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text(bi(isEn, "رقم الهاتف *", "Phone Number *")) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("admin_edit_user_phone"),
+                )
+                PasswordOutlinedTextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    label = bi(isEn, "كلمة مرور جديدة (اتركها فارغة للإبقاء)", "New Password (blank keeps current)"),
+                    toggleTestTag = "admin_edit_user_pass_toggle",
+                    modifier = Modifier.fillMaxWidth().testTag("admin_edit_user_pass"),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(fullName, phone, newPassword.takeIf { it.isNotBlank() }) },
+                modifier = Modifier.testTag("admin_edit_user_save"),
+            ) {
+                Text(bi(isEn, "حفظ التعديلات", "Save Changes"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(bi(isEn, "إلغاء", "Cancel"))
+            }
+        },
+    )
 }
 
 @Composable

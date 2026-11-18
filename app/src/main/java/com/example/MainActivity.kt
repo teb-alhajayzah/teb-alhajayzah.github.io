@@ -56,11 +56,13 @@ import com.example.data.local.TebDatabase
 import com.example.data.repository.TebRepository
 import com.example.ui.AppLanguage
 import com.example.ui.AppRoleMode
+import com.example.ui.LiveWebPortalScreen
 import com.example.ui.PatientTab
 import com.example.ui.StaffPortalTab
 import com.example.ui.TebUiState
 import com.example.ui.TebViewModel
 import com.example.ui.bi
+import com.example.ui.isDeviceOnline
 import com.example.ui.admin.SuperAdminDashboardScreen
 import com.example.ui.components.AccountAndFamilyDialog
 import com.example.ui.components.AdminPinLockDialog
@@ -91,10 +93,25 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
+            var useLiveWebMode by remember {
+                mutableStateOf(
+                    state.brandConfig.liveWebUrl.isNotBlank() && isDeviceOnline(this@MainActivity),
+                )
+            }
             val layoutDirection = if (state.isEn) LayoutDirection.Ltr else LayoutDirection.Rtl
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 TebAlHajayzahTheme {
-                    TebAlHajayzahAppRoot(viewModel = viewModel, state = state)
+                    if (useLiveWebMode && state.brandConfig.liveWebUrl.isNotBlank()) {
+                        LiveWebPortalScreen(
+                            liveUrl = state.brandConfig.liveWebUrl,
+                            isEn = state.isEn,
+                            hasNewDataBanner = state.hasNewDataBanner,
+                            onDismissBannerAndSync = viewModel::dismissNewDataBanner,
+                            onSwitchToNativeOffline = { useLiveWebMode = false },
+                        )
+                    } else {
+                        TebAlHajayzahAppRoot(viewModel = viewModel, state = state)
+                    }
                 }
             }
         }
@@ -166,6 +183,7 @@ fun TebAlHajayzahAppRoot(
                     unreadAlertsCount = state.unreadAlertsCount,
                     activeAccount = state.activeAccount,
                     isRefreshing = state.isRefreshing,
+                    hasNewDataBanner = state.hasNewDataBanner,
                     onSelectLanguage = viewModel::setAppLanguage,
                     onRefresh = viewModel::smartRefreshData,
                     onSwitchRole = viewModel::switchRoleMode,
@@ -404,7 +422,8 @@ fun TebAlHajayzahAppRoot(
                                                             )
                                                         },
                                                         onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
-                                                        onGenerateOtpBatch = viewModel::generateActivationCodes,
+                                                        onSearchPatientsForActivation = viewModel::searchPatientsForClinicActivation,
+                                                        onActivatePatientByClinic = viewModel::activatePatientByClinic,
                                                         onPreviewImage = { path, title -> previewImage = path to title },
                                                         onShowMessage = showMessage,
                                                     )
@@ -506,6 +525,9 @@ fun TebAlHajayzahAppRoot(
                                         onAddLab = viewModel::addLabByAdmin,
                                         onUpdateLab = viewModel::updateLabByAdmin,
                                         onDeleteLab = viewModel::deleteLabByAdmin,
+                                        onSetUserVerified = viewModel::setAccountVerifiedByAdmin,
+                                        onUpdateUser = viewModel::updatePatientAccountByAdmin,
+                                        onDeleteUser = viewModel::deletePatientAccountByAdmin,
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )

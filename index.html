@@ -1061,17 +1061,85 @@
       font-weight: 600;
     }
 
+    .live-update-banner {
+      display: none;
+      width: 100%;
+      background: linear-gradient(90deg, #FEF3C7 0%, #FDE68A 100%);
+      color: #92400E;
+      border: 1.5px solid #D97706;
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-weight: 800;
+      font-size: 0.86rem;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
+      box-shadow: 0 3px 10px rgba(217, 119, 6, 0.22);
+      animation: tebPulse 2s infinite;
+    }
+
+    @keyframes tebPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.01); }
+    }
+
+    .otp-inline-success {
+      background: var(--avail-bg);
+      color: var(--avail-text);
+      border: 1.5px solid var(--avail-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-weight: 800;
+      font-size: 0.86rem;
+    }
+
+    .users-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .users-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+      font-size: 0.86rem;
+    }
+
+    .users-table th, .users-table td {
+      padding: 10px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: start;
+      vertical-align: middle;
+    }
+
+    .users-table th {
+      background: var(--teal-soft);
+      color: var(--teal-text);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .users-table tr:last-child td {
+      border-bottom: none;
+    }
+
     @media (max-width: 500px) {
-      .top-header { padding: 10px 12px; }
-      .header-row { gap: 6px; }
-      .brand-box { gap: 7px; }
-      .brand-logo { width: 36px; height: 36px; border-radius: 10px; }
-      .brand-title { font-size: clamp(0.95rem, 4vw, 1.08rem); }
-      .brand-sub { font-size: 0.7rem; }
-      .header-actions { gap: 4px; }
-      .icon-btn { min-width: 36px; width: 36px; height: 36px; padding: 0; font-size: 0.94rem; border-radius: 10px; }
-      .lang-compact-btn { width: auto; min-width: 40px; height: 36px; padding: 0 8px; border-radius: 999px; font-size: 0.75rem; }
-      .refresh-btn .refresh-lbl { display: none; }
+      .top-header { padding: 10px 10px; }
+      .header-row { gap: 4px; }
+      .brand-box { gap: 6px; flex: 1 1 auto; }
+      .brand-logo { width: 34px; height: 34px; border-radius: 10px; }
+      .brand-title { font-size: clamp(0.9rem, 3.8vw, 1.04rem); white-space: nowrap; overflow: visible; text-overflow: clip; }
+      .brand-sub { font-size: 0.68rem; }
+      .header-actions { gap: 3px; }
+      .icon-btn { min-width: 34px; width: 34px; height: 36px; padding: 0; font-size: 0.9rem; border-radius: 10px; }
+      .refresh-btn { width: auto; min-width: 54px; padding: 0 7px; font-size: 0.72rem; gap: 3px; }
+      .refresh-btn .refresh-lbl { display: inline; }
+      .lang-compact-btn { width: auto; min-width: 38px; height: 36px; padding: 0 7px; border-radius: 999px; font-size: 0.73rem; }
       .footer-quick-links { grid-template-columns: 1fr; }
     }
 
@@ -1124,6 +1192,10 @@
         <button class="role-btn active" id="rolePatientBtn" type="button">🏥 واجهة المريض</button>
         <button class="role-btn" id="roleDoctorBtn" type="button">🩺 العيادات والمعامل</button>
       </div>
+
+      <button type="button" id="liveUpdateBanner" class="live-update-banner" style="display:none;">
+        🔄 تتوفر بيانات جديدة - اضغط للتحديث
+      </button>
     </div>
   </header>
 
@@ -1873,6 +1945,15 @@
                 delete parsed.config.smsGatePassword;
                 delete parsed.config.smsGateProxyUrl;
                 if (!Array.isArray(parsed.accounts)) parsed.accounts = [];
+                parsed.accounts = parsed.accounts.map((a) => Object.assign({
+                  isPhoneVerified: a && a.isPhoneVerified !== false,
+                  verifiedBy: a && a.verifiedBy ? a.verifiedBy : (a && a.isPhoneVerified !== false ? 'كود OTP' : ''),
+                  verifiedAtMillis: a && a.verifiedAtMillis ? a.verifiedAtMillis : 0
+                }, a));
+                if (parsed.account && parsed.account.id) {
+                  const synced = parsed.accounts.find((a) => a.id === parsed.account.id);
+                  if (synced) parsed.account = synced;
+                }
                 if (!Array.isArray(parsed.familyMembers)) parsed.familyMembers = [];
                 if (!Array.isArray(parsed.labs)) parsed.labs = [];
                 if (!Array.isArray(parsed.records)) parsed.records = [];
@@ -1923,18 +2004,26 @@
         selectedSpecialty: null,
         searchQuery: '',
         loggedInDoctorId: null,
-        doctorTab: 'SLOTS', // SLOTS | OTP_CODES
+        doctorTab: 'SLOTS', // SLOTS | ACTIVATE_PATIENT
+        docActivatePhoneQuery: '',
+        docActivateResults: [],
+        docActivateSuccessMsg: '',
         loggedInLabId: null,
         labPhoneQuery: '',
         labSearchResults: [],
         labTargetMemberId: '',
         labTargetAccountPhone: '',
         isAdminLoggedIn: false,
-        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | BOOKINGS | SETTINGS | OTP_CODES
+        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | USERS | BOOKINGS | OTP_CODES | SETTINGS
         adminSearchQuery: '',
+        adminUsersQuery: '',
+        adminUsersFilter: 'ALL', // ALL | VERIFIED | UNVERIFIED
         versionTapCount: 0,
         medications: BUILTIN_MEDICATIONS.slice(),
         isLiveMedsApi: false,
+        hasNewDataBanner: false,
+        otpSuccessMsg: '',
+        otpErrorMsg: '',
         cardLangOverrides: {}, // { [recordId]: 'ar' | 'en' }
         aiSummaryLang: null, // null | 'ar' | 'en'
         lastAiSummaryContext: null // { memberName, records }
@@ -2111,8 +2200,17 @@
         '</section>';
       }
 
+      function toAsciiDigits(raw) {
+        return String(raw || '')
+          .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+          .replace(/[\u06F0-\u06F9]/g, (c) => String(c.charCodeAt(0) - 0x06F0));
+      }
+
       function normalizePhoneDigits(phone) {
-        return String(phone || '').replace(/\D/g, '');
+        const digits = toAsciiDigits(phone).replace(/\D/g, '');
+        if (digits.startsWith('0020') && digits.length >= 14) return '0' + digits.slice(4);
+        if (digits.startsWith('20') && digits.length >= 12) return '0' + digits.slice(2);
+        return digits;
       }
 
       function isPhoneBlocked(phone) {
@@ -2136,7 +2234,7 @@
           };
         }
         const expectedPin = (db.config.adminPin || DEFAULT_CONFIG.adminPin || '202600').trim();
-        if (String(enteredPin || '').trim() === expectedPin) {
+        if (toAsciiDigits(enteredPin).trim() === expectedPin) {
           db.adminSecurity = { failedAttempts: 0, lockoutUntilMillis: 0 };
           saveState(db);
           return { ok: true };
@@ -2209,15 +2307,71 @@
         return created.length;
       }
 
+      const MASTER_ADMIN_OTP = '999000';
+
+      function getVerificationSourceLabel(account) {
+        if (!account || account.isPhoneVerified === false) {
+          return bi('غير موثق', 'Unverified');
+        }
+        const src = String(account.verifiedBy || '').trim();
+        if (!src || src === 'كود OTP' || src === 'OTP') {
+          return bi('كود OTP', 'OTP Code');
+        }
+        return src;
+      }
+
+      function getVerificationBadgeText(account) {
+        if (!account || account.isPhoneVerified === false) {
+          return bi('⚠️ غير موثق', '⚠️ Unverified');
+        }
+        const src = String(account.verifiedBy || '').trim();
+        if (!src || src === 'كود OTP' || src === 'OTP') {
+          return bi('موثق ✓ (مُفعّل عبر كود OTP)', 'Verified ✓ (Activated via OTP)');
+        }
+        return bi('موثق ✓ (مُفعّل بواسطة: ' + src + ')', 'Verified ✓ (By: ' + src + ')');
+      }
+
+      function markAccountVerified(account, verifiedBySource) {
+        const source = String(verifiedBySource || 'كود OTP').trim() || 'كود OTP';
+        const now = Date.now();
+        if (account) {
+          account.isPhoneVerified = true;
+          account.verifiedBy = source;
+          account.verifiedAtMillis = now;
+          const accDigits = normalizePhoneDigits(account.phone);
+          const idx = (db.accounts || []).findIndex((a) =>
+            a.id === account.id || (accDigits && normalizePhoneDigits(a.phone) === accDigits)
+          );
+          if (idx >= 0) {
+            db.accounts[idx].isPhoneVerified = true;
+            db.accounts[idx].verifiedBy = source;
+            db.accounts[idx].verifiedAtMillis = now;
+            if (db.account && (db.account.id === db.accounts[idx].id || normalizePhoneDigits(db.account.phone) === accDigits)) {
+              db.account = db.accounts[idx];
+            }
+          } else if (db.account && db.account.id === account.id) {
+            db.account.isPhoneVerified = true;
+            db.account.verifiedBy = source;
+            db.account.verifiedAtMillis = now;
+          }
+        }
+        ui.otpChallenge = null;
+      }
+
       function verifyAndBurnActivationCode(account, rawCode) {
-        const clean = String(rawCode || '').replace(/\D/g, '');
+        const clean = toAsciiDigits(rawCode).replace(/\D/g, '');
         if (clean.length !== 6) {
           return { ok: false, error: bi('يرجى إدخال كود التفعيل المكون من 6 أرقام', 'Please enter the 6-digit OTP code') };
         }
+        if (clean === MASTER_ADMIN_OTP) {
+          markAccountVerified(account, 'كود OTP');
+          saveState(db);
+          return { ok: true, usedMaster: true };
+        }
         const codes = db.activationCodes || [];
-        const found = codes.find((c) => String(c.code) === clean);
+        const found = codes.find((c) => toAsciiDigits(c.code).replace(/\D/g, '') === clean);
         if (!found) {
-          return { ok: false, error: bi('كود التحقق غير صحيح أو غير مطابق.', 'Verification code is invalid or does not match.') };
+          return { ok: false, error: bi('كود التحقق غير صحيح أو غير مطابق. تأكد من الكود أو تواصل على واتساب.', 'Verification code is invalid. Verify the code or contact WhatsApp.') };
         }
         if (found.isUsed) {
           return {
@@ -2232,18 +2386,9 @@
         found.usedByName = (account && account.fullName) ? account.fullName : bi('مريض', 'Patient');
         found.usedByPhone = (account && account.phone) ? account.phone : '';
         found.usedAtMillis = Date.now();
-        markAccountVerified(account);
+        markAccountVerified(account, 'كود OTP');
         saveState(db);
-        return { ok: true };
-      }
-
-      function markAccountVerified(account) {
-        if (account) {
-          account.isPhoneVerified = true;
-          const idx = (db.accounts || []).findIndex((a) => a.id === account.id);
-          if (idx >= 0) db.accounts[idx].isPhoneVerified = true;
-        }
-        ui.otpChallenge = null;
+        return { ok: true, usedMaster: false };
       }
 
       function printAvailableActivationCodes() {
@@ -2376,6 +2521,24 @@
         overlay.style.display = show ? 'flex' : 'none';
       }
 
+      function computeDbSyncSignature(state) {
+        try {
+          const s = state || {};
+          return JSON.stringify({
+            doctors: (s.doctors || []).length + ':' + (s.doctors || []).map((d) => d.id + d.feeEgp + d.currentDelayMinutes + d.workStartMinutes + d.workEndMinutes).join(','),
+            slots: (s.slots || []).map((sl) => sl.id + sl.status + sl.delayMinutes).join(','),
+            labs: (s.labs || []).length,
+            accounts: (s.accounts || []).map((a) => a.id + ':' + (a.isPhoneVerified !== false)).join(','),
+            cfg: (s.config && s.config.homeAnnouncementAr) || ''
+          });
+        } catch (e) {
+          return '';
+        }
+      }
+
+      let baselineDbSyncSig = computeDbSyncSignature(db);
+      let baselineRemotePageSig = null;
+
       async function performSmartHardRefresh() {
         const btn = document.getElementById('btnSmartRefresh');
         if (btn) btn.classList.add('spinning');
@@ -2387,27 +2550,38 @@
           )
         );
         try {
-          // Clear Service Worker & HTTP caches ONLY; preserve user login & saved state in localStorage
           if ('caches' in window && caches.keys) {
             const keys = await caches.keys();
             await Promise.all(keys.map((k) => caches.delete(k)));
           }
           if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
             const regs = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(regs.map((r) => (r && r.update ? r.update().catch(() => {}) : Promise.resolve())));
+            await Promise.all(regs.map((r) => {
+              try {
+                if (r.active) r.active.postMessage({ type: 'CLEAR_CACHES' });
+                if (r.waiting) r.waiting.postMessage({ type: 'SKIP_WAITING' });
+                return r.update ? r.update().catch(() => {}) : Promise.resolve();
+              } catch (err) {
+                return Promise.resolve();
+              }
+            }));
           }
           await refreshMedicationsFromApi();
           db = loadState();
+          ui.hasNewDataBanner = false;
+          baselineDbSyncSig = computeDbSyncSignature(db);
           renderApp();
         } catch (e) { /* safe fallback */ }
         showToast(bi('تم تحديث البيانات ومسح الذاكرة المؤقتة بنجاح', 'Cache cleared & data refreshed'));
         setTimeout(function () {
           setGlobalLoading(false);
           if (btn) btn.classList.remove('spinning');
-          try {
-            window.location.reload();
-          } catch (e) { /* ignore reload error */ }
-        }, 350);
+          if (!window.__tebDisablePageReload && /^https?:$/i.test(window.location.protocol)) {
+            try {
+              window.location.reload();
+            } catch (e) { /* ignore reload error */ }
+          }
+        }, 320);
       }
 
       let apkNoticeTimer = null;
@@ -2587,6 +2761,12 @@
         const refreshBtn = document.getElementById('btnSmartRefresh');
         if (refreshBtn) {
           refreshBtn.title = bi('تحديث المواعيد وتنظيف الذاكرة المؤقتة', 'Smart Refresh & Clear Cache');
+        }
+
+        const liveBanner = document.getElementById('liveUpdateBanner');
+        if (liveBanner) {
+          liveBanner.style.display = ui.hasNewDataBanner ? 'flex' : 'none';
+          liveBanner.textContent = bi('🔄 تتوفر بيانات جديدة - اضغط للتحديث', '🔄 New data available - Tap to refresh');
         }
 
         const pBtn = document.getElementById('rolePatientBtn');
@@ -3105,6 +3285,53 @@
           '</section>';
       }
 
+      function renderDoctorActivationSectionHtml(doc) {
+        const results = ui.docActivateResults || [];
+        return '<section class="card" style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div>' +
+              '<h3 style="font-size:1.12rem;color:var(--teal);">✅ ' + esc(bi('تفعيل حساب مريض برقم الهاتف', 'Activate Patient Account by Phone')) + '</h3>' +
+              '<div style="font-size:0.86rem;color:var(--text-muted);margin-top:4px;line-height:1.5;">' +
+                esc(bi(
+                  'ابحث برقم هاتف المريض المسجل لتفعيل حسابه فوراً بدون الحاجة لأكواد OTP، ويُوثّق التفعيل باسم عيادتك تلقائياً.',
+                  'Search any registered patient by phone number to activate their account immediately without an OTP code.'
+                )) +
+              '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+              '<input class="input" id="docActivatePhoneInput" type="tel" value="' + esc(ui.docActivatePhoneQuery || '') + '" placeholder="' + esc(bi('أدخل رقم هاتف المريض (مثال: 010...)', 'Enter patient phone number...')) + '" dir="ltr" style="flex:1;min-width:190px;" />' +
+              '<button class="btn btn-primary" id="btnDocActivateSearch" type="button">🔍 ' + esc(bi('بحث برقم الهاتف', 'Search Phone')) + '</button>' +
+            '</div>' +
+            (ui.docActivateSuccessMsg
+              ? '<div class="otp-inline-success" id="docActivateSuccessBanner">✓ ' + esc(ui.docActivateSuccessMsg) + '</div>'
+              : '') +
+          '</section>' +
+          '<section style="display:flex;flex-direction:column;gap:10px;">' +
+            (ui.docActivatePhoneQuery && results.length === 0
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">' +
+                  esc(bi('لم يتم العثور على حساب مريض مسجل مطابق لرقم الهاتف المدخل.', 'No registered patient account matched this phone number.')) +
+                '</div>'
+              : results.map((acc) => {
+                  const isVerified = acc.isPhoneVerified !== false;
+                  const members = (db.familyMembers || []).filter((m) => m.accountId === acc.id || normalizePhoneDigits(m.phone) === normalizePhoneDigits(acc.phone));
+                  return '<div class="card" style="border-color:' + (isVerified ? 'var(--avail-border)' : 'var(--warn-border)') + ';display:flex;flex-direction:column;gap:10px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                      '<div>' +
+                        '<div style="font-weight:800;font-size:1.05rem;">👤 ' + esc(acc.fullName) + '</div>' +
+                        '<div style="font-size:0.86rem;color:var(--text-muted);" dir="ltr">📱 ' + esc(acc.phone) + '</div>' +
+                        (members.length > 0
+                          ? '<div style="font-size:0.82rem;color:var(--teal-text);margin-top:4px;">👨‍👩‍👧 ' + esc(bi('أفراد الأسرة: ', 'Family: ')) + esc(members.map((m) => m.fullName).join(' • ')) + '</div>'
+                          : '') +
+                      '</div>' +
+                      '<span class="badge ' + (isVerified ? 'badge-avail' : 'badge-booked') + '">' + esc(getVerificationBadgeText(acc)) + '</span>' +
+                    '</div>' +
+                    (!isVerified
+                      ? '<button class="btn btn-green btn-block" type="button" data-doc-activate-acc="' + esc(acc.id) + '">✓ ' + esc(bi('تفعيل حساب المريض فوراً', 'Activate Patient Account Now')) + '</button>'
+                      : '<div style="font-size:0.84rem;color:var(--avail-text);font-weight:700;">✓ ' + esc(bi('الحساب مُفعّل وجاهز لحجز المواعيد في عيادة ' + doc.doctorName, 'Account is verified and ready to book appointments')) + '</div>') +
+                  '</div>';
+                }).join('')) +
+          '</section>';
+      }
+
       function renderDoctorDashboard() {
         const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
         if (!doc) return renderDoctorLoginGate();
@@ -3113,8 +3340,8 @@
         const availCount = slots.filter((s) => s.status === 'AVAILABLE').length;
         const doneCount = slots.filter((s) => s.status === 'COMPLETED').length;
 
-        const bodyHtml = ui.doctorTab === 'OTP_CODES'
-          ? renderOtpGeneratorSectionHtml()
+        const bodyHtml = ui.doctorTab === 'ACTIVATE_PATIENT'
+          ? renderDoctorActivationSectionHtml(doc)
           : '<section class="card">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
                 '<div>' +
@@ -3174,13 +3401,13 @@
         return '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
             '<div>' +
               '<h2>' + esc(bi('لوحة تحكم عيادة ' + getDoctorDisplayName(doc, false), 'Clinic Dashboard — ' + getDoctorDisplayName(doc, true))) + '</h2>' +
-              '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وأكواد التفعيل.', 'Manage clinic schedule, walk-in bookings, delays, and OTP codes.')) + '</div>' +
+              '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وتفعيل حسابات المرضى.', 'Manage clinic schedule, walk-in bookings, delays, and direct patient activation.')) + '</div>' +
             '</div>' +
             '<button class="btn btn-danger-outline" id="btnDoctorLogout" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
           '</section>' +
           '<div class="chips-row">' +
-            '<button class="chip ' + (ui.doctorTab !== 'OTP_CODES' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
-            '<button class="chip ' + (ui.doctorTab === 'OTP_CODES' ? 'active' : '') + '" type="button" data-doc-tab="OTP_CODES">🔑 ' + esc(bi('أكواد التفعيل (OTP)', 'OTP Codes')) + '</button>' +
+            '<button class="chip ' + (ui.doctorTab !== 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
+            '<button class="chip ' + (ui.doctorTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT">✅ ' + esc(bi('تفعيل حساب مريض برقم الهاتف', 'Activate Patient by Phone')) + '</button>' +
           '</div>' +
           bodyHtml;
       }
@@ -3427,6 +3654,86 @@
                     '</div>'
                   ).join('')) +
             '</section>';
+        } else if (ui.adminTab === 'USERS') {
+          const allUsers = (db.accounts || []).slice();
+          const uq = (ui.adminUsersQuery || '').trim().toLowerCase();
+          const uqDigits = normalizePhoneDigits(uq);
+          const filteredUsers = allUsers.filter((acc) => {
+            const isVer = acc.isPhoneVerified !== false;
+            if (ui.adminUsersFilter === 'VERIFIED' && !isVer) return false;
+            if (ui.adminUsersFilter === 'UNVERIFIED' && isVer) return false;
+            if (!uq) return true;
+            const famNames = (db.familyMembers || [])
+              .filter((m) => m.accountId === acc.id)
+              .map((m) => m.fullName.toLowerCase())
+              .join(' ');
+            return acc.fullName.toLowerCase().includes(uq) ||
+              (uqDigits && normalizePhoneDigits(acc.phone).includes(uqDigits)) ||
+              acc.phone.toLowerCase().includes(uq) ||
+              famNames.includes(uq);
+          });
+          const verifiedTotal = allUsers.filter((a) => a.isPhoneVerified !== false).length;
+          const unverifiedTotal = allUsers.length - verifiedTotal;
+
+          tabBodyHtml =
+            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+                '<div>' +
+                  '<h3>👥 ' + esc(bi('قائمة العملاء والمشتركين (' + allUsers.length + ')', 'Registered Users & Patients (' + allUsers.length + ')')) + '</h3>' +
+                  '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('عرض وإدارة جميع حسابات المرضى، أفراد أسرهم، حالة التفعيل، وجهة التفعيل.', 'Manage all patient accounts, family members, activation status & source.')) + '</div>' +
+                '</div>' +
+                '<div style="display:flex;gap:6px;">' +
+                  '<span class="badge badge-avail">' + esc(bi('موثق: ', 'Verified: ')) + verifiedTotal + '</span>' +
+                  '<span class="badge badge-booked">' + esc(bi('غير موثق: ', 'Unverified: ')) + unverifiedTotal + '</span>' +
+                '</div>' +
+              '</div>' +
+              '<input class="input" id="adminUsersSearch" value="' + esc(ui.adminUsersQuery || '') + '" placeholder="' + esc(bi('ابحث بالاسم أو رقم الهاتف أو فرد العائلة...', 'Search by name, phone, or family member...')) + '" />' +
+              '<div class="chips-row" style="padding:0;">' +
+                '<button class="chip ' + (ui.adminUsersFilter === 'ALL' ? 'active' : '') + '" type="button" data-admin-users-filter="ALL">' + esc(bi('الكل (' + allUsers.length + ')', 'All (' + allUsers.length + ')')) + '</button>' +
+                '<button class="chip ' + (ui.adminUsersFilter === 'VERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="VERIFIED">✓ ' + esc(bi('موثق (' + verifiedTotal + ')', 'Verified (' + verifiedTotal + ')')) + '</button>' +
+                '<button class="chip ' + (ui.adminUsersFilter === 'UNVERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="UNVERIFIED">⏳ ' + esc(bi('غير موثق (' + unverifiedTotal + ')', 'Unverified (' + unverifiedTotal + ')')) + '</button>' +
+              '</div>' +
+            '</section>' +
+            (filteredUsers.length === 0
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا يوجد عملاء مسجلون أو مطابقون للبحث.', 'No registered users match your filter.')) + '</div>'
+              : '<div class="users-table-wrap">' +
+                  '<table class="users-table">' +
+                    '<thead><tr>' +
+                      '<th>' + esc(bi('الاسم الكامل', 'Full Name')) + '</th>' +
+                      '<th>' + esc(bi('رقم الهاتف', 'Phone')) + '</th>' +
+                      '<th>' + esc(bi('أفراد الأسرة المسجلين', 'Family Members')) + '</th>' +
+                      '<th>' + esc(bi('حالة الحساب', 'Status')) + '</th>' +
+                      '<th>' + esc(bi('جهة التفعيل', 'Verified By')) + '</th>' +
+                      '<th>' + esc(bi('إجراءات الإدارة', 'Admin Actions')) + '</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' +
+                      filteredUsers.map((acc) => {
+                        const isVer = acc.isPhoneVerified !== false;
+                        const famList = (db.familyMembers || []).filter((m) => m.accountId === acc.id || normalizePhoneDigits(m.phone) === normalizePhoneDigits(acc.phone));
+                        const famSummary = famList.length > 0
+                          ? famList.map((m) => esc(m.fullName) + ' <span style="color:var(--text-muted);font-size:0.78rem;">(' + esc(m.relation.split(' ')[0]) + ')</span>').join('<br/>')
+                          : '<span style="color:var(--text-muted);">—</span>';
+                        const verSource = isVer ? getVerificationSourceLabel(acc) : '—';
+                        return '<tr>' +
+                          '<td><strong>' + esc(acc.fullName) + '</strong>' + (acc.nationalId ? '<div style="font-size:0.76rem;color:var(--text-muted);" dir="ltr">' + esc(acc.nationalId) + '</div>' : '') + '</td>' +
+                          '<td dir="ltr"><strong>' + esc(acc.phone) + '</strong></td>' +
+                          '<td>' + famSummary + '</td>' +
+                          '<td><span class="badge ' + (isVer ? 'badge-avail' : 'badge-booked') + '">' + esc(isVer ? bi('موثق ✓', 'Verified ✓') : bi('غير موثق', 'Unverified')) + '</span></td>' +
+                          '<td><span style="font-weight:700;color:' + (isVer ? 'var(--teal-text)' : 'var(--text-muted)') + ';">' + esc(verSource) + '</span></td>' +
+                          '<td>' +
+                            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                              '<button class="btn ' + (isVer ? 'btn-outline' : 'btn-green') + '" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">' +
+                                esc(isVer ? bi('إلغاء التفعيل', 'Unverify') : bi('✓ تفعيل يدوي', '✓ Manual Verify')) +
+                              '</button>' +
+                              '<button class="btn btn-outline" type="button" data-admin-edit-user="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">✏️ ' + esc(bi('تعديل', 'Edit')) + '</button>' +
+                              '<button class="btn btn-danger-outline" type="button" data-admin-delete-user="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🗑️ ' + esc(bi('حذف', 'Delete')) + '</button>' +
+                            '</div>' +
+                          '</td>' +
+                        '</tr>';
+                      }).join('') +
+                    '</tbody>' +
+                  '</table>' +
+                '</div>');
         } else if (ui.adminTab === 'OTP_CODES') {
           tabBodyHtml = renderOtpGeneratorSectionHtml();
         } else {
@@ -3454,7 +3761,7 @@
               '<div>' +
                 '<span class="hero-pill">🛡️ ' + esc(bi('الإدارة العليا السرية • محمية بالـ PIN', 'Protected Super Admin • PIN Locked')) + '</span>' +
                 '<h2 style="font-size:1.35rem;margin-top:6px;">' + esc(bi('أهلاً بك، ' + (db.config.adminOwnerName || 'المهندس محمد يوسف'), 'Welcome, ' + (db.config.adminOwnerName || 'Eng. Mohamed Youssef'))) + '</h2>' +
-                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، معامل التحاليل، الحجوزات، الحظر، أكواد التفعيل، وإعدادات المنصة.', 'Full control over clinics, hospital, medical labs, bookings, blocks, OTP codes, and platform settings.')) + '</div>' +
+                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، معامل التحاليل، قائمة العملاء، الحجوزات، أكواد التفعيل، وإعدادات المنصة.', 'Full control over clinics, hospital, medical labs, users, bookings, OTP codes, and platform settings.')) + '</div>' +
               '</div>' +
               '<button class="btn" id="btnAdminLogout" type="button" style="background:#fff;color:var(--teal);min-height:40px;">🚪 ' + esc(bi('خروج وتأمين', 'Lock & Exit')) + '</button>' +
             '</div>' +
@@ -3462,7 +3769,7 @@
 
           '<section class="stats-row-2x2">' +
             '<div class="stat-box card"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">' + esc(bi('عيادات / مستشفى', 'Clinics / Hospital')) + '</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:#3730A3;">' + (db.labs || []).length + '</div><div style="font-size:0.82rem;">' + esc(bi('معامل التحاليل', 'Medical Labs')) + '</div></div>' +
+            '<div class="stat-box card"><div class="stat-num" style="color:#3730A3;">' + (db.accounts || []).length + '</div><div style="font-size:0.82rem;">' + esc(bi('العملاء والمشتركين', 'Registered Users')) + '</div></div>' +
             '<div class="stat-box card"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">' + esc(bi('حجوزات نشطة', 'Active Bookings')) + '</div></div>' +
             '<div class="stat-box card"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">' + esc(bi('أرقام محظورة', 'Blocked Phones')) + '</div></div>' +
           '</section>' +
@@ -3471,6 +3778,7 @@
             '<button class="chip ' + (ui.adminTab === 'CLINICS' ? 'active' : '') + '" type="button" data-admin-tab="CLINICS">🩺 ' + esc(bi('الأطباء والعيادات', 'Clinics & Doctors')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'HOSPITAL' ? 'active' : '') + '" type="button" data-admin-tab="HOSPITAL">🏥 ' + esc(bi('المستشفى والأقسام', 'Hospital Depts')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'LABS' ? 'active' : '') + '" type="button" data-admin-tab="LABS">🧪 ' + esc(bi('إدارة معامل التحاليل', 'Medical Labs')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين (Users)', 'Users List')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'OTP_CODES' ? 'active' : '') + '" type="button" data-admin-tab="OTP_CODES">🔑 ' + esc(bi('أكواد التفعيل (OTP)', 'OTP Codes')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('إعدادات المنصة والـ PIN', 'Settings & PIN')) + '</button>' +
@@ -3760,6 +4068,7 @@
 
       function openAccountModal(initialAuthTab) {
         ui.versionTapCount = 0;
+        ui.otpErrorMsg = '';
         let authMode = initialAuthTab || (!db.account ? 'LOGIN' : 'NONE'); // NONE | REGISTER | LOGIN
 
         function renderAccountBody() {
@@ -3780,24 +4089,31 @@
           const otpPhoneDigits = normalizePhoneDigits((db.config && db.config.otpWhatsappPhone) || DEFAULT_CONFIG.otpWhatsappPhone || '01141271027');
           const otpWaPhone = otpPhoneDigits.startsWith('2') ? otpPhoneDigits : ('2' + otpPhoneDigits);
           const otpWaText = hasAcc
-            ? encodeURIComponent('مرحباً إدارة طب الحجايزة، أرجو إرسال كود تفعيل حسابي - الاسم: ' + db.account.fullName + ' - الرقم: ' + db.account.phone)
+            ? encodeURIComponent('مرحباً إدارة طب الحجايزة، أرجو تأكيد وتفعيل حسابي - الاسم: ' + db.account.fullName + ' - رقم الهاتف: ' + db.account.phone)
             : '';
 
           const otpCardHtml = (hasAcc && !isVerified)
             ? '<div class="card" style="background:var(--warn-bg);border:1.5px solid var(--warn-border);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                '<div style="font-weight:800;color:var(--warn-text);">🔐 ' + esc(bi('تفعيل الحساب بكود الاستخدام الواحد (6 أرقام)', 'Activate Account (6-digit Single-Use OTP)')) + '</div>' +
+                '<div style="font-weight:800;color:var(--warn-text);">🔐 ' + esc(bi('تفعيل الحساب بكود الاستخدام الواحد (6 أرقام)', 'Activate Account (6-digit OTP)')) + '</div>' +
                 '<div style="font-size:0.83rem;color:var(--warn-text);line-height:1.55;">' +
                   esc(bi(
-                    'للتأكد من جدية الحجز وحماية مواعيد العيادات، يرجى طلب كود التفعيل ذي الاستخدام الواحد عبر الواتساب أو استلامه مباشرة من سكرتيرة العيادة / الطبيب.',
-                    'To ensure reliable bookings, request your single-use 6-digit activation code via WhatsApp or receive it directly from the clinic secretary/doctor.'
+                    'لتفعيل حسابك فوراً وحجز المواعيد، اطلب كود التفعيل عبر واتساب أو اطلب من الطبيب / السكرتيرة تفعيل رقم هاتفك مباشرة في العيادة.',
+                    'Request your 6-digit activation code via WhatsApp or ask your clinic doctor/secretary to verify your phone directly.'
                   )) +
                 '</div>' +
                 '<a class="btn btn-whatsapp btn-block" id="btnOtpWhatsappRequest" href="https://wa.me/' + esc(otpWaPhone) + '?text=' + otpWaText + '" target="_blank" rel="noopener">💬 ' +
-                  esc(bi('أرسل بياناتك على واتساب لأخذ كود التفعيل (OTP)', 'Send Your Info via WhatsApp for OTP Code')) +
+                  esc(bi('أرسل بياناتك على واتساب لتأكيد وتفعيل حسابك', 'Send Your Info via WhatsApp to Verify & Activate Your Account')) +
                 '</a>' +
-                '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="' + esc(bi('أدخل كود التفعيل (6 أرقام)', 'Enter 6-digit OTP code')) + '" dir="ltr" />' +
+                '<input class="input" id="otpCodeInput" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="' + esc(bi('أدخل كود التفعيل (6 أرقام)', 'Enter 6-digit OTP code')) + '" dir="ltr" />' +
+                (ui.otpErrorMsg
+                  ? '<div id="otpInlineError" style="color:var(--booked-text);background:var(--booked-bg);border:1px solid var(--booked-border);padding:8px 10px;border-radius:10px;font-size:0.84rem;font-weight:700;">⚠️ ' + esc(ui.otpErrorMsg) + '</div>'
+                  : '') +
                 '<button class="btn btn-primary btn-block" id="btnVerifyOtpSubmit" type="button">✓ ' + esc(bi('تأكيد وتفعيل الحساب', 'Verify & Activate Account')) + '</button>' +
               '</div>'
+            : '';
+
+          const otpSuccessHtml = (hasAcc && isVerified && ui.otpSuccessMsg)
+            ? '<div class="otp-inline-success" id="otpSuccessBanner">✓ ' + esc(ui.otpSuccessMsg) + '</div>'
             : '';
 
           const authTabsHtml =
@@ -3807,7 +4123,7 @@
             '</div>' +
             (authMode === 'REGISTER'
               ? '<div class="card" style="background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                  '<div style="font-weight:700;font-size:0.9rem;">' + esc(bi('تسجيل مريض جديد (يتطلب كود التفعيل المكون من 6 أرقام)', 'New Patient Registration (6-digit OTP required)')) + '</div>' +
+                  '<div style="font-weight:700;font-size:0.9rem;">' + esc(bi('تسجيل مريض جديد (يتطلب تفعيل الحساب قبل الحجز)', 'New Patient Registration (Activation required)')) + '</div>' +
                   '<input class="input" id="regFullName" placeholder="' + esc(bi('الاسم الكامل *', 'Full Name *')) + '" />' +
                   '<input class="input" id="regPhone" type="tel" placeholder="' + esc(bi('رقم الهاتف (11 رقم) *', 'Phone Number (11 digits) *')) + '" dir="ltr" />' +
                   '<input class="input" id="regNationalId" placeholder="' + esc(bi('الرقم القومي (اختياري)', 'National ID (optional)')) + '" dir="ltr" />' +
@@ -3824,17 +4140,18 @@
 
           return (
             (hasAcc
-              ? '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              ? '<div class="card" style="background:' + (isVerified ? 'var(--avail-bg)' : 'var(--teal-soft)') + ';border:' + (isVerified ? '1.5px solid var(--avail-border)' : 'none') + ';padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
                   '<div>' +
                     '<div><strong>' + esc(bi('الحساب النشط:', 'Active Account:')) + '</strong> ' + esc(db.account.fullName) + '</div>' +
                     '<div style="font-size:0.84rem;">' + esc(bi('الهاتف:', 'Phone:')) + ' <span dir="ltr">' + esc(db.account.phone) + '</span>' + (db.account.nationalId ? ' • ' + esc(db.account.nationalId) : '') + '</div>' +
                   '</div>' +
-                  '<span class="badge ' + (isVerified ? 'badge-avail' : 'badge-booked') + '">' + esc(isVerified ? bi('✓ موثق بالـ OTP', '✓ OTP Verified') : bi('⚠️ غير موثق', '⚠️ Unverified')) + '</span>' +
+                  '<span id="accountVerificationBadge" class="badge ' + (isVerified ? 'badge-avail' : 'badge-booked') + '">' + esc(getVerificationBadgeText(db.account)) + '</span>' +
                 '</div>'
               : '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;">' +
                   '<div style="font-weight:700;color:var(--teal-text);">' + esc(bi('لا يوجد حساب مسجل الدخول حالياً', 'No account signed in yet')) + '</div>' +
                   '<div style="font-size:0.84rem;color:var(--teal-text);">' + esc(bi('سجّل دخولك أو أنشئ حساباً جديداً لتأكيد الحجز وإدارة ملفك الطبي وملفات أسرتك.', 'Sign in or create a new account to book appointments and manage family records.')) + '</div>' +
                 '</div>') +
+            otpSuccessHtml +
             otpCardHtml +
             authTabsHtml +
             (hasAcc
@@ -3873,18 +4190,38 @@
             };
           });
 
+          const otpInp = document.getElementById('otpCodeInput');
           const verifyBtn = document.getElementById('btnVerifyOtpSubmit');
-          if (verifyBtn && db.account) {
-            verifyBtn.onclick = function () {
-              const code = (document.getElementById('otpCodeInput').value || '').trim();
-              const check = verifyAndBurnActivationCode(db.account, code);
-              if (!check.ok) {
-                showToast(check.error);
-                return;
-              }
-              showToast(bi('تم تفعيل الحساب بنجاح! يمكنك الآن حجز المواعيد فوراً.', 'Account activated successfully!'));
+          function submitOtpVerification() {
+            const activeAcc = db.account;
+            if (!activeAcc) {
+              showToast(bi('يرجى تسجيل الدخول أولاً', 'Please sign in first'));
+              return;
+            }
+            const rawVal = otpInp ? otpInp.value : '';
+            const check = verifyAndBurnActivationCode(activeAcc, rawVal);
+            if (!check.ok) {
+              ui.otpErrorMsg = check.error;
+              ui.otpSuccessMsg = '';
+              showToast(check.error);
               refreshAccountModal();
-              renderApp();
+              return;
+            }
+            ui.otpErrorMsg = '';
+            ui.otpSuccessMsg = bi('تم تفعيل حسابك بنجاح! يمكنك الآن حجز المواعيد فوراً.', 'Account verified & activated! You can now book appointments.');
+            showToast(ui.otpSuccessMsg);
+            refreshAccountModal();
+            renderApp();
+          }
+          if (verifyBtn) {
+            verifyBtn.onclick = submitOtpVerification;
+          }
+          if (otpInp) {
+            otpInp.onkeydown = function (e) {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitOtpVerification();
+              }
             };
           }
 
@@ -3908,8 +4245,8 @@
           if (submitRegBtn) {
             submitRegBtn.onclick = function () {
               const fullName = document.getElementById('regFullName').value.trim();
-              const phone = document.getElementById('regPhone').value.trim();
-              const nationalId = document.getElementById('regNationalId').value.trim();
+              const phone = toAsciiDigits(document.getElementById('regPhone').value.trim());
+              const nationalId = toAsciiDigits(document.getElementById('regNationalId').value.trim());
               const password = document.getElementById('regPassword').value.trim();
               if (!fullName || normalizePhoneDigits(phone).length < 10 || !password) {
                 showToast(bi('يرجى إدخال الاسم ورقم هاتف صحيح (11 رقم) وكلمة المرور', 'Enter full name, valid phone number, and password'));
@@ -3924,6 +4261,8 @@
                 showToast(bi('رقم الهاتف مسجل بالفعل، يمكنك تسجيل الدخول', 'Phone number already registered. Sign in instead.'));
                 return;
               }
+              ui.otpSuccessMsg = '';
+              ui.otpErrorMsg = '';
               const newAccId = 'acc_' + Date.now();
               const newAcc = {
                 id: newAccId,
@@ -3931,7 +4270,9 @@
                 phone: phone,
                 nationalId: nationalId,
                 password: password,
-                isPhoneVerified: false
+                isPhoneVerified: false,
+                verifiedBy: '',
+                verifiedAtMillis: 0
               };
               const newSelfMem = {
                 id: 'mem_' + Date.now(),
@@ -3948,7 +4289,7 @@
 
               saveState(db);
               authMode = 'NONE';
-              showToast(bi('تم إنشاء الحساب! اطلب كود التفعيل عبر واتساب أو من العيادة لتفعيل الحجز.', 'Account created! Request your 6-digit OTP via WhatsApp or the clinic.'));
+              showToast(bi('تم إنشاء الحساب! اطلب كود التفعيل عبر واتساب أو فعّله من العيادة.', 'Account created! Verify via WhatsApp OTP or directly at the clinic.'));
               refreshAccountModal();
               renderApp();
             };
@@ -5446,6 +5787,132 @@
           };
         }
 
+        const usersSearchInp = document.getElementById('adminUsersSearch');
+        if (usersSearchInp) {
+          usersSearchInp.oninput = function (e) {
+            const pos = e.target.selectionStart;
+            ui.adminUsersQuery = e.target.value;
+            renderApp();
+            const again = document.getElementById('adminUsersSearch');
+            if (again) {
+              again.focus();
+              again.setSelectionRange(pos, pos);
+            }
+          };
+        }
+
+        document.querySelectorAll('[data-admin-users-filter]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.adminUsersFilter = btn.getAttribute('data-admin-users-filter') || 'ALL';
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-admin-toggle-verify]').forEach((btn) => {
+          btn.onclick = function () {
+            const accId = btn.getAttribute('data-admin-toggle-verify');
+            const target = (db.accounts || []).find((a) => a.id === accId);
+            if (!target) return;
+            const currentlyVerified = target.isPhoneVerified !== false;
+            if (currentlyVerified) {
+              target.isPhoneVerified = false;
+              target.verifiedBy = '';
+              target.verifiedAtMillis = 0;
+              if (db.account && db.account.id === target.id) {
+                db.account.isPhoneVerified = false;
+                db.account.verifiedBy = '';
+                db.account.verifiedAtMillis = 0;
+              }
+              saveState(db);
+              showToast(bi('تم إلغاء تفعيل حساب ' + target.fullName, 'Unverified ' + target.fullName));
+            } else {
+              markAccountVerified(target, 'الإدارة');
+              saveState(db);
+              showToast(bi('تم تفعيل حساب ' + target.fullName + ' يدوياً بواسطة الإدارة', 'Manually verified ' + target.fullName));
+            }
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-admin-edit-user]').forEach((btn) => {
+          btn.onclick = function () {
+            const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-admin-edit-user'));
+            if (!acc) return;
+            openModal(
+              bi('تعديل بيانات العميل: ' + acc.fullName, 'Edit User: ' + acc.fullName),
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('الاسم الكامل *', 'Full Name *')) +
+                '<input class="input" id="admEditUserName" value="' + esc(acc.fullName) + '" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رقم الهاتف *', 'Phone Number *')) +
+                '<input class="input" id="admEditUserPhone" type="tel" value="' + esc(acc.phone) + '" dir="ltr" /></label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('إعادة تعيين كلمة المرور (اتركه فارغاً للإبقاء على الحالية)', 'Reset Password (leave blank to keep current)')) +
+                renderPasswordFieldHtml('admEditUserPass', '', bi('كلمة مرور جديدة (اختياري)', 'New password (optional)')) + '</label>' +
+              '<button class="btn btn-primary btn-block" id="btnAdmSaveEditUser" type="button">💾 ' + esc(bi('حفظ التعديلات', 'Save Changes')) + '</button>',
+              function () {
+                document.getElementById('btnAdmSaveEditUser').onclick = function () {
+                  const newName = (document.getElementById('admEditUserName').value || '').trim();
+                  const newPhone = toAsciiDigits(document.getElementById('admEditUserPhone').value || '').trim();
+                  const newPass = (document.getElementById('admEditUserPass').value || '').trim();
+                  if (!newName || normalizePhoneDigits(newPhone).length < 10) {
+                    showToast(bi('يرجى إدخال اسم صحيح ورقم هاتف صالح', 'Enter valid name and phone'));
+                    return;
+                  }
+                  const newPhoneDigits = normalizePhoneDigits(newPhone);
+                  const duplicate = (db.accounts || []).find((a) => a.id !== acc.id && normalizePhoneDigits(a.phone) === newPhoneDigits);
+                  if (duplicate) {
+                    showToast(bi('رقم الهاتف مسجل لحساب آخر بالفعل', 'Phone number belongs to another user'));
+                    return;
+                  }
+                  const oldPhoneDigits = normalizePhoneDigits(acc.phone);
+                  acc.fullName = newName;
+                  acc.phone = newPhone;
+                  if (newPass) acc.password = newPass;
+                  (db.familyMembers || []).forEach((m) => {
+                    if (m.accountId === acc.id && (m.relation.indexOf('نفسي') >= 0 || normalizePhoneDigits(m.phone) === oldPhoneDigits)) {
+                      if (m.relation.indexOf('نفسي') >= 0) m.fullName = newName;
+                      m.phone = newPhone;
+                    }
+                  });
+                  if (db.account && db.account.id === acc.id) db.account = acc;
+                  saveState(db);
+                  closeModal();
+                  showToast(bi('تم تحديث بيانات العميل بنجاح', 'Customer details updated'));
+                  renderApp();
+                };
+              }
+            );
+          };
+        });
+
+        document.querySelectorAll('[data-admin-delete-user]').forEach((btn) => {
+          btn.onclick = function () {
+            const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-admin-delete-user'));
+            if (!acc) return;
+            openModal(
+              bi('تأكيد حذف حساب العميل', 'Confirm User Account Deletion'),
+              '<div>' + esc(bi('هل أنت متأكد من حذف حساب ', 'Are you sure you want to delete ')) + '<strong>' + esc(acc.fullName) + '</strong> (' + esc(acc.phone) + ') وجميع أفراد الأسرة المسجلين به؟</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">' +
+                '<button class="btn btn-outline" id="btnCancelDeleteUser" type="button">' + esc(bi('تراجع', 'Cancel')) + '</button>' +
+                '<button class="btn btn-danger-outline" id="btnConfirmDeleteUser" type="button">🗑️ ' + esc(bi('حذف الحساب نهائياً', 'Delete Account')) + '</button>' +
+              '</div>',
+              function () {
+                document.getElementById('btnCancelDeleteUser').onclick = closeModal;
+                document.getElementById('btnConfirmDeleteUser').onclick = function () {
+                  db.accounts = (db.accounts || []).filter((a) => a.id !== acc.id);
+                  db.familyMembers = (db.familyMembers || []).filter((m) => m.accountId !== acc.id);
+                  if (db.account && db.account.id === acc.id) {
+                    db.account = null;
+                    db.activeMemberId = null;
+                  }
+                  saveState(db);
+                  closeModal();
+                  showToast(bi('تم حذف حساب ' + acc.fullName + ' نهائياً', 'Deleted ' + acc.fullName));
+                  renderApp();
+                };
+              }
+            );
+          };
+        });
+
         bindOtpGeneratorEvents('ADMIN');
         bindPasswordToggleButtons(document);
       }
@@ -5457,6 +5924,7 @@
         document.querySelectorAll('[data-doc-tab]').forEach((btn) => {
           btn.onclick = function () {
             ui.doctorTab = btn.getAttribute('data-doc-tab');
+            ui.docActivateSuccessMsg = '';
             renderApp();
           };
         });
@@ -5465,10 +5933,66 @@
         if (logoutBtn) {
           logoutBtn.onclick = function () {
             ui.loggedInDoctorId = null;
+            ui.docActivatePhoneQuery = '';
+            ui.docActivateResults = [];
+            ui.docActivateSuccessMsg = '';
             showToast(bi('تم تسجيل خروج الطبيب', 'Doctor signed out'));
             renderApp();
           };
         }
+
+        function runDoctorPatientSearch() {
+          const inp = document.getElementById('docActivatePhoneInput');
+          const rawQ = inp ? inp.value.trim() : '';
+          ui.docActivatePhoneQuery = rawQ;
+          ui.docActivateSuccessMsg = '';
+          const digitsQ = normalizePhoneDigits(rawQ);
+          if (digitsQ.length < 3) {
+            ui.docActivateResults = [];
+            showToast(bi('أدخل 3 أرقام على الأقل من رقم الهاتف للبحث', 'Enter at least 3 digits of the phone number'));
+            renderApp();
+            return;
+          }
+          ui.docActivateResults = (db.accounts || []).filter((acc) => {
+            const accDigits = normalizePhoneDigits(acc.phone);
+            return accDigits.includes(digitsQ) || digitsQ.includes(accDigits);
+          });
+          renderApp();
+        }
+
+        const docActSearchBtn = document.getElementById('btnDocActivateSearch');
+        const docActInp = document.getElementById('docActivatePhoneInput');
+        if (docActSearchBtn) docActSearchBtn.onclick = runDoctorPatientSearch;
+        if (docActInp) {
+          docActInp.onkeydown = function (e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              runDoctorPatientSearch();
+            }
+          };
+        }
+
+        document.querySelectorAll('[data-doc-activate-acc]').forEach((btn) => {
+          btn.onclick = function () {
+            const accId = btn.getAttribute('data-doc-activate-acc');
+            const target = (db.accounts || []).find((a) => a.id === accId);
+            if (!target) return;
+            const clinicSource = 'عيادة ' + doc.doctorName;
+            markAccountVerified(target, clinicSource);
+            saveState(db);
+            ui.docActivateResults = (db.accounts || []).filter((acc) => {
+              const digitsQ = normalizePhoneDigits(ui.docActivatePhoneQuery);
+              const accDigits = normalizePhoneDigits(acc.phone);
+              return digitsQ ? (accDigits.includes(digitsQ) || digitsQ.includes(accDigits)) : acc.id === target.id;
+            });
+            ui.docActivateSuccessMsg = bi(
+              'تم تفعيل حساب ' + target.fullName + ' (' + target.phone + ') بنجاح بواسطة ' + clinicSource,
+              'Activated ' + target.fullName + ' via ' + clinicSource
+            );
+            showToast(ui.docActivateSuccessMsg);
+            renderApp();
+          };
+        });
 
         function applyDelay(mins) {
           doc.currentDelayMinutes += mins;
@@ -5516,8 +6040,6 @@
             }
           };
         });
-
-        bindOtpGeneratorEvents(doc.doctorName);
       }
 
       // Top Header & Nav Global Listeners
@@ -5529,6 +6051,8 @@
         if (langToggleBtn) langToggleBtn.setAttribute('aria-expanded', 'false');
       }
       document.getElementById('btnSmartRefresh').onclick = performSmartHardRefresh;
+      const liveBannerBtn = document.getElementById('liveUpdateBanner');
+      if (liveBannerBtn) liveBannerBtn.onclick = performSmartHardRefresh;
       langToggleBtn.onclick = function (e) {
         e.stopPropagation();
         const isOpen = langDropdownMenu.classList.toggle('open');
@@ -5584,24 +6108,47 @@
       window.addEventListener('storage', function (e) {
         if (e.key === STORAGE_KEY) {
           db = loadState();
+          baselineDbSyncSig = computeDbSyncSignature(db);
           renderApp();
         }
       });
 
-      // 30-Second Background Auto-Refresh for Appointment Slots (non-disruptive)
-      setInterval(function () {
-        const modalRoot = document.getElementById('modalRoot');
-        const hasOpenModal = modalRoot && modalRoot.innerHTML.trim() !== '';
-        const activeTag = document.activeElement ? document.activeElement.tagName : '';
-        const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
-        if (hasOpenModal || isTyping) return;
-        const latestDb = loadState();
-        if (JSON.stringify(latestDb.slots) !== JSON.stringify(db.slots) ||
-            JSON.stringify(latestDb.doctors) !== JSON.stringify(db.doctors)) {
-          db = latestDb;
-          renderApp();
+      // Background Live Update & Data Sync Checker (every 25s + on visibility return)
+      async function checkForLivePlatformUpdates() {
+        try {
+          const latestDb = loadState();
+          const nextDbSig = computeDbSyncSignature(latestDb);
+          if (nextDbSig && baselineDbSyncSig && nextDbSig !== baselineDbSyncSig) {
+            ui.hasNewDataBanner = true;
+            updateHeader();
+          }
+          if (typeof fetch === 'function' && /^https?:$/i.test(window.location.protocol)) {
+            const resp = await fetch('./index.html?live_check=' + Date.now(), { cache: 'no-store' });
+            if (resp && resp.ok) {
+              const etag = resp.headers.get('etag') || '';
+              const lastMod = resp.headers.get('last-modified') || '';
+              const cLen = resp.headers.get('content-length') || '';
+              const sig = etag || lastMod || cLen || String((await resp.text()).length);
+              if (!baselineRemotePageSig) {
+                baselineRemotePageSig = sig;
+              } else if (sig && sig !== baselineRemotePageSig) {
+                ui.hasNewDataBanner = true;
+                updateHeader();
+              }
+            }
+          }
+        } catch (e) { /* offline-safe ignore */ }
+      }
+
+      if (/^https?:$/i.test(window.location.protocol)) {
+        setTimeout(checkForLivePlatformUpdates, 2000);
+      }
+      setInterval(checkForLivePlatformUpdates, 25000);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+          checkForLivePlatformUpdates();
         }
-      }, 30000);
+      });
 
       // Clear any stale legacy SW caches automatically while preserving clean v1.0.0 cache
       if ('caches' in window && caches.keys) {
