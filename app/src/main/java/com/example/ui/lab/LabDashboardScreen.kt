@@ -28,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -49,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,14 +67,19 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
+import com.example.data.local.MedicalRecordEntity
+import com.example.data.local.MedicalRecordType
 import com.example.ui.TebUiState
 import com.example.ui.bi
+import com.example.ui.components.AttachmentPreviewTarget
+import com.example.ui.components.DeleteFileConfirmationDialog
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.theme.SlotAvailableBg
 import com.example.ui.theme.SlotAvailableBorder
 import com.example.ui.theme.SlotBookedBorder
 import com.example.ui.theme.TealPrimary
 import com.example.util.ImageStorageHelper
+import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
@@ -203,10 +212,13 @@ fun LabDashboardScreen(
         displayName: String,
         onDone: () -> Unit,
     ) -> Unit,
+    onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
+    onDeleteRecordFile: (recordId: String) -> Unit,
     onLogoutLab: () -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val isEn = state.isEn
     var phoneQuery by remember { mutableStateOf("") }
     var selectedTarget by remember { mutableStateOf<Pair<FamilyMemberEntity, String>?>(null) }
@@ -217,6 +229,14 @@ fun LabDashboardScreen(
     var attachmentMime by remember { mutableStateOf("") }
     var attachmentName by remember { mutableStateOf("") }
     var tempCameraFile by remember { mutableStateOf<File?>(null) }
+    var showClearPendingConfirm by remember { mutableStateOf(false) }
+    var recordToDelete by remember { mutableStateOf<MedicalRecordEntity?>(null) }
+
+    val recentLabRecords = remember(state.medicalRecords, activeLab.id) {
+        state.medicalRecords.filter {
+            it.recordType == MedicalRecordType.LAB_RESULT && it.doctorId == activeLab.id
+        }.take(12)
+    }
 
     val docLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -539,6 +559,19 @@ fun LabDashboardScreen(
                                             .clip(RoundedCornerShape(12.dp)),
                                     )
                                 }
+                                OutlinedButton(
+                                    onClick = { showClearPendingConfirm = true },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                                    border = BorderStroke(1.dp, Color(0xFFDC2626).copy(alpha = 0.55f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(44.dp)
+                                        .testTag("lab_clear_pending_file_button"),
+                                ) {
+                                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(bi(isEn, "🗑️ حذف الملف المختار", "🗑️ Remove Selected File"))
+                                }
                             }
 
                             Button(
@@ -573,6 +606,142 @@ fun LabDashboardScreen(
                     }
                 }
             }
+
+            if (recentLabRecords.isNotEmpty()) {
+                item {
+                    Text(
+                        text = bi(
+                            isEn,
+                            "التحاليل المرفوعة حديثاً (${recentLabRecords.size})",
+                            "Recently Uploaded Results (${recentLabRecords.size})",
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4338CA),
+                    )
+                }
+                items(recentLabRecords, key = { it.id }) { rec ->
+                    val isPdf = ImageStorageHelper.isPdfAttachment(rec.attachmentPath, rec.attachmentMimeType)
+                    val targetPreview = AttachmentPreviewTarget(
+                        path = rec.attachmentPath,
+                        mimeType = rec.attachmentMimeType.ifBlank { if (isPdf) "application/pdf" else "image/jpeg" },
+                        displayName = rec.attachmentName.ifBlank { "${rec.diagnosis}.pdf" },
+                        title = "${rec.diagnosis} — ${rec.patientName}",
+                        recordId = rec.id,
+                    )
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, Color(0xFF4338CA).copy(alpha = 0.25f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("lab_uploaded_item_${rec.id}"),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(rec.diagnosis, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "${rec.patientName} • ${rec.visitDateLabel}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Icon(
+                                    imageVector = if (isPdf) Icons.Filled.PictureAsPdf else Icons.Filled.PhotoLibrary,
+                                    contentDescription = null,
+                                    tint = if (isPdf) Color(0xFFDC2626) else TealPrimary,
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (rec.attachmentPath.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = { onPreviewAttachment(targetPreview) },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                    ) {
+                                        Icon(Icons.Filled.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(bi(isEn, "معاينة", "Preview"), maxLines = 1)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            scope.launch {
+                                                ImageStorageHelper.saveAttachmentToDownloads(
+                                                    context = context,
+                                                    filePath = targetPreview.path,
+                                                    mimeType = targetPreview.mimeType,
+                                                    displayName = targetPreview.displayName,
+                                                ).onSuccess { savedName ->
+                                                    onShowMessage(bi(isEn, "✓ تم التنزيل: $savedName", "✓ Downloaded: $savedName"))
+                                                }.onFailure { err ->
+                                                    onShowMessage(err.localizedMessage ?: "تعذر التنزيل")
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                    ) {
+                                        Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(bi(isEn, "تحميل", "Save"), maxLines = 1)
+                                    }
+                                }
+                                Button(
+                                    onClick = { recordToDelete = rec },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFDC2626),
+                                        contentColor = Color.White,
+                                    ),
+                                    modifier = Modifier
+                                        .height(44.dp)
+                                        .testTag("lab_delete_record_${rec.id}"),
+                                ) {
+                                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(bi(isEn, "حذف", "Delete"), maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if (showClearPendingConfirm) {
+        DeleteFileConfirmationDialog(
+            fileName = attachmentName.ifBlank { testTitle },
+            isEn = isEn,
+            onConfirmDelete = {
+                ImageStorageHelper.deleteInternalFile(context, attachmentPath)
+                attachmentPath = ""
+                attachmentMime = ""
+                attachmentName = ""
+                showClearPendingConfirm = false
+            },
+            onDismiss = { showClearPendingConfirm = false },
+        )
+    }
+
+    val pendingDeleteRec = recordToDelete
+    if (pendingDeleteRec != null) {
+        DeleteFileConfirmationDialog(
+            fileName = pendingDeleteRec.attachmentName.ifBlank { pendingDeleteRec.diagnosis },
+            isEn = isEn,
+            onConfirmDelete = {
+                recordToDelete = null
+                onDeleteRecordFile(pendingDeleteRec.id)
+            },
+            onDismiss = { recordToDelete = null },
+        )
     }
 }

@@ -628,4 +628,109 @@ class ExampleRobolectricTest {
         )
         assertTrue(repository.allAccountsFlow.first().first { it.id == user2.id }.isPhoneVerified)
     }
+
+    @Test
+    fun patientBioChronicsPersistenceSummaryEnrichmentFileDeletionAndVersionOneLockWork() = runBlocking {
+        assertEquals("1.0.0", BuildConfig.VERSION_NAME)
+        assertEquals(1, BuildConfig.VERSION_CODE)
+
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        repository.ensureSeeded()
+
+        val acc = repository.registerPatientAccount(
+            fullName = "سعيد إبراهيم محمد",
+            phone = "01077665544",
+            nationalId = "",
+            password = "pass_bio",
+        ).getOrThrow()
+        val member = repository.observeFamilyMembers(acc.id).first().first()
+
+        // 1) Save Patient Bio & Chronic Conditions
+        val bioSaveRes = repository.updateMemberBioAndChronic(
+            memberId = member.id,
+            age = 42,
+            weightKg = 78.5,
+            heightCm = 174.0,
+            bloodType = "O+",
+            chronicConditions = listOf("diabetes", "hypertension", "التهاب المفاصل المزمن"),
+            drugAllergies = "البنسلين والأسبرين",
+            otherChronicNotes = "استئصال زائدة سابقاً",
+        )
+        assertTrue(bioSaveRes.isSuccess)
+        val updatedMem = bioSaveRes.getOrThrow()
+        assertEquals(42, updatedMem.age)
+        assertEquals(78.5, updatedMem.weightKg, 0.01)
+        assertEquals(174.0, updatedMem.heightCm, 0.01)
+        assertEquals("O+", updatedMem.bloodType)
+        assertTrue(
+            com.example.util.ChronicConditionsCatalog.parseKeys(updatedMem.chronicConditions)
+                .containsAll(listOf("diabetes", "hypertension", "التهاب المفاصل المزمن"))
+        )
+        assertEquals("البنسلين والأسبرين", updatedMem.drugAllergies)
+
+        // 2) Create temporary internal files for testing deletion
+        val attachmentsDir = java.io.File(context.filesDir, "medical_images").apply { mkdirs() }
+        val uploadPdfFile = java.io.File(attachmentsDir, "urine_test.pdf").apply { writeText("%PDF-1.4 dummy") }
+        val rxPhotoFile = java.io.File(attachmentsDir, "rx_paper.jpg").apply { writeText("jpg-dummy") }
+
+        val uploadRec = repository.addPatientUploadedAttachment(
+            familyMemberId = updatedMem.id,
+            patientName = updatedMem.fullName,
+            patientPhone = acc.phone,
+            title = "تحليل بول كامل Urine Analysis",
+            notes = "Pus cells 12-15 / HPF",
+            attachmentPath = uploadPdfFile.absolutePath,
+            attachmentMimeType = "application/pdf",
+            attachmentName = "urine_test.pdf",
+        )
+
+        val rxRec = repository.addExternalDoctorVisitRecord(
+            familyMemberId = updatedMem.id,
+            patientName = updatedMem.fullName,
+            patientPhone = acc.phone,
+            doctorName = "أشرف حسن",
+            specialty = "الباطنة العامة والجهاز الهضمي والكبد",
+            visitDateLabel = "18/11/2026",
+            diagnosis = "ارتفاع ضغط الدم",
+            medicationsText = "• كونكور 5 مجم — قرص صباحاً يومياً",
+            notes = "قياس ضغط الدم يومياً",
+            attachmentPath = rxPhotoFile.absolutePath,
+            attachmentMimeType = "image/jpeg",
+            attachmentName = "rx_paper.jpg",
+        ).getOrThrow()
+
+        val memberRecords = repository.allMedicalRecordsFlow.first().filter { it.familyMemberId == updatedMem.id }
+        assertEquals(2, memberRecords.size)
+
+        // 3) Verify MedicalSummaryAnalyzer includes Bio, Chronic Conditions, and Allergies
+        val summaryAr = MedicalSummaryAnalyzer.summarize(
+            member = updatedMem,
+            patientName = updatedMem.fullName,
+            records = memberRecords,
+            isEn = false,
+        )
+        assertTrue(summaryAr.vitalsSummary.contains("O+"))
+        assertTrue(summaryAr.vitalsSummary.contains("78.5"))
+        assertTrue(summaryAr.chronicConditionsSummary.contains("السكر"))
+        assertTrue(summaryAr.chronicConditionsSummary.contains("ضغط الدم"))
+        assertEquals("البنسلين والأسبرين", summaryAr.drugAllergies)
+        assertEquals(1, summaryAr.labAndImagingCount)
+        assertEquals(1, summaryAr.externalVisitsCount)
+
+        // 4) Delete patient PDF upload -> deletes record and physical file
+        val delPdfRes = repository.deleteMedicalRecordOrAttachment(uploadRec.id)
+        assertTrue(delPdfRes.isSuccess)
+        assertFalse(uploadPdfFile.exists())
+        val afterPdfDel = repository.allMedicalRecordsFlow.first().filter { it.familyMemberId == updatedMem.id }
+        assertEquals(1, afterPdfDel.size)
+        assertEquals(rxRec.id, afterPdfDel.first().id)
+
+        // 5) Delete attachment from visit record -> keeps clinical visit, clears attachment & deletes file
+        val delRxFileRes = repository.deleteMedicalRecordOrAttachment(rxRec.id)
+        assertTrue(delRxFileRes.isSuccess)
+        assertFalse(rxPhotoFile.exists())
+        val remainingVisit = repository.allMedicalRecordsFlow.first().first { it.familyMemberId == updatedMem.id }
+        assertEquals("", remainingVisit.attachmentPath)
+        assertEquals("ارتفاع ضغط الدم", remainingVisit.diagnosis)
+    }
 }

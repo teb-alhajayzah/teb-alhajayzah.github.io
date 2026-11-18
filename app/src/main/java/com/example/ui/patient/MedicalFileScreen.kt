@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.MedicalServices
@@ -70,6 +71,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,12 +93,17 @@ import com.example.data.local.MedicalRecordType
 import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
+import com.example.ui.components.AttachmentPreviewTarget
+import com.example.ui.components.DeleteFileConfirmationDialog
+import com.example.ui.components.EditPatientBioDialog
+import com.example.ui.components.PatientBioOverviewCard
 import com.example.ui.theme.TealPrimary
 import com.example.util.BilingualMedicalTranslator
 import com.example.util.ImageStorageHelper
 import com.example.util.MedicalSummaryAnalyzer
 import com.example.util.PrescriptionPrintHelper
 import com.example.util.TimeUtils
+import kotlinx.coroutines.launch
 import java.io.File
 
 private data class ExternalMedDraft(
@@ -110,6 +117,19 @@ fun MedicalFileScreen(
     state: TebUiState,
     onSelectFamilyMember: (String) -> Unit,
     onOpenAccountDialog: () -> Unit,
+    onSaveBioAndChronics: (
+        memberId: String,
+        age: Int,
+        weightKg: Double,
+        heightCm: Double,
+        bloodType: String,
+        chronicKeys: List<String>,
+        drugAllergies: String,
+        otherChronicNotes: String,
+        onSaved: () -> Unit,
+    ) -> Unit,
+    onRefreshAiSummary: (memberId: String) -> Unit,
+    onDeleteRecordFile: (recordId: String) -> Unit,
     onUploadAttachment: (
         member: FamilyMemberEntity,
         title: String,
@@ -130,7 +150,7 @@ fun MedicalFileScreen(
         attachmentMimeType: String,
         attachmentName: String,
     ) -> Unit,
-    onPreviewImage: (path: String, title: String) -> Unit,
+    onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -142,6 +162,7 @@ fun MedicalFileScreen(
 
     var showUploadDialog by remember { mutableStateOf(false) }
     var showExternalVisitDialog by remember { mutableStateOf(false) }
+    var showEditBioDialog by remember { mutableStateOf(false) }
     var pendingFilePath by remember { mutableStateOf("") }
     var pendingFileMime by remember { mutableStateOf("image/jpeg") }
     var pendingFileName by remember { mutableStateOf("") }
@@ -293,11 +314,23 @@ fun MedicalFileScreen(
                     }
                 }
 
+                // Prominent Patient Bio & Chronic Conditions Overview card at the top of Medical File
+                item {
+                    PatientBioOverviewCard(
+                        member = activeMember,
+                        isEn = isEn,
+                        onEditClick = { showEditBioDialog = true },
+                    )
+                }
+
                 // AI Medical Summary card at the top of each family member's file
                 item {
                     AiMedicalSummaryCard(
                         patientName = activeMember.fullName,
                         records = records,
+                        member = activeMember,
+                        isAnalyzing = activeMember.id in state.analyzingAiMemberIds,
+                        onRefreshAiSummary = { onRefreshAiSummary(activeMember.id) },
                         isEn = isEn,
                     )
                 }
@@ -460,7 +493,8 @@ fun MedicalFileScreen(
                             record = record,
                             brandConfig = state.brandConfig,
                             isEn = isEn,
-                            onPreviewImage = onPreviewImage,
+                            onPreviewAttachment = onPreviewAttachment,
+                            onDeleteRecordFile = onDeleteRecordFile,
                             onShowMessage = onShowMessage,
                         )
                     }
@@ -568,6 +602,28 @@ fun MedicalFileScreen(
             },
             onShowMessage = onShowMessage,
             onDismiss = { showExternalVisitDialog = false },
+        )
+    }
+
+    if (showEditBioDialog && activeMember != null) {
+        EditPatientBioDialog(
+            member = activeMember,
+            isEn = isEn,
+            onSave = { age, weightKg, heightCm, bloodType, chronicKeys, drugAllergies, otherNotes ->
+                onSaveBioAndChronics(
+                    activeMember.id,
+                    age,
+                    weightKg,
+                    heightCm,
+                    bloodType,
+                    chronicKeys,
+                    drugAllergies,
+                    otherNotes,
+                ) {
+                    showEditBioDialog = false
+                }
+            },
+            onDismiss = { showEditBioDialog = false },
         )
     }
 }
@@ -943,11 +999,14 @@ fun MedicalRecordTimelineCard(
     record: MedicalRecordEntity,
     brandConfig: PlatformBrandConfig,
     isEn: Boolean = false,
-    onPreviewImage: (path: String, title: String) -> Unit,
+    onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
+    onDeleteRecordFile: ((recordId: String) -> Unit)? = null,
     onShowMessage: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var cardIsEn by remember(isEn, record.id) { mutableStateOf(isEn) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val localized = remember(record, cardIsEn) {
         BilingualMedicalTranslator.resolveForDisplay(record, showEnglish = cardIsEn)
     }
@@ -1159,24 +1218,69 @@ fun MedicalRecordTimelineCard(
             }
 
             if (record.attachmentPath.isNotBlank()) {
+                val previewTarget = AttachmentPreviewTarget(
+                    path = record.attachmentPath,
+                    mimeType = record.attachmentMimeType.ifBlank { if (isPdf) "application/pdf" else "image/jpeg" },
+                    displayName = record.attachmentName.ifBlank {
+                        if (isPdf) "${localized.diagnosis.ifBlank { "LabReport" }}.pdf" else "attachment.jpg"
+                    },
+                    title = localized.diagnosis,
+                    recordId = record.id,
+                )
+
                 if (isPdf) {
-                    OutlinedButton(
-                        onClick = {
-                            ImageStorageHelper.openAttachmentExternally(
-                                context = context,
-                                filePath = record.attachmentPath,
-                                mimeType = record.attachmentMimeType,
-                                onError = onShowMessage,
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Filled.PictureAsPdf, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(bi(cardIsEn, "فتح ملف PDF: ${record.attachmentName.ifBlank { "نتيجة التحليل" }}", "Open PDF: ${record.attachmentName.ifBlank { "Lab Report" }}"))
+                        Button(
+                            onClick = { onPreviewAttachment(previewTarget) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("open_pdf_preview_${record.id}"),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = bi(cardIsEn, "معاينة ملف PDF", "View PDF"),
+                                maxLines = 1,
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val saved = ImageStorageHelper.saveAttachmentToDownloads(
+                                        context = context,
+                                        filePath = previewTarget.path,
+                                        mimeType = previewTarget.mimeType,
+                                        displayName = previewTarget.displayName,
+                                    )
+                                    saved.onSuccess { name ->
+                                        onShowMessage(
+                                            bi(
+                                                cardIsEn,
+                                                "✓ تم تنزيل الملف في مجلد التنزيلات: $name",
+                                                "✓ Saved to Downloads: $name",
+                                            )
+                                        )
+                                    }.onFailure { err ->
+                                        onShowMessage(err.localizedMessage ?: bi(cardIsEn, "تعذر تنزيل الملف", "Download failed"))
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("download_pdf_${record.id}"),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(bi(cardIsEn, "تحميل ملف التحليل", "Download PDF"), maxLines = 1)
+                        }
                     }
                 } else {
                     Box(
@@ -1184,7 +1288,7 @@ fun MedicalRecordTimelineCard(
                             .fillMaxWidth()
                             .height(170.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable { onPreviewImage(record.attachmentPath, localized.diagnosis) },
+                            .clickable { onPreviewAttachment(previewTarget) },
                     ) {
                         AsyncImage(
                             model = File(record.attachmentPath),
@@ -1219,6 +1323,23 @@ fun MedicalRecordTimelineCard(
                         }
                     }
                 }
+
+                if (onDeleteRecordFile != null) {
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                        border = BorderStroke(1.dp, Color(0xFFDC2626).copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("delete_record_file_${record.id}"),
+                    ) {
+                        Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(bi(cardIsEn, "🗑️ حذف الملف", "🗑️ Delete File"), fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             if (isRxOrExternal) {
@@ -1246,5 +1367,17 @@ fun MedicalRecordTimelineCard(
                 }
             }
         }
+    }
+
+    if (showDeleteConfirm && onDeleteRecordFile != null) {
+        DeleteFileConfirmationDialog(
+            fileName = record.attachmentName.ifBlank { localized.diagnosis },
+            isEn = cardIsEn,
+            onConfirmDelete = {
+                showDeleteConfirm = false
+                onDeleteRecordFile(record.id)
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
     }
 }

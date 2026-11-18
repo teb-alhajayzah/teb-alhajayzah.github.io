@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -15,6 +16,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
+import com.example.util.ImageStorageHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -256,9 +263,57 @@ fun LiveWebPortalScreen(
                             loadWithOverviewMode = true
                             loadsImagesAutomatically = true
                         }
-                        setDownloadListener { url, _, _, _, _ ->
+                        addJavascriptInterface(
+                            object {
+                                @JavascriptInterface
+                                fun saveBase64File(dataUrl: String, mimeType: String, fileName: String) {
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        val res = ImageStorageHelper.saveBase64ToDownloads(
+                                            context = ctx,
+                                            rawDataUrlOrBase64 = dataUrl,
+                                            mimeType = mimeType,
+                                            displayName = fileName,
+                                        )
+                                        res.onSuccess { savedName ->
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(
+                                                    ctx,
+                                                    "تم حفظ الملف في التنزيلات: $savedName",
+                                                    Toast.LENGTH_LONG,
+                                                ).show()
+                                            }
+                                        }.onFailure { err ->
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(
+                                                    ctx,
+                                                    err.localizedMessage ?: "تعذر حفظ الملف",
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "AndroidPdfBridge",
+                        )
+                        setDownloadListener { url, _, contentDisposition, mimeType, _ ->
                             if (!url.isNullOrBlank()) {
-                                openExternalUri(ctx, url)
+                                if (url.startsWith("data:", ignoreCase = true)) {
+                                    val guessedName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        val res = ImageStorageHelper.saveBase64ToDownloads(
+                                            context = ctx,
+                                            rawDataUrlOrBase64 = url,
+                                            mimeType = mimeType.orEmpty(),
+                                            displayName = guessedName,
+                                        )
+                                        res.onSuccess { saved ->
+                                            Toast.makeText(ctx, "تم تنزيل الملف: $saved", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                } else if (!url.startsWith("blob:", ignoreCase = true)) {
+                                    openExternalUri(ctx, url)
+                                }
                             }
                         }
                         webChromeClient = object : WebChromeClient() {

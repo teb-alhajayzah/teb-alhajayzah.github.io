@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -15,12 +16,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,10 +35,13 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -69,12 +75,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -105,7 +113,9 @@ import com.example.ui.theme.SlotBookedBorder
 import com.example.ui.theme.SlotBookedText
 import com.example.ui.theme.TealPrimary
 import com.example.ui.theme.TealPrimaryDark
+import com.example.util.ImageStorageHelper
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.net.URLEncoder
 
@@ -1231,52 +1241,286 @@ fun NotificationsDialog(
 
 @Composable
 fun FullImagePreviewDialog(
-    imagePath: String,
-    title: String,
+    target: AttachmentPreviewTarget,
     isEn: Boolean = false,
+    onDeleteRecordFile: ((recordId: String) -> Unit)? = null,
+    onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val isPdf = remember(target.path, target.mimeType) {
+        ImageStorageHelper.isPdfAttachment(target.path, target.mimeType)
+    }
+
+    var pdfPages by remember(target.path) { mutableStateOf<List<Bitmap>>(emptyList()) }
+    var pdfLoading by remember(target.path) { mutableStateOf(isPdf) }
+    var pdfError by remember(target.path) { mutableStateOf("") }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(target.path, isPdf) {
+        if (isPdf) {
+            pdfLoading = true
+            pdfError = ""
+            val res = ImageStorageHelper.renderPdfPagesToBitmaps(target.path)
+            res.onSuccess { pages ->
+                pdfPages = pages
+                pdfLoading = false
+            }.onFailure { err ->
+                pdfError = err.localizedMessage ?: bi(isEn, "تعذر عرض صفحات PDF", "Could not render PDF pages")
+                pdfLoading = false
+            }
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
-            color = Color.Black.copy(alpha = 0.92f),
+            color = Color(0xFF0F172A),
             modifier = Modifier.fillMaxSize(),
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                AsyncImage(
-                    model = File(imagePath),
-                    contentDescription = title,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentScale = ContentScale.Fit,
-                )
+            Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(16.dp),
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = target.title.ifBlank { target.displayName },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (target.displayName.isNotBlank()) {
+                            Text(
+                                text = target.displayName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.72f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.18f)),
                     ) {
                         Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"), tint = Color.White)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(bi(isEn, "إغلاق", "Close"), color = Color.White)
                     }
                 }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isPdf) {
+                        when {
+                            pdfLoading -> {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    CircularProgressIndicator(color = TealPrimary)
+                                    Text(
+                                        text = bi(isEn, "جاري تجهيز صفحات ملف PDF...", "Rendering PDF pages..."),
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
+
+                            pdfError.isNotBlank() -> {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Icon(Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(44.dp))
+                                    Text(
+                                        text = pdfError,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Button(
+                                        onClick = {
+                                            ImageStorageHelper.openAttachmentExternally(
+                                                context = context,
+                                                filePath = target.path,
+                                                mimeType = target.mimeType,
+                                                onError = onShowMessage,
+                                            )
+                                        },
+                                    ) {
+                                        Icon(Icons.Filled.OpenInNew, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(bi(isEn, "فتح بتطبيق PDF خارجي", "Open in external PDF viewer"))
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    itemsIndexed(pdfPages) { index, pageBitmap ->
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = Color.White,
+                                            shadowElevation = 4.dp,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Column {
+                                                Image(
+                                                    bitmap = pageBitmap.asImageBitmap(),
+                                                    contentDescription = bi(isEn, "صفحة PDF ${index + 1}", "PDF page ${index + 1}"),
+                                                    contentScale = ContentScale.FillWidth,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                                Text(
+                                                    text = bi(isEn, "صفحة ${index + 1} من ${pdfPages.size}", "Page ${index + 1} of ${pdfPages.size}"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color(0xFF475569),
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 6.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        AsyncImage(
+                            model = File(target.path),
+                            contentDescription = target.title,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
+                }
+
+                Surface(
+                    color = Color.Black.copy(alpha = 0.72f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    val saved = ImageStorageHelper.saveAttachmentToDownloads(
+                                        context = context,
+                                        filePath = target.path,
+                                        mimeType = target.mimeType,
+                                        displayName = target.displayName.ifBlank { target.title },
+                                    )
+                                    saved.onSuccess { savedFile ->
+                                        onShowMessage(
+                                            bi(
+                                                isEn,
+                                                "✓ تم تنزيل الملف في مجلد التنزيلات (Downloads/TebAlHajayzah): $savedFile",
+                                                "✓ Saved to Downloads/TebAlHajayzah: $savedFile",
+                                            )
+                                        )
+                                    }.onFailure { err ->
+                                        onShowMessage(err.localizedMessage ?: bi(isEn, "تعذر تنزيل الملف", "Could not download file"))
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .height(48.dp)
+                                .testTag("preview_download_file_button"),
+                        ) {
+                            Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isPdf) {
+                                    bi(isEn, "تحميل ملف التحليل (PDF)", "Download Lab PDF")
+                                } else {
+                                    bi(isEn, "تحميل الملف", "Download File")
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        if (isPdf) {
+                            OutlinedButton(
+                                onClick = {
+                                    ImageStorageHelper.openAttachmentExternally(
+                                        context = context,
+                                        filePath = target.path,
+                                        mimeType = target.mimeType,
+                                        onError = onShowMessage,
+                                    )
+                                },
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                                modifier = Modifier.height(48.dp),
+                            ) {
+                                Icon(Icons.Filled.OpenInNew, contentDescription = bi(isEn, "فتح خارجي", "Open External"), tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        val recId = target.recordId
+                        if (!recId.isNullOrBlank() && onDeleteRecordFile != null) {
+                            Button(
+                                onClick = { showDeleteConfirm = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFDC2626),
+                                    contentColor = Color.White,
+                                ),
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .testTag("preview_delete_file_button"),
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(bi(isEn, "حذف", "Delete"), maxLines = 1)
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (showDeleteConfirm && target.recordId != null && onDeleteRecordFile != null) {
+        DeleteFileConfirmationDialog(
+            fileName = target.displayName.ifBlank { target.title },
+            isEn = isEn,
+            onConfirmDelete = {
+                showDeleteConfirm = false
+                onDeleteRecordFile(target.recordId)
+                onDismiss()
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
     }
 }

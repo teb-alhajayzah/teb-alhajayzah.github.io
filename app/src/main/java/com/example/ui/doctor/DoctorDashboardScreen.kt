@@ -69,11 +69,14 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.BookingSource
 import com.example.data.local.ClinicDoctorEntity
+import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
+import com.example.ui.components.AttachmentPreviewTarget
+import com.example.ui.components.DoctorPatientMedicalAlertBanner
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.patient.MedicalRecordTimelineCard
 import com.example.ui.theme.DelayWarningBg
@@ -229,7 +232,8 @@ fun DoctorDashboardScreen(
     onToggleFavoriteMed: (doctorId: String, medicationId: String) -> Unit,
     onSearchPatientsForActivation: (phoneQuery: String) -> Unit,
     onActivatePatientByClinic: (accountId: String) -> Unit,
-    onPreviewImage: (path: String, title: String) -> Unit,
+    onRefreshAiSummary: (memberId: String) -> Unit = {},
+    onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
     val isEn = state.isEn
@@ -630,6 +634,12 @@ fun DoctorDashboardScreen(
     // Smart Electronic Prescription Dialog
     val rxSlot = slotForPrescription
     if (rxSlot != null) {
+        val rxPatientMember = remember(state.allFamilyMembers, rxSlot) {
+            state.allFamilyMembers.firstOrNull {
+                (rxSlot.familyMemberId.isNotBlank() && it.id == rxSlot.familyMemberId) ||
+                    (rxSlot.patientName.isNotBlank() && it.fullName == rxSlot.patientName)
+            }
+        }
         SmartPrescriptionDialog(
             slot = rxSlot,
             doctor = activeDoctor,
@@ -637,6 +647,7 @@ fun DoctorDashboardScreen(
             medications = state.medications,
             isLiveRemoteMeds = state.isLiveMedicationsApi,
             favoriteMedIds = state.favoriteMedicationIdsForDoctor(activeDoctor.id),
+            patientMember = rxPatientMember,
             isEn = isEn,
             onToggleFavorite = { medId -> onToggleFavoriteMed(activeDoctor.id, medId) },
             onSaveAndComplete = { diagnosis, medicationsText, notes, attachmentPath, diagEn, medsEn, notesEn, reportAr, reportEn ->
@@ -667,12 +678,21 @@ fun DoctorDashboardScreen(
             patientName = emrSlot.patientName,
             patientPhone = emrSlot.patientPhone,
         )
+        val emrPatientMember = remember(state.allFamilyMembers, emrSlot) {
+            state.allFamilyMembers.firstOrNull {
+                (emrSlot.familyMemberId.isNotBlank() && it.id == emrSlot.familyMemberId) ||
+                    (emrSlot.patientName.isNotBlank() && it.fullName == emrSlot.patientName)
+            }
+        }
         PatientEmrViewerDialog(
             patientName = emrSlot.patientName,
+            patientMember = emrPatientMember,
+            isAnalyzingAi = emrPatientMember?.id?.let { it in state.analyzingAiMemberIds } == true,
             brandConfig = state.brandConfig,
             records = patientRecords,
             isEn = isEn,
-            onPreviewImage = onPreviewImage,
+            onRefreshAiSummary = { emrPatientMember?.id?.let(onRefreshAiSummary) },
+            onPreviewAttachment = onPreviewAttachment,
             onShowMessage = onShowMessage,
             onDismiss = { slotForEmrView = null },
         )
@@ -1003,10 +1023,13 @@ private fun ScheduleGeneratorDialog(
 @Composable
 private fun PatientEmrViewerDialog(
     patientName: String,
+    patientMember: FamilyMemberEntity?,
+    isAnalyzingAi: Boolean,
     brandConfig: com.example.config.PlatformBrandConfig,
     records: List<MedicalRecordEntity>,
     isEn: Boolean = false,
-    onPreviewImage: (path: String, title: String) -> Unit,
+    onRefreshAiSummary: () -> Unit,
+    onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
     onShowMessage: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1047,12 +1070,22 @@ private fun PatientEmrViewerDialog(
 
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.height(470.dp),
+                    modifier = Modifier.height(500.dp),
                 ) {
+                    item(key = "emr_medical_alert") {
+                        DoctorPatientMedicalAlertBanner(
+                            member = patientMember,
+                            patientName = patientName,
+                            isEn = isEn,
+                        )
+                    }
                     item(key = "emr_ai_summary") {
                         AiMedicalSummaryCard(
                             patientName = patientName,
                             records = records,
+                            member = patientMember,
+                            isAnalyzing = isAnalyzingAi,
+                            onRefreshAiSummary = if (patientMember != null) onRefreshAiSummary else null,
                             isEn = isEn,
                         )
                     }
@@ -1081,7 +1114,8 @@ private fun PatientEmrViewerDialog(
                                 record = rec,
                                 brandConfig = brandConfig,
                                 isEn = isEn,
-                                onPreviewImage = onPreviewImage,
+                                onPreviewAttachment = onPreviewAttachment,
+                                onDeleteRecordFile = null,
                                 onShowMessage = onShowMessage,
                             )
                         }

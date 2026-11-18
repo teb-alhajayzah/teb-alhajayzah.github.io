@@ -15,15 +15,20 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.MedicalInformation
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,10 +42,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
 import com.example.ui.theme.DelayWarningText
+import com.example.ui.theme.SlotBookedBg
+import com.example.ui.theme.SlotBookedBorder
+import com.example.ui.theme.SlotBookedText
 import com.example.ui.theme.TealPrimary
 import com.example.util.MedicalSummaryAnalyzer
 
@@ -48,12 +57,20 @@ import com.example.util.MedicalSummaryAnalyzer
 fun AiMedicalSummaryCard(
     patientName: String,
     records: List<MedicalRecordEntity>,
+    member: FamilyMemberEntity? = null,
+    isAnalyzing: Boolean = false,
+    onRefreshAiSummary: (() -> Unit)? = null,
     isEn: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var cardIsEn by remember(isEn) { mutableStateOf(isEn) }
-    val summary = remember(patientName, records, cardIsEn) {
-        MedicalSummaryAnalyzer.summarize(patientName, records, isEn = cardIsEn)
+    val summary = remember(member, patientName, records, cardIsEn) {
+        MedicalSummaryAnalyzer.summarize(
+            member = member,
+            patientName = patientName,
+            records = records,
+            isEn = cardIsEn,
+        )
     }
 
     Card(
@@ -100,37 +117,202 @@ fun AiMedicalSummaryCard(
                             color = TealPrimary,
                         )
                         Text(
-                            text = if (cardIsEn) "Auto-generated from visits, prescriptions & lab reports" else "تحليل تلقائي للزيارات والأدوية ونتائج التحاليل",
+                            text = if (cardIsEn) {
+                                "Reads uploaded PDFs, vitals, chronics & prescriptions"
+                            } else {
+                                "يقرأ ملفات PDF والتحاليل والبيانات الحيوية والأدوية تلقائياً"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                FilterChip(
-                    selected = cardIsEn,
-                    onClick = { cardIsEn = !cardIsEn },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Translate,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp),
-                        )
-                    },
-                    label = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onRefreshAiSummary != null) {
+                        IconButton(
+                            onClick = onRefreshAiSummary,
+                            enabled = !isAnalyzing,
+                            modifier = Modifier.testTag("ai_summary_refresh_button"),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = if (cardIsEn) "Re-analyze medical files" else "تحديث التحليل الطبي",
+                                tint = TealPrimary,
+                            )
+                        }
+                    }
+                    FilterChip(
+                        selected = cardIsEn,
+                        onClick = { cardIsEn = !cardIsEn },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Translate,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = if (cardIsEn) "AR" else "EN",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = TealPrimary,
+                            selectedLabelColor = Color.White,
+                            selectedLeadingIconColor = Color.White,
+                        ),
+                        modifier = Modifier.testTag("ai_summary_lang_toggle"),
+                    )
+                }
+            }
+
+            if (summary.vitalsSummary.isNotBlank() ||
+                summary.chronicConditionsSummary.isNotBlank() ||
+                summary.drugAllergies.isNotBlank()
+            ) {
+                Surface(
+                    color = TealPrimary.copy(alpha = 0.06f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (summary.vitalsSummary.isNotBlank()) {
+                            Text(
+                                text = summary.vitalsSummary,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        if (summary.chronicConditionsSummary.isNotBlank()) {
+                            Text(
+                                text = if (cardIsEn) {
+                                    "Chronic: ${summary.chronicConditionsSummary}"
+                                } else {
+                                    "الأمراض المزمنة: ${summary.chronicConditionsSummary}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DelayWarningText,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        if (summary.drugAllergies.isNotBlank()) {
+                            Text(
+                                text = if (cardIsEn) {
+                                    "🚨 Drug Allergies: ${summary.drugAllergies}"
+                                } else {
+                                    "🚨 حساسية أدوية: ${summary.drugAllergies}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlotBookedText,
+                                fontWeight = FontWeight.ExtraBold,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isAnalyzing) {
+                Surface(
+                    color = TealPrimary.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         Text(
-                            text = if (cardIsEn) "AR عرض بالعربية" else "EN English",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = if (cardIsEn) {
+                                "Reading attached PDF / images and updating AI medical summary..."
+                            } else {
+                                "جاري قراءة ملفات PDF والمرفقات وتحديث الملخص الطبي بالذكاء الاصطناعي..."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TealPrimary,
                             fontWeight = FontWeight.Bold,
                         )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = TealPrimary,
-                        selectedLabelColor = Color.White,
-                        selectedLeadingIconColor = Color.White,
-                    ),
-                    modifier = Modifier.testTag("ai_summary_lang_toggle"),
-                )
+                        LinearProgressIndicator(
+                            color = TealPrimary,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            } else if (summary.aiNarrative.isNotBlank()) {
+                Surface(
+                    color = Color(0xFFF0FDFA),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ai_gemini_narrative_box"),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                tint = TealPrimary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = if (cardIsEn) {
+                                    "Smart Clinical Analysis (PDFs & History)"
+                                } else {
+                                    "القراءة والتحليل الذكي للتقارير والتحاليل"
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = TealPrimary,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        Text(
+                            text = summary.aiNarrative,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            } else if (summary.aiError.isNotBlank()) {
+                Surface(
+                    color = SlotBookedBg.copy(alpha = 0.65f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Filled.Warning, contentDescription = null, tint = SlotBookedBorder, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = summary.aiError,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlotBookedText,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (onRefreshAiSummary != null) {
+                            OutlinedButton(onClick = onRefreshAiSummary, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (cardIsEn) "Retry AI Analysis" else "إعادة محاولة التحليل الذكي")
+                            }
+                        }
+                    }
+                }
             }
 
             if (summary.totalRecords > 0) {
@@ -220,7 +402,7 @@ fun AiMedicalSummaryCard(
                         }
                     }
                 }
-            } else {
+            } else if (summary.aiNarrative.isBlank()) {
                 Text(
                     text = summary.headlineSummary,
                     style = MaterialTheme.typography.bodySmall,

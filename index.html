@@ -15,6 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <style>
     :root {
       --teal: #0D7377;
@@ -743,6 +744,84 @@
       font-size: 0.86rem;
     }
 
+    .bio-overview-card {
+      background: linear-gradient(135deg, #FFFFFF 0%, #F0FDFA 100%);
+      border: 1.5px solid rgba(13, 115, 119, 0.35);
+      border-radius: 18px;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .bio-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    @media (max-width: 520px) {
+      .bio-metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .bio-metric-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+
+    .doctor-alert-banner {
+      background: linear-gradient(135deg, #FEF2F2 0%, #FFFBEB 100%);
+      border: 2px solid #DC2626;
+      border-radius: 14px;
+      padding: 12px;
+      color: #7F1D1D;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.86rem;
+    }
+
+    .btn-danger-solid {
+      background: #DC2626;
+      color: #fff;
+      border: none;
+    }
+
+    .pdf-viewer-toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .pdf-canvas-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 64vh;
+      overflow-y: auto;
+      background: #F1F5F9;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .pdf-page-canvas {
+      width: 100%;
+      height: auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
+      display: block;
+    }
+
     /* Doctor & Admin Stats */
     .stats-row {
       display: grid;
@@ -1457,6 +1536,43 @@
         { id: 'other', ar: 'تخصصات أخرى', en: 'Other Specialties', medKey: '', aliases: ['تخصصات أخرى', 'other', 'other specialties'] }
       ];
 
+      const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+      const CHRONIC_CONDITIONS_CATALOG = [
+        { key: 'diabetes', ar: 'السكر', en: 'Diabetes' },
+        { key: 'hypertension', ar: 'ضغط الدم', en: 'Hypertension' },
+        { key: 'heart_disease', ar: 'أمراض القلب', en: 'Heart Disease' },
+        { key: 'asthma', ar: 'الحساسية الصدرية / الربو', en: 'Asthma / Bronchial Allergy' },
+        { key: 'kidney_disease', ar: 'أمراض الكلى', en: 'Kidney Disease' },
+        { key: 'liver_disease', ar: 'أمراض الكبد', en: 'Liver Disease' }
+      ];
+
+      function chronicLabelByKey(key, isEnOverride) {
+        const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
+        const clean = String(key || '').trim();
+        const found = CHRONIC_CONDITIONS_CATALOG.find((c) => c.key === clean || c.ar === clean || c.en.toLowerCase() === clean.toLowerCase());
+        if (found) return isEn ? found.en : found.ar;
+        return clean;
+      }
+
+      function normalizeFamilyMemberObj(mem) {
+        if (!mem) return mem;
+        return Object.assign({
+          age: mem.age != null ? mem.age : 30,
+          weightKg: mem.weightKg != null ? Number(mem.weightKg) || 0 : 0,
+          heightCm: mem.heightCm != null ? Number(mem.heightCm) || 0 : 0,
+          bloodType: String(mem.bloodType || ''),
+          chronicConditions: Array.isArray(mem.chronicConditions)
+            ? mem.chronicConditions.map((x) => String(x || '').trim()).filter(Boolean)
+            : [],
+          drugAllergies: String(mem.drugAllergies || ''),
+          otherChronicNotes: String(mem.otherChronicNotes || '')
+        }, mem, {
+          chronicConditions: Array.isArray(mem.chronicConditions)
+            ? mem.chronicConditions.map((x) => String(x || '').trim()).filter(Boolean)
+            : []
+        });
+      }
+
       function findSpecialtyByNameOrAlias(raw) {
         const clean = String(raw || '').trim().toLowerCase();
         if (!clean) return null;
@@ -2023,6 +2139,7 @@
                   if (synced) parsed.account = synced;
                 }
                 if (!Array.isArray(parsed.familyMembers)) parsed.familyMembers = [];
+                parsed.familyMembers = parsed.familyMembers.map(normalizeFamilyMemberObj);
                 if (!Array.isArray(parsed.labs)) parsed.labs = [];
                 if (!Array.isArray(parsed.records)) parsed.records = [];
                 if (!Array.isArray(parsed.notifications)) parsed.notifications = [];
@@ -2093,10 +2210,14 @@
         otpErrorMsg: '',
         cardLangOverrides: {}, // { [recordId]: 'ar' | 'en' }
         aiSummaryLang: null, // null | 'ar' | 'en'
-        lastAiSummaryContext: null // { memberName, records }
+        lastAiSummaryContext: null // { memberName, records, memberObj }
       };
 
       const EXTERNAL_SPECIALTIES = SPECIALTIES_CATALOG;
+
+      if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
 
       function bi(arText, enText) {
         return ui.lang === 'en' ? enText : arText;
@@ -2108,6 +2229,52 @@
       const MAX_ADMIN_PIN_ATTEMPTS = 3;
       const ADMIN_LOCKOUT_MILLIS = 15 * 60 * 1000;
 
+      function dataUrlToUint8Array(dataUrl) {
+        try {
+          const str = String(dataUrl || '');
+          const commaIdx = str.indexOf(',');
+          const b64 = commaIdx >= 0 ? str.slice(commaIdx + 1) : str;
+          const bin = atob(b64.replace(/\s+/g, ''));
+          const len = bin.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = bin.charCodeAt(i);
+          }
+          return bytes;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function dataUrlToBlob(dataUrl, fallbackMime) {
+        const bytes = dataUrlToUint8Array(dataUrl);
+        if (!bytes) return null;
+        const mimeMatch = String(dataUrl || '').match(/^data:([^;]+);/i);
+        const mime = (mimeMatch && mimeMatch[1]) || fallbackMime || 'application/octet-stream';
+        return new Blob([bytes], { type: mime });
+      }
+
+      async function extractTextFromPdfBytes(bytes) {
+        if (!bytes || !window.pdfjsLib) return '';
+        try {
+          const loadingTask = window.pdfjsLib.getDocument({ data: bytes.slice() });
+          const pdfDoc = await loadingTask.promise;
+          const pageLimit = Math.min(pdfDoc.numPages || 0, 10);
+          const chunks = [];
+          for (let p = 1; p <= pageLimit; p++) {
+            const page = await pdfDoc.getPage(p);
+            const tc = await page.getTextContent();
+            const txt = (tc && Array.isArray(tc.items))
+              ? tc.items.map((item) => item.str || '').join(' ').replace(/\s+/g, ' ').trim()
+              : '';
+            if (txt) chunks.push(txt);
+          }
+          return chunks.join('\n').slice(0, 6000);
+        } catch (e) {
+          return '';
+        }
+      }
+
       function readAttachmentWithCompression(file, onDone) {
         if (!file) return;
         const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
@@ -2117,11 +2284,20 @@
             return;
           }
           const reader = new FileReader();
-          reader.onload = function () {
+          reader.onload = async function () {
+            const dataUrl = reader.result;
+            let extractedText = '';
+            try {
+              setGlobalLoading(true, bi('جاري قراءة واستخراج نتائج ملف الـ PDF...', 'Reading & extracting PDF clinical content...'));
+              const bytes = dataUrlToUint8Array(dataUrl);
+              extractedText = await extractTextFromPdfBytes(bytes);
+            } catch (e) { /* safe fallback */ }
+            setGlobalLoading(false);
             onDone({
-              dataUrl: reader.result,
+              dataUrl: dataUrl,
               mimeType: 'application/pdf',
-              fileName: file.name || 'report.pdf'
+              fileName: file.name || 'report.pdf',
+              extractedText: extractedText
             });
           };
           reader.readAsDataURL(file);
@@ -2153,13 +2329,15 @@
               onDone({
                 dataUrl: compressedUrl,
                 mimeType: 'image/jpeg',
-                fileName: file.name || 'image.jpg'
+                fileName: file.name || 'image.jpg',
+                extractedText: ''
               });
             } catch (err) {
               onDone({
                 dataUrl: reader.result,
                 mimeType: file.type || 'image/jpeg',
-                fileName: file.name || 'image.jpg'
+                fileName: file.name || 'image.jpg',
+                extractedText: ''
               });
             }
           };
@@ -2167,7 +2345,8 @@
             onDone({
               dataUrl: reader.result,
               mimeType: file.type || 'image/jpeg',
-              fileName: file.name || 'image.jpg'
+              fileName: file.name || 'image.jpg',
+              extractedText: ''
             });
           };
           img.src = reader.result;
@@ -2175,8 +2354,107 @@
         reader.readAsDataURL(file);
       }
 
-      function buildMedicalSummary(memberName, records, isEnOverride) {
+      function extractClinicalLabFindingsFromRecords(records, memberObj, isEn) {
+        const findings = [];
+        const alerts = [];
+        const seenFinding = new Set();
+        const chronicKeys = memberObj && Array.isArray(memberObj.chronicConditions)
+          ? memberObj.chronicConditions.map((x) => String(x).toLowerCase())
+          : [];
+        const hasDiabetes = chronicKeys.some((k) => k.includes('diabetes') || k.includes('سكر'));
+        const hasKidney = chronicKeys.some((k) => k.includes('kidney') || k.includes('كل'));
+        const hasHeartOrBp = chronicKeys.some((k) => k.includes('heart') || k.includes('hyper') || k.includes('قلب') || k.includes('ضغط'));
+
+        function addFinding(labelAr, labelEn) {
+          const val = isEn ? labelEn : labelAr;
+          if (!seenFinding.has(val) && findings.length < 6) {
+            seenFinding.add(val);
+            findings.push(val);
+          }
+        }
+        function addAlert(ar, en) {
+          const val = isEn ? en : ar;
+          if (!alerts.includes(val) && alerts.length < 5) alerts.push(val);
+        }
+
+        (records || []).forEach((rec) => {
+          const rawBlob = [rec.diagnosis, rec.notes, rec.extractedText].filter(Boolean).join(' • ');
+          const text = rawBlob.replace(/\s+/g, ' ');
+          if (!text) return;
+
+          const hbMatch = text.match(/(?:hemoglobin|hgb|\bhb\b|الهيموجلوبين)\s*[:=\-]?\s*(\d{1,2}(?:\.\d+)?)/i);
+          if (hbMatch) {
+            const hb = parseFloat(hbMatch[1]);
+            if (hb > 2 && hb < 25) {
+              const flag = hb < 11.5 ? (isEn ? ' (Low — check Anemia)' : ' (منخفض — يُرجى متابعة الأنيميا)') : '';
+              addFinding('الهيموجلوبين (Hb): ' + hb + flag, 'Hemoglobin (Hb): ' + hb + flag);
+            }
+          }
+
+          const gluMatch = text.match(/(?:glucose|fbs|rbs|blood\s*sugar|السكر(?:\s*العشوائي|\s*الصائم)?)\s*[:=\-]?\s*(\d{2,3}(?:\.\d+)?)/i);
+          if (gluMatch) {
+            const g = parseFloat(gluMatch[1]);
+            const high = g >= 140;
+            addFinding(
+              'سكر الدم: ' + g + ' mg/dL' + (high ? ' (مرتفع)' : ''),
+              'Blood Glucose: ' + g + ' mg/dL' + (high ? ' (Elevated)' : '')
+            );
+            if (high && hasDiabetes) {
+              addAlert('ارتفاع مستوى السكر (' + g + ') مع وجود تاريخ لمرض السكري — يُنصح بمراجعة الجرعة.', 'Elevated glucose (' + g + ') in diabetic patient — review regimen.');
+            }
+          }
+
+          const a1cMatch = text.match(/(?:hba1c|a1c|السكر\s*التراكمي)\s*[:=\-]?\s*(\d{1,2}(?:\.\d+)?)/i);
+          if (a1cMatch) {
+            const a1c = parseFloat(a1cMatch[1]);
+            addFinding('السكر التراكمي (HbA1c): ' + a1c + '%', 'HbA1c: ' + a1c + '%');
+            if (a1c >= 6.5) {
+              addAlert('قيمة HbA1c (' + a1c + '%) تتطلب متابعة ضبط السكري.', 'HbA1c (' + a1c + '%) indicates need for glycemic control review.');
+            }
+          }
+
+          const creatMatch = text.match(/(?:creatinine|الكرياتينين)\s*[:=\-]?\s*(\d(?:\.\d+)?)/i);
+          if (creatMatch) {
+            const cr = parseFloat(creatMatch[1]);
+            const high = cr > 1.3;
+            addFinding('الكرياتينين: ' + cr + (high ? ' (مرتفع)' : ''), 'Creatinine: ' + cr + (high ? ' (Elevated)' : ''));
+            if (high || hasKidney) {
+              addAlert('ملاحظة لوظائف الكلى (Creatinine ' + cr + ') — تجنّب المسكنات الضارة بالكلى (NSAIDs).', 'Renal monitoring noted (Creatinine ' + cr + ') — avoid nephrotoxic NSAIDs.');
+            }
+          }
+
+          const pusMatch = text.match(/(?:pus\s*cells?|صديد)\s*[:=\-]?\s*([0-9]+(?:\s*-\s*[0-9]+)?)/i);
+          if (pusMatch) {
+            const pVal = pusMatch[1].trim();
+            addFinding('خلايا صديد (Pus Cells): ' + pVal, 'Pus Cells: ' + pVal);
+            const firstNum = parseInt(pVal, 10);
+            if (firstNum >= 8) {
+              addAlert('ارتفاع خلايا الصديد بالبول (' + pVal + ') قد يشير إلى التهاب مسالك بولية.', 'Elevated urinary pus cells (' + pVal + ') may suggest UTI.');
+            }
+          }
+
+          const albMatch = text.match(/(?:albumin|protein|الألبيومين|زلال)\s*[:=\-]?\s*(positive|\+{1,3}|\d+(?:\.\d+)?)/i);
+          if (albMatch) {
+            addFinding('البروتين / الزلال: ' + albMatch[1], 'Protein / Albumin: ' + albMatch[1]);
+            if (hasHeartOrBp || hasKidney) {
+              addAlert('ظهور زلال بالتحليل مع ضغط الدم أو الكلى يستدعي تقييم الطبيب.', 'Albuminuria with hypertension/renal history warrants physician review.');
+            }
+          }
+
+          if (rec.extractedText && findings.length === 0) {
+            const cleanFirst = rec.extractedText.replace(/\s+/g, ' ').trim().slice(0, 110);
+            if (cleanFirst) {
+              addFinding((rec.diagnosis ? rec.diagnosis + ': ' : '') + cleanFirst + '…', (rec.diagnosis ? rec.diagnosis + ': ' : '') + cleanFirst + '…');
+            }
+          }
+        });
+
+        return { findings: findings, alerts: alerts };
+      }
+
+      function buildMedicalSummary(memberName, records, isEnOverride, memberObj) {
         const isEn = typeof isEnOverride === 'boolean' ? isEnOverride : (ui.lang === 'en');
+        const mem = memberObj ? normalizeFamilyMemberObj(memberObj) : null;
         const sorted = (records || []).slice().sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
         const clinicVisitsCount = sorted.filter((r) => !r.recordType || r.recordType === 'PRESCRIPTION').length;
         const externalVisitsCount = sorted.filter((r) => r.recordType === 'EXTERNAL_VISIT').length;
@@ -2206,36 +2484,57 @@
           }
         });
 
+        const parsedLab = extractClinicalLabFindingsFromRecords(sorted, mem, isEn);
+        const chronicsList = mem && mem.chronicConditions.length > 0
+          ? mem.chronicConditions.map((k) => chronicLabelByKey(k, isEn))
+          : [];
+        const bioParts = [];
+        if (mem) {
+          if (mem.age > 0) bioParts.push(isEn ? (mem.age + ' yrs') : (mem.age + ' سنة'));
+          if (mem.weightKg > 0) bioParts.push(mem.weightKg + (isEn ? ' kg' : ' كجم'));
+          if (mem.heightCm > 0) bioParts.push(mem.heightCm + (isEn ? ' cm' : ' سم'));
+          if (mem.bloodType) bioParts.push((isEn ? 'Blood: ' : 'فصيلة الدم: ') + mem.bloodType);
+        }
+
         return {
-          memberName: memberName || (isEn ? 'Patient' : 'المريض'),
+          memberName: memberName || (mem ? mem.fullName : '') || (isEn ? 'Patient' : 'المريض'),
           totalRecords: sorted.length,
           clinicVisitsCount: clinicVisitsCount,
           externalVisitsCount: externalVisitsCount,
           labReportsCount: labReportsCount,
+          vitalsSummary: bioParts.join(' • '),
+          chronicsList: chronicsList,
+          drugAllergies: mem && mem.drugAllergies ? mem.drugAllergies.trim() : '',
+          otherChronicNotes: mem && mem.otherChronicNotes ? mem.otherChronicNotes.trim() : '',
           diagnoses: Array.from(diagnosesSet),
           medications: Array.from(medsSet),
           labs: Array.from(labsSet),
+          extractedFindings: parsedLab.findings,
+          clinicalAlerts: parsedLab.alerts,
           disclaimer: isEn
             ? 'Standard Medical Disclaimer: This summary is auto-generated for clinical reference only and does not replace a full medical evaluation by the treating physician.'
-            : 'تنبيه طبي قياسي: هذا الملخص مولّد آلياً للاستئناس الطبي فقط بناءً على السجلات المضافة ولا يُغني عن التقييم السريري الكامل للطبيب المعالج.'
+            : 'تنبيه طبي قياسي: هذا الملخص مولّد آلياً للاستئناس الطبي فقط بناءً على السجلات وملفات الـ PDF المضافة ولا يُغني عن التقييم السريري الكامل للطبيب المعالج.'
         };
       }
 
-      function renderAiMedicalSummaryCardHtml(memberName, records) {
-        ui.lastAiSummaryContext = { memberName: memberName, records: records || [] };
+      function renderAiMedicalSummaryCardHtml(memberName, records, memberObj) {
+        ui.lastAiSummaryContext = { memberName: memberName, records: records || [], memberObj: memberObj || null };
         const cardIsEn = ui.aiSummaryLang ? (ui.aiSummaryLang === 'en') : (ui.lang === 'en');
         const t = (ar, en) => (cardIsEn ? en : ar);
-        const s = buildMedicalSummary(memberName, records, cardIsEn);
+        const s = buildMedicalSummary(memberName, records, cardIsEn, memberObj);
+        const hasBioOrRecords = s.totalRecords > 0 || Boolean(s.vitalsSummary) || s.chronicsList.length > 0 || Boolean(s.drugAllergies);
+
         return '<section class="ai-summary-card" id="aiMedicalSummaryCard" dir="' + (cardIsEn ? 'ltr' : 'rtl') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
             '<div style="display:flex;align-items:center;gap:8px;">' +
               '<span style="font-size:1.3rem;">🧠</span>' +
               '<div>' +
-                '<div style="font-weight:800;font-size:1rem;color:var(--teal-text);">' + esc(t('التقرير الطبي الذكي الشامل (AI Summary)', 'AI Comprehensive Medical Summary')) + '</div>' +
-                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(t('تحليل فوري لملف ', 'Instant clinical summary for ')) + esc(s.memberName) + '</div>' +
+                '<div style="font-weight:800;font-size:1rem;color:var(--teal-text);">' + esc(t('الملخص الطبي المختصر (AI Summary)', 'AI Comprehensive Medical Summary')) + '</div>' +
+                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(t('تحليل فوري للملف ونتائج الـ PDF لـ ', 'Instant clinical & PDF summary for ')) + esc(s.memberName) + '</div>' +
               '</div>' +
             '</div>' +
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+              '<button class="rx-lang-pill" type="button" data-refresh-ai-summary="1">🔄 ' + esc(t('تحديث الملخص', 'Refresh')) + '</button>' +
               '<button class="rx-lang-pill" type="button" data-toggle-ai-summary-lang="1">' +
                 '🌐 ' + esc(cardIsEn ? 'عرض بالعربية (AR)' : 'عرض بالإنجليزية (EN)') +
               '</button>' +
@@ -2244,13 +2543,27 @@
               '</span>' +
             '</div>' +
           '</div>' +
-          (s.totalRecords === 0
-            ? '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(t('لا توجد بيانات كافية بعد. سيتحدث التقرير تلقائياً فور إضافة روشتة أو زيارة خارجية أو نتيجة تحليل.', 'No records yet. The AI summary updates automatically when visits or lab results are added.')) + '</div>'
-            : '<div class="stats-row">' +
+          (!hasBioOrRecords
+            ? '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(t('لا توجد بيانات كافية بعد. سجّل البيانات الحيوية والأمراض المزمنة أو ارفع تحليل PDF لتحديث الملخص فوراً.', 'No clinical data yet. Update bio/chronic profile or upload a lab PDF to populate this summary.')) + '</div>'
+            : ((s.vitalsSummary || s.chronicsList.length > 0 || s.drugAllergies)
+                ? '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:4px;font-size:0.84rem;">' +
+                    (s.vitalsSummary ? '<div><strong>📊 ' + esc(t('البيانات الحيوية:', 'Vitals:')) + '</strong> ' + esc(s.vitalsSummary) + '</div>' : '') +
+                    (s.chronicsList.length > 0 ? '<div style="color:#B45309;"><strong>🩺 ' + esc(t('الأمراض المزمنة:', 'Chronic Conditions:')) + '</strong> ' + esc(s.chronicsList.join(' • ')) + '</div>' : '') +
+                    (s.drugAllergies ? '<div style="color:#DC2626;font-weight:700;">⚠️ ' + esc(t('حساسية الأدوية: ', 'Drug Allergies: ')) + esc(s.drugAllergies) + '</div>' : '') +
+                    (s.otherChronicNotes ? '<div style="color:var(--text-muted);"><strong>📝 ' + esc(t('ملاحظات:', 'Notes:')) + '</strong> ' + esc(s.otherChronicNotes) + '</div>' : '') +
+                  '</div>'
+                : '') +
+              '<div class="stats-row">' +
                 '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:var(--teal);font-size:1.15rem;">' + s.clinicVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(t('كشوفات المنصة', 'Clinic Visits')) + '</div></div>' +
                 '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#C2410C;font-size:1.15rem;">' + s.externalVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(t('زيارات خارجية', 'External Visits')) + '</div></div>' +
                 '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#3730A3;font-size:1.15rem;">' + s.labReportsCount + '</div><div style="font-size:0.74rem;">' + esc(t('تحاليل وأشعة', 'Lab Reports')) + '</div></div>' +
               '</div>' +
+              (s.clinicalAlerts.length > 0
+                ? '<div style="background:#FEF2F2;border:1px solid #DC2626;border-radius:12px;padding:10px;color:#7F1D1D;font-size:0.84rem;"><strong>🚨 ' + esc(t('تنبيهات سريرية من التحاليل والأمراض المزمنة:', 'Clinical Alerts from Labs & Chronics:')) + '</strong><div style="margin-top:4px;">' + s.clinicalAlerts.map((a) => '• ' + esc(a)).join('<br/>') + '</div></div>'
+                : '') +
+              (s.extractedFindings.length > 0
+                ? '<div style="background:#EEF2FF;border:1px solid #6366F1;border-radius:12px;padding:10px;color:#312E81;font-size:0.84rem;"><strong>📑 ' + esc(t('نتائج مستخرجة من ملفات التحاليل المرفوعة:', 'Extracted Lab PDF Values:')) + '</strong><div style="margin-top:4px;">' + s.extractedFindings.map((f) => '• ' + esc(f)).join('<br/>') + '</div></div>'
+                : '') +
               (s.diagnoses.length > 0
                 ? '<div><strong style="font-size:0.84rem;color:var(--teal-text);">🩺 ' + esc(t('أبرز التشخيصات المسجلة:', 'Key Recorded Diagnoses:')) + '</strong>' +
                     '<div style="font-size:0.84rem;margin-top:3px;">' + s.diagnoses.map((d) => '• ' + esc(d)).join('<br/>') + '</div></div>'
@@ -3066,8 +3379,16 @@
           if (isPdfAttach) {
             attachHtml = '<div class="pdf-attach-card" style="margin-top:10px;">' +
               '<span>📑 ' + esc(rec.attachmentName || t('تقرير تحليل طبي (PDF)', 'Medical Lab Report (PDF)')) + '</span>' +
-              '<button class="btn btn-outline" type="button" data-open-pdf="' + esc(rec.id) + '" style="min-height:36px;padding:4px 12px;">👁️ ' + esc(t('فتح / تحميل PDF', 'Open / Download PDF')) + '</button>' +
-            '</div>';
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                '<button class="btn btn-outline" type="button" data-open-pdf="' + esc(rec.id) + '" style="min-height:36px;padding:4px 12px;">👁️ ' + esc(t('معاينة PDF', 'Preview PDF')) + '</button>' +
+                '<button class="btn btn-primary" type="button" data-download-att="' + esc(rec.id) + '" style="min-height:36px;padding:4px 12px;">⬇️ ' + esc(t('تحميل PDF', 'Download')) + '</button>' +
+              '</div>' +
+            '</div>' +
+            (rec.extractedText
+              ? '<div style="margin-top:6px;padding:8px 10px;background:#F8FAFC;border:1px solid var(--border);border-radius:10px;font-size:0.78rem;color:var(--text-muted);">' +
+                  '📄 <strong>' + esc(t('مقتطف مستخرج من الملف:', 'Extracted PDF snippet:')) + '</strong> ' + esc(rec.extractedText.slice(0, 140)) + (rec.extractedText.length > 140 ? '…' : '') +
+                '</div>'
+              : '');
           } else {
             attachHtml = '<div style="margin-top:10px;"><img class="attach-img" src="' + esc(rec.attachmentDataUrl) + '" alt="مرفق طبي" data-preview-img="' + esc(rec.id) + '" /></div>';
           }
@@ -3104,9 +3425,14 @@
               '</div>'
             : '') +
           attachHtml +
-          (canBilingual
-            ? '<div style="margin-top:10px;"><button class="btn btn-outline btn-block" type="button" data-print-rec="' + esc(rec.id) + '">🖨️ ' + esc(t('طباعة الروشتة والتقرير (AR PDF)', 'Print Prescription & Report (EN PDF)')) + '</button></div>'
-            : '') +
+          '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' +
+            (canBilingual
+              ? '<button class="btn btn-outline" type="button" data-print-rec="' + esc(rec.id) + '" style="flex:1;">🖨️ ' + esc(t('طباعة الروشتة والتقرير', 'Print Rx & Report')) + '</button>'
+              : '') +
+            (rec.attachmentDataUrl
+              ? '<button class="btn btn-danger-outline" type="button" data-delete-rec-file="' + esc(rec.id) + '" style="min-height:42px;">🗑️ ' + esc(t('حذف الملف', 'Delete File')) + '</button>'
+              : '') +
+          '</div>' +
         '</article>';
       }
 
@@ -3343,6 +3669,59 @@
           '</section>';
       }
 
+      function renderPatientBioOverviewCardHtml(member) {
+        const mem = normalizeFamilyMemberObj(member);
+        if (!mem) return '';
+        const chronics = (mem.chronicConditions || []).map((k) => chronicLabelByKey(k));
+        return '<section class="bio-overview-card">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+            '<div>' +
+              '<div style="font-weight:800;font-size:1.02rem;color:var(--teal-text);">🩺 ' + esc(bi('البيانات الحيوية والأمراض المزمنة (نظرة عامة)', 'Vital Bio & Chronic Conditions Overview')) + '</div>' +
+              '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(mem.fullName) + ' (' + esc(mem.relation) + ')</div>' +
+            '</div>' +
+            '<button class="btn btn-outline" id="btnEditPatientBio" type="button" style="min-height:38px;padding:6px 12px;">✏️ ' + esc(bi('تعديل البيانات', 'Edit Bio Data')) + '</button>' +
+          '</div>' +
+          '<div class="bio-metrics-grid">' +
+            '<div class="bio-metric-pill"><div style="font-size:0.74rem;color:var(--text-muted);">' + esc(bi('السن', 'Age')) + '</div><div style="font-weight:800;">' + (mem.age > 0 ? esc(mem.age + ' ' + bi('سنة', 'yr')) : '—') + '</div></div>' +
+            '<div class="bio-metric-pill"><div style="font-size:0.74rem;color:var(--text-muted);">' + esc(bi('الوزن', 'Weight')) + '</div><div style="font-weight:800;">' + (mem.weightKg > 0 ? esc(mem.weightKg + ' ' + bi('كجم', 'kg')) : '—') + '</div></div>' +
+            '<div class="bio-metric-pill"><div style="font-size:0.74rem;color:var(--text-muted);">' + esc(bi('الطول', 'Height')) + '</div><div style="font-weight:800;">' + (mem.heightCm > 0 ? esc(mem.heightCm + ' ' + bi('سم', 'cm')) : '—') + '</div></div>' +
+            '<div class="bio-metric-pill"><div style="font-size:0.74rem;color:var(--text-muted);">' + esc(bi('فصيلة الدم', 'Blood Type')) + '</div><div style="font-weight:800;color:#DC2626;" dir="ltr">' + esc(mem.bloodType || '—') + '</div></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
+            '<strong style="font-size:0.84rem;color:var(--teal-text);">' + esc(bi('الأمراض المزمنة:', 'Chronic Conditions:')) + '</strong>' +
+            (chronics.length === 0
+              ? '<span class="badge" style="background:#ECFDF5;color:#15803D;border:1px solid #86EFAC;">' + esc(bi('لا توجد أمراض مزمنة مسجلة', 'None recorded')) + '</span>'
+              : chronics.map((c) => '<span class="badge" style="background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;">' + esc(c) + '</span>').join('')) +
+          '</div>' +
+          (mem.drugAllergies
+            ? '<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:8px 10px;color:#991B1B;font-size:0.84rem;font-weight:700;">⚠️ ' + esc(bi('حساسية الأدوية: ', 'Drug Allergies: ')) + esc(mem.drugAllergies) + '</div>'
+            : '') +
+          (mem.otherChronicNotes
+            ? '<div style="font-size:0.82rem;color:var(--text-muted);"><strong>' + esc(bi('ملاحظات طبية دائمة: ', 'Permanent notes: ')) + '</strong>' + esc(mem.otherChronicNotes) + '</div>'
+            : '') +
+        '</section>';
+      }
+
+      function renderDoctorMedicalAlertBannerHtml(member) {
+        const mem = normalizeFamilyMemberObj(member);
+        if (!mem) return '';
+        const chronics = (mem.chronicConditions || []).map((k) => chronicLabelByKey(k));
+        const vitals = [];
+        if (mem.age > 0) vitals.push(bi('السن: ', 'Age: ') + mem.age);
+        if (mem.weightKg > 0) vitals.push(bi('الوزن: ', 'Wt: ') + mem.weightKg + ' ' + bi('كجم', 'kg'));
+        if (mem.heightCm > 0) vitals.push(bi('الطول: ', 'Ht: ') + mem.heightCm + ' ' + bi('سم', 'cm'));
+        if (mem.bloodType) vitals.push(bi('فصيلة الدم: ', 'Blood: ') + mem.bloodType);
+        const hasAlert = chronics.length > 0 || Boolean(mem.drugAllergies) || vitals.length > 0 || Boolean(mem.otherChronicNotes);
+        if (!hasAlert) return '';
+        return '<div class="doctor-alert-banner">' +
+          '<div style="font-weight:800;font-size:0.94rem;color:#991B1B;">🚨 ' + esc(bi('تنبيه طبي هام للطبيب قبل التشخيص وكتابة الروشتة', 'Important Patient Medical Alert Banner')) + '</div>' +
+          (vitals.length > 0 ? '<div style="color:#1E293B;font-weight:700;">📊 ' + esc(vitals.join(' • ')) + '</div>' : '') +
+          (chronics.length > 0 ? '<div>🩺 <strong>' + esc(bi('أمراض مزمنة: ', 'Chronic Conditions: ')) + '</strong>' + esc(chronics.join('، ')) + '</div>' : '') +
+          (mem.drugAllergies ? '<div style="font-weight:800;color:#DC2626;">⛔ ' + esc(bi('حساسية أدوية: ', 'Drug Allergies: ')) + esc(mem.drugAllergies) + '</div>' : '') +
+          (mem.otherChronicNotes ? '<div style="color:#475569;">📝 ' + esc(mem.otherChronicNotes) + '</div>' : '') +
+        '</div>';
+      }
+
       function renderMedicalFileScreen() {
         const activeMember = getActiveMember();
         if (!db.account || !activeMember) {
@@ -3377,7 +3756,9 @@
             ).join('') +
           '</div>' +
 
-          renderAiMedicalSummaryCardHtml(activeMember.fullName, records) +
+          renderPatientBioOverviewCardHtml(activeMember) +
+
+          renderAiMedicalSummaryCardHtml(activeMember.fullName, records, activeMember) +
 
           '<button class="btn btn-primary btn-block" id="btnOpenExternalVisitModal" type="button" style="background:linear-gradient(135deg,#EA580C 0%,#C2410C 100%);">' +
             esc(bi('➕ تسجيل زيارة طبيب خارجي / خاص', '➕ Log External / Private Doctor Visit')) +
@@ -3614,20 +3995,32 @@
           '</section>' +
 
           (selectedMember
-            ? '<section class="card" style="border-color:#4F46E5;display:flex;flex-direction:column;gap:10px;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
-                  '<h3 style="color:#312E81;">📤 ' + esc(bi('2. إرفاق نتيجة التحليل لملف: ', '2. Upload Lab Result for: ')) + esc(selectedMember.fullName) + '</h3>' +
-                  '<span class="badge badge-lab">' + esc(selectedMember.relation) + '</span>' +
-                '</div>' +
-                '<input class="input" id="labTestTitle" placeholder="' + esc(bi('اسم التحليل أو الأشعة * (مثال: صورة دم كاملة CBC)', 'Test / Scan Title * (e.g. CBC)')) + '" />' +
-                '<textarea class="textarea" id="labTestNotes" placeholder="' + esc(bi('ملاحظات المعمل أو أبرز النتائج (اختياري)', 'Lab notes / key findings (optional)')) + '"></textarea>' +
-                '<label class="btn btn-outline btn-block" style="cursor:pointer;">' +
-                  '📎 ' + esc(bi('اختيار ملف التقرير (PDF أو صورة من الجهاز)', 'Choose Report File (PDF or Image)')) +
-                  '<input type="file" id="labResultFileInput" accept="image/*,application/pdf" style="display:none;" />' +
-                '</label>' +
-                '<div id="labFilePreview" style="font-size:0.86rem;color:var(--teal-text);"></div>' +
-                '<button class="btn btn-primary btn-block" id="btnLabUploadSubmit" type="button" style="background:#3730A3;">✓ ' + esc(bi('إرسال النتيجة فوراً إلى ملف المريض الطبي', 'Send Report to Patient Medical File')) + '</button>' +
-              '</section>'
+            ? (function () {
+                const memberLabs = (db.records || [])
+                  .filter((r) => (r.familyMemberId === selectedMember.id || r.patientName === selectedMember.fullName) && r.recordType === 'LAB_RESULT')
+                  .sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0))
+                  .slice(0, 6);
+                return '<section class="card" style="border-color:#4F46E5;display:flex;flex-direction:column;gap:10px;">' +
+                  '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                    '<h3 style="color:#312E81;">📤 ' + esc(bi('2. إرفاق نتيجة التحليل لملف: ', '2. Upload Lab Result for: ')) + esc(selectedMember.fullName) + '</h3>' +
+                    '<span class="badge badge-lab">' + esc(selectedMember.relation) + '</span>' +
+                  '</div>' +
+                  '<input class="input" id="labTestTitle" placeholder="' + esc(bi('اسم التحليل أو الأشعة * (مثال: صورة دم كاملة CBC)', 'Test / Scan Title * (e.g. CBC)')) + '" />' +
+                  '<textarea class="textarea" id="labTestNotes" placeholder="' + esc(bi('ملاحظات المعمل أو أبرز النتائج (اختياري)', 'Lab notes / key findings (optional)')) + '"></textarea>' +
+                  '<label class="btn btn-outline btn-block" style="cursor:pointer;">' +
+                    '📎 ' + esc(bi('اختيار ملف التقرير (PDF أو صورة من الجهاز)', 'Choose Report File (PDF or Image)')) +
+                    '<input type="file" id="labResultFileInput" accept="image/*,application/pdf" style="display:none;" />' +
+                  '</label>' +
+                  '<div id="labFilePreview" style="font-size:0.86rem;color:var(--teal-text);"></div>' +
+                  '<button class="btn btn-primary btn-block" id="btnLabUploadSubmit" type="button" style="background:#3730A3;">✓ ' + esc(bi('إرسال النتيجة فوراً إلى ملف المريض الطبي', 'Send Report to Patient Medical File')) + '</button>' +
+                '</section>' +
+                (memberLabs.length > 0
+                  ? '<section class="card" style="display:flex;flex-direction:column;gap:8px;">' +
+                      '<h3>📑 ' + esc(bi('التحاليل المرفوعة حديثاً للمريض (' + memberLabs.length + ')', 'Recently Uploaded Lab Reports (' + memberLabs.length + ')')) + '</h3>' +
+                      memberLabs.map((rec) => renderMedicalRecordCardHtml(rec)).join('') +
+                    '</section>'
+                  : '');
+              })()
             : '');
       }
 
@@ -4041,10 +4434,14 @@
       // 6. النوافذ المنبثقة (Modals) والروشتة الذكية والتحقق بالـ OTP
       // ================================================================
       let modalIntervalTimer = null;
+      let activeModalBlobUrls = [];
       function closeModal() {
         if (modalIntervalTimer) {
           clearInterval(modalIntervalTimer);
           modalIntervalTimer = null;
+        }
+        while (activeModalBlobUrls.length > 0) {
+          try { URL.revokeObjectURL(activeModalBlobUrls.pop()); } catch (e) {}
         }
         document.getElementById('modalRoot').innerHTML = '';
       }
@@ -4460,14 +4857,14 @@
                 verifiedBy: '',
                 verifiedAtMillis: 0
               }, db, nowMs);
-              const newSelfMem = {
+              const newSelfMem = normalizeFamilyMemberObj({
                 id: 'mem_' + nowMs,
                 accountId: newAccId,
                 fullName: fullName,
                 relation: 'نفسي (صاحب الحساب)',
                 age: 30,
                 phone: phone
-              };
+              });
               db.accounts = (db.accounts || []).concat([newAcc]);
               db.account = newAcc;
               db.familyMembers.push(newSelfMem);
@@ -4526,14 +4923,14 @@
             addFamSubmit.onclick = function () {
               const name = document.getElementById('newMemName').value.trim();
               if (!name) { showToast(bi('يرجى كتابة اسم فرد العائلة', 'Enter family member name')); return; }
-              const mem = {
+              const mem = normalizeFamilyMemberObj({
                 id: 'mem_' + Date.now(),
                 accountId: db.account.id,
                 fullName: name,
                 relation: document.getElementById('newMemRel').value.trim() || 'فرد عائلة',
                 age: parseInt(document.getElementById('newMemAge').value, 10) || 25,
                 phone: document.getElementById('newMemPhone').value.trim() || db.account.phone
-              };
+              });
               db.familyMembers.push(mem);
               db.activeMemberId = mem.id;
               saveState(db);
@@ -4771,6 +5168,7 @@
                 attachmentDataUrl: extAttachment.dataUrl || '',
                 attachmentMimeType: extAttachment.mimeType || '',
                 attachmentName: extAttachment.fileName || '',
+                extractedText: extAttachment.extractedText || '',
                 recordType: 'EXTERNAL_VISIT',
                 createdAtMillis: Date.now()
               });
@@ -5179,7 +5577,19 @@
           return bundle;
         }
 
+        function findMemberForSlot(slot) {
+          if (!slot) return null;
+          return (db.familyMembers || []).find((m) =>
+            (slot.familyMemberId && m.id === slot.familyMemberId) ||
+            (slot.patientName && m.fullName === slot.patientName) ||
+            (slot.patientPhone && normalizePhoneDigits(m.phone) === normalizePhoneDigits(slot.patientPhone))
+          ) || null;
+        }
+
+        const slotMember = findMemberForSlot(slot);
+
         openModal(bi('الروشتة الإلكترونية الذكية — ', 'Smart E-Prescription — ') + slot.patientName,
+          renderDoctorMedicalAlertBannerHtml(slotMember) +
           '<div class="badge ' + (ui.isLiveMedsApi ? 'badge-avail' : '') + '" style="background:var(--teal-soft);color:var(--teal-text);">' +
             (ui.isLiveMedsApi ? '☁️ متصل بقاعدة الأدوية المصرية (' + ui.medications.length + ' دواء)' : '💊 ' + esc(bi('قاعدة الأدوية المصرية المدمجة Offline (' + ui.medications.length + ' دواء)', 'Egyptian Drugs Offline DB (' + ui.medications.length + ' items)'))) +
           '</div>' +
@@ -5322,15 +5732,279 @@
         );
       }
 
+      function findMemberBySlotOrId(slot) {
+        if (!slot) return null;
+        return (db.familyMembers || []).find((m) =>
+          (slot.familyMemberId && m.id === slot.familyMemberId) ||
+          (slot.patientName && m.fullName === slot.patientName) ||
+          (slot.patientPhone && normalizePhoneDigits(m.phone) === normalizePhoneDigits(slot.patientPhone))
+        ) || null;
+      }
+
+      function openEditPatientBioModal(member) {
+        if (!member) return;
+        const mem = normalizeFamilyMemberObj(member);
+        const standardKeys = new Set(CHRONIC_CONDITIONS_CATALOG.map((c) => c.key));
+        let selectedChronics = (mem.chronicConditions || []).slice();
+
+        function renderChronicChips() {
+          const box = document.getElementById('bioChronicsContainer');
+          if (!box) return;
+          const allOptions = CHRONIC_CONDITIONS_CATALOG.slice();
+          selectedChronics.forEach((k) => {
+            if (!standardKeys.has(k) && !allOptions.some((o) => o.key === k || o.ar === k)) {
+              allOptions.push({ key: k, ar: k, en: k });
+            }
+          });
+          box.innerHTML = allOptions.map((c) => {
+            const active = selectedChronics.includes(c.key) || selectedChronics.includes(c.ar);
+            return '<button class="chip spec-multi-chip ' + (active ? 'active' : '') + '" type="button" data-bio-chronic="' + esc(c.key) + '">' +
+              (active ? '✓ ' : '+ ') + esc(ui.lang === 'en' ? c.en : c.ar) +
+            '</button>';
+          }).join('');
+          box.querySelectorAll('[data-bio-chronic]').forEach((btn) => {
+            btn.onclick = function () {
+              const key = btn.getAttribute('data-bio-chronic');
+              const idx = selectedChronics.indexOf(key);
+              if (idx >= 0) selectedChronics.splice(idx, 1);
+              else selectedChronics.push(key);
+              renderChronicChips();
+            };
+          });
+        }
+
+        openModal(
+          bi('تعديل البيانات الحيوية والأمراض المزمنة — ', 'Edit Bio & Chronic Profile — ') + mem.fullName,
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('السن (بالسنوات)', 'Age (years)')) + '<input class="input" id="bioAgeInp" type="number" min="0" max="120" value="' + esc(mem.age || '') + '" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('الوزن (كجم)', 'Weight (kg)')) + '<input class="input" id="bioWeightInp" type="number" step="0.1" min="0" value="' + esc(mem.weightKg || '') + '" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('الطول (سم)', 'Height (cm)')) + '<input class="input" id="bioHeightInp" type="number" min="0" value="' + esc(mem.heightCm || '') + '" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('فصيلة الدم', 'Blood Type')) +
+              '<select class="select" id="bioBloodSel">' +
+                '<option value="">' + esc(bi('غير محددة', 'Not set')) + '</option>' +
+                BLOOD_TYPES.map((bt) => '<option value="' + esc(bt) + '"' + (mem.bloodType === bt ? ' selected' : '') + '>' + esc(bt) + '</option>').join('') +
+              '</select>' +
+            '</label>' +
+          '</div>' +
+          '<div>' +
+            '<div style="font-weight:800;font-size:0.88rem;color:var(--teal-text);margin-bottom:6px;">🩺 ' + esc(bi('الأمراض المزمنة (اختيار متعدد):', 'Chronic Conditions (Multi-select):')) + '</div>' +
+            '<div id="bioChronicsContainer" class="chips-row" style="flex-wrap:wrap;overflow:visible;"></div>' +
+            '<div style="display:flex;gap:6px;margin-top:8px;">' +
+              '<input class="input" id="bioCustomChronicInp" placeholder="' + esc(bi('إضافة مرض مزمن آخر...', 'Add custom condition...')) + '" />' +
+              '<button class="btn btn-outline" id="btnAddCustomChronic" type="button">+ ' + esc(bi('إضافة', 'Add')) + '</button>' +
+            '</div>' +
+          '</div>' +
+          '<label style="font-size:0.82rem;font-weight:700;color:#B91C1C;">⚠️ ' + esc(bi('حساسية من أدوية معينة (مهم جداً للطبيب)', 'Drug Allergies (Important Alert)')) +
+            '<input class="input" id="bioAllergyInp" value="' + esc(mem.drugAllergies || '') + '" placeholder="' + esc(bi('مثال: البنسلين، السلفا، الأسبرين...', 'e.g. Penicillin, Sulfa...')) + '" />' +
+          '</label>' +
+          '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('ملاحظات طبية إضافية', 'Additional Chronic Notes')) +
+            '<textarea class="textarea" id="bioOtherNotesInp" placeholder="' + esc(bi('عمليات سابقة، تاريخ عائلي، إلخ...', 'Past surgeries, family history...')) + '">' + esc(mem.otherChronicNotes || '') + '</textarea>' +
+          '</label>' +
+          '<button class="btn btn-primary btn-block" id="btnSavePatientBio" type="button">💾 ' + esc(bi('حفظ وتحديث الملخص الطبي', 'Save & Update AI Summary')) + '</button>',
+          function () {
+            renderChronicChips();
+            document.getElementById('btnAddCustomChronic').onclick = function () {
+              const customVal = (document.getElementById('bioCustomChronicInp').value || '').trim();
+              if (!customVal) return;
+              if (!selectedChronics.includes(customVal)) selectedChronics.push(customVal);
+              document.getElementById('bioCustomChronicInp').value = '';
+              renderChronicChips();
+            };
+            document.getElementById('btnSavePatientBio').onclick = function () {
+              const idx = (db.familyMembers || []).findIndex((m) => m.id === mem.id);
+              if (idx >= 0) {
+                db.familyMembers[idx] = normalizeFamilyMemberObj(Object.assign({}, db.familyMembers[idx], {
+                  age: parseInt(document.getElementById('bioAgeInp').value, 10) || 0,
+                  weightKg: parseFloat(document.getElementById('bioWeightInp').value) || 0,
+                  heightCm: parseFloat(document.getElementById('bioHeightInp').value) || 0,
+                  bloodType: document.getElementById('bioBloodSel').value || '',
+                  chronicConditions: selectedChronics.slice(),
+                  drugAllergies: (document.getElementById('bioAllergyInp').value || '').trim(),
+                  otherChronicNotes: (document.getElementById('bioOtherNotesInp').value || '').trim()
+                }));
+                saveState(db);
+              }
+              closeModal();
+              showToast(bi('تم حفظ البيانات الحيوية وتحديث الملخص الطبي بنجاح', 'Bio & chronic conditions saved; AI summary updated'));
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function downloadAttachmentFile(fileObj) {
+        if (!fileObj || !fileObj.attachmentDataUrl) {
+          showToast(bi('لا يوجد ملف متاح للتحميل', 'No file available to download'));
+          return;
+        }
+        const safeName = fileObj.attachmentName || (fileObj.attachmentMimeType === 'application/pdf' ? 'medical_report.pdf' : 'medical_attachment.jpg');
+        const mimeType = fileObj.attachmentMimeType || (String(fileObj.attachmentDataUrl).indexOf('data:application/pdf') === 0 ? 'application/pdf' : 'image/jpeg');
+
+        if (window.AndroidPdfBridge && typeof window.AndroidPdfBridge.saveBase64File === 'function') {
+          try {
+            window.AndroidPdfBridge.saveBase64File(fileObj.attachmentDataUrl, mimeType, safeName);
+            showToast(bi('تم حفظ الملف في مجلد التنزيلات: ' + safeName, 'Saved to Downloads: ' + safeName));
+            return;
+          } catch (e) { /* fall back to browser blob download */ }
+        }
+
+        const blob = dataUrlToBlob(fileObj.attachmentDataUrl, mimeType);
+        if (!blob) {
+          showToast(bi('تعذر تجهيز الملف للتحميل', 'Unable to prepare file download'));
+          return;
+        }
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = safeName;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () {
+          try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+        }, 6000);
+        showToast(bi('جاري تحميل الملف: ' + safeName, 'Downloading file: ' + safeName));
+      }
+
+      function executeDeleteRecordFile(recId) {
+        const idx = (db.records || []).findIndex((r) => r.id === recId);
+        if (idx < 0) return;
+        const rec = db.records[idx];
+        if (rec.recordType === 'PATIENT_UPLOAD' || rec.recordType === 'LAB_RESULT') {
+          db.records.splice(idx, 1);
+        } else {
+          rec.attachmentDataUrl = '';
+          rec.attachmentMimeType = '';
+          rec.attachmentName = '';
+          rec.extractedText = '';
+        }
+        saveState(db);
+        showToast(bi('تم حذف الملف وتحديث الملخص الطبي بنجاح', 'File deleted & AI summary refreshed'));
+        renderApp();
+      }
+
+      function openDeleteFileConfirmModal(recId, onDeleted) {
+        const rec = (db.records || []).find((r) => r.id === recId);
+        if (!rec) return;
+        openModal(
+          bi('تأكيد حذف الملف', 'Confirm File Deletion'),
+          '<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:14px;padding:14px;color:#7F1D1D;font-weight:700;">' +
+            '🗑️ ' + esc(bi('هل أنت متأكد من حذف هذا الملف؟', 'Are you sure you want to delete this file?')) +
+            '<div style="font-size:0.84rem;font-weight:500;margin-top:6px;">' + esc(rec.attachmentName || rec.diagnosis || '') + '</div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">' +
+            '<button class="btn btn-outline" id="btnCancelDelFile" type="button">' + esc(bi('إلغاء', 'Cancel')) + '</button>' +
+            '<button class="btn btn-danger-solid" id="btnConfirmDelFile" type="button">🗑️ ' + esc(bi('نعم، حذف الملف', 'Yes, Delete File')) + '</button>' +
+          '</div>',
+          function () {
+            document.getElementById('btnCancelDelFile').onclick = closeModal;
+            document.getElementById('btnConfirmDelFile').onclick = function () {
+              closeModal();
+              executeDeleteRecordFile(recId);
+              if (onDeleted) onDeleted();
+            };
+          }
+        );
+      }
+
+      function openAttachmentPreviewModal(rec) {
+        if (!rec || !rec.attachmentDataUrl) return;
+        const isPdf = rec.attachmentMimeType === 'application/pdf' ||
+          String(rec.attachmentDataUrl).indexOf('data:application/pdf') === 0 ||
+          /\.pdf$/i.test(rec.attachmentName || '');
+        const safeName = rec.attachmentName || (isPdf ? 'medical_report.pdf' : 'medical_attachment.jpg');
+
+        if (!isPdf) {
+          openModal(
+            rec.diagnosis || safeName,
+            '<div class="pdf-viewer-toolbar">' +
+              '<button class="btn btn-primary" id="btnModalDownloadAtt" type="button" style="flex:1;">⬇️ ' + esc(bi('تحميل المرفق', 'Download Image')) + '</button>' +
+              '<button class="btn btn-danger-outline" id="btnModalDeleteAtt" type="button">🗑️ ' + esc(bi('حذف الملف', 'Delete File')) + '</button>' +
+            '</div>' +
+            '<img src="' + esc(rec.attachmentDataUrl) + '" style="width:100%;border-radius:14px;border:1px solid var(--border);" alt="' + esc(safeName) + '" />',
+            function () {
+              document.getElementById('btnModalDownloadAtt').onclick = function () { downloadAttachmentFile(rec); };
+              document.getElementById('btnModalDeleteAtt').onclick = function () { openDeleteFileConfirmModal(rec.id); };
+            }
+          );
+          return;
+        }
+
+        const blob = dataUrlToBlob(rec.attachmentDataUrl, 'application/pdf');
+        const blobUrl = blob ? URL.createObjectURL(blob) : '';
+        if (blobUrl) activeModalBlobUrls.push(blobUrl);
+
+        openModal(
+          safeName,
+          '<div class="pdf-viewer-toolbar">' +
+            '<button class="btn btn-primary" id="btnModalDownloadPdf" type="button" style="flex:1;">⬇️ ' + esc(bi('تحميل ملف التحليل (PDF)', 'Download PDF Report')) + '</button>' +
+            '<button class="btn btn-danger-outline" id="btnModalDeletePdf" type="button">🗑️ ' + esc(bi('حذف الملف', 'Delete File')) + '</button>' +
+          '</div>' +
+          '<div id="pdfRenderStatus" style="font-size:0.84rem;color:var(--teal-text);font-weight:700;">⏳ ' + esc(bi('جاري تحميل ومعالجة صفحات الـ PDF...', 'Rendering PDF pages...')) + '</div>' +
+          '<div id="pdfCanvasList" class="pdf-canvas-list"></div>' +
+          (rec.extractedText
+            ? '<details style="margin-top:4px;"><summary style="cursor:pointer;font-weight:700;color:var(--teal-text);font-size:0.86rem;">📄 ' + esc(bi('عرض النص المستخرج من التحليل', 'Show Extracted PDF Text')) + '</summary>' +
+                '<div style="white-space:pre-wrap;font-size:0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:6px;max-height:180px;overflow-y:auto;">' + esc(rec.extractedText) + '</div>' +
+              '</details>'
+            : ''),
+          async function () {
+            document.getElementById('btnModalDownloadPdf').onclick = function () { downloadAttachmentFile(rec); };
+            document.getElementById('btnModalDeletePdf').onclick = function () { openDeleteFileConfirmModal(rec.id); };
+
+            const container = document.getElementById('pdfCanvasList');
+            const statusEl = document.getElementById('pdfRenderStatus');
+            const bytes = dataUrlToUint8Array(rec.attachmentDataUrl);
+            if (!bytes || !container) {
+              if (statusEl) statusEl.textContent = bi('تعذر قراءة الملف. اضغط زر التحميل بالأعلى لفتحه على جهازك.', 'Unable to read PDF. Tap Download above.');
+              return;
+            }
+            if (window.pdfjsLib) {
+              try {
+                const pdfDoc = await window.pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+                const total = pdfDoc.numPages || 0;
+                if (statusEl) statusEl.textContent = bi('📄 عدد الصفحات: ' + total, '📄 Pages: ' + total);
+                const maxWidth = Math.max(container.clientWidth - 24, 320);
+                for (let p = 1; p <= total; p++) {
+                  const page = await pdfDoc.getPage(p);
+                  const unscaledVp = page.getViewport({ scale: 1.0 });
+                  const cssScale = maxWidth / (unscaledVp.width || 600);
+                  const renderScale = cssScale * Math.min(window.devicePixelRatio || 1.5, 2.0);
+                  const vp = page.getViewport({ scale: renderScale });
+                  const canvas = document.createElement('canvas');
+                  canvas.className = 'pdf-page-canvas';
+                  canvas.width = Math.ceil(vp.width);
+                  canvas.height = Math.ceil(vp.height);
+                  container.appendChild(canvas);
+                  const ctx = canvas.getContext('2d');
+                  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+                }
+                return;
+              } catch (e) { /* fall back to object embed */ }
+            }
+            if (blobUrl) {
+              if (statusEl) statusEl.textContent = bi('تم فتح الملف عبر العارض المدمج — في حال لم يظهر اضغط زر التحميل بالأعلى.', 'Embedded PDF view — tap Download above if needed.');
+              container.innerHTML = '<object data="' + esc(blobUrl) + '#toolbar=1" type="application/pdf" style="width:100%;height:58vh;border-radius:10px;background:#fff;">' +
+                '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('المتصفح الحالي لا يدعم عرض الـ PDF داخل الإطار، يرجى الضغط على زر تحميل ملف التحليل (PDF) بالأعلى.', 'Inline PDF preview unavailable. Please tap Download PDF Report above.')) + '</div>' +
+              '</object>';
+            } else {
+              if (statusEl) statusEl.textContent = bi('يرجى الضغط على زر التحميل بالأعلى لفتح ملف الـ PDF.', 'Please tap Download above to open the PDF.');
+            }
+          }
+        );
+      }
+
       function openPatientEmrModal(slotId) {
         const slot = db.slots.find((s) => s.id === slotId);
+        const memberObj = findMemberBySlotOrId(slot);
         const recs = db.records.filter((r) =>
           (slot.familyMemberId && r.familyMemberId === slot.familyMemberId) ||
           (slot.patientName && r.patientName === slot.patientName)
         ).sort((a, b) => b.createdAtMillis - a.createdAtMillis);
 
         openModal(bi('الملف الطبي: ', 'Medical Record: ') + slot.patientName,
-          renderAiMedicalSummaryCardHtml(slot.patientName, recs) +
+          renderDoctorMedicalAlertBannerHtml(memberObj) +
+          renderAiMedicalSummaryCardHtml(slot.patientName, recs, memberObj) +
           (recs.length === 0
             ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد زيارات أو تحاليل مسجلة لهذا المريض.', 'No previous visits or lab reports recorded for this patient.')) + '</div>'
             : recs.map(renderMedicalRecordCardHtml).join('')),
@@ -5342,13 +6016,33 @@
       // 7. ربط الأحداث (Event Wiring)
       // ================================================================
       function bindSharedRecordActions() {
+        document.querySelectorAll('[data-refresh-ai-summary]').forEach((btn) => {
+          btn.onclick = function () {
+            const cardEl = btn.closest('#aiMedicalSummaryCard');
+            if (cardEl && ui.lastAiSummaryContext) {
+              cardEl.outerHTML = renderAiMedicalSummaryCardHtml(
+                ui.lastAiSummaryContext.memberName,
+                ui.lastAiSummaryContext.records,
+                ui.lastAiSummaryContext.memberObj
+              );
+              bindSharedRecordActions();
+              showToast(bi('تم تحديث الملخص الطبي المختصر بنجاح', 'AI Medical Summary refreshed'));
+            } else {
+              renderApp();
+            }
+          };
+        });
         document.querySelectorAll('[data-toggle-ai-summary-lang]').forEach((btn) => {
           btn.onclick = function () {
             const currentIsEn = ui.aiSummaryLang ? (ui.aiSummaryLang === 'en') : (ui.lang === 'en');
             ui.aiSummaryLang = currentIsEn ? 'ar' : 'en';
             const cardEl = btn.closest('#aiMedicalSummaryCard');
             if (cardEl && ui.lastAiSummaryContext) {
-              cardEl.outerHTML = renderAiMedicalSummaryCardHtml(ui.lastAiSummaryContext.memberName, ui.lastAiSummaryContext.records);
+              cardEl.outerHTML = renderAiMedicalSummaryCardHtml(
+                ui.lastAiSummaryContext.memberName,
+                ui.lastAiSummaryContext.records,
+                ui.lastAiSummaryContext.memberObj
+              );
               bindSharedRecordActions();
             } else {
               renderApp();
@@ -5388,7 +6082,7 @@
           img.onclick = function () {
             const rec = db.records.find((r) => r.id === img.getAttribute('data-preview-img'));
             if (rec && rec.attachmentDataUrl) {
-              openModal(rec.diagnosis || bi('معاينة الصورة', 'Image Preview'), '<img src="' + esc(rec.attachmentDataUrl) + '" style="width:100%;border-radius:14px;" />');
+              openAttachmentPreviewModal(rec);
             }
           };
         });
@@ -5396,15 +6090,20 @@
           btn.onclick = function () {
             const rec = db.records.find((r) => r.id === btn.getAttribute('data-open-pdf'));
             if (rec && rec.attachmentDataUrl) {
-              const safeName = rec.attachmentName || 'medical_report.pdf';
-              openModal(
-                safeName,
-                '<div style="display:flex;flex-direction:column;gap:10px;">' +
-                  '<a class="btn btn-primary btn-block" href="' + esc(rec.attachmentDataUrl) + '" download="' + esc(safeName) + '">⬇️ ' + esc(bi('تحميل ملف التحليل (PDF)', 'Download PDF Report')) + '</a>' +
-                  '<iframe src="' + esc(rec.attachmentDataUrl) + '" title="' + esc(safeName) + '" style="width:100%;height:62vh;border:1px solid var(--border);border-radius:12px;"></iframe>' +
-                '</div>'
-              );
+              openAttachmentPreviewModal(rec);
             }
+          };
+        });
+        document.querySelectorAll('[data-download-att]').forEach((btn) => {
+          btn.onclick = function () {
+            const rec = db.records.find((r) => r.id === btn.getAttribute('data-download-att'));
+            if (rec) downloadAttachmentFile(rec);
+          };
+        });
+        document.querySelectorAll('[data-delete-rec-file]').forEach((btn) => {
+          btn.onclick = function () {
+            const recId = btn.getAttribute('data-delete-rec-file');
+            openDeleteFileConfirmModal(recId);
           };
         });
       }
@@ -5506,6 +6205,14 @@
           };
         }
 
+        const editBioBtn = document.getElementById('btnEditPatientBio');
+        if (editBioBtn) {
+          editBioBtn.onclick = function () {
+            const member = getActiveMember();
+            if (member) openEditPatientBioModal(member);
+          };
+        }
+
         const labInp = document.getElementById('labPhotoInput');
         if (labInp) {
           labInp.onchange = function (e) {
@@ -5531,10 +6238,12 @@
                 attachmentDataUrl: res.dataUrl,
                 attachmentMimeType: res.mimeType,
                 attachmentName: res.fileName,
+                extractedText: res.extractedText || '',
                 recordType: 'PATIENT_UPLOAD',
                 createdAtMillis: Date.now()
               });
               saveState(db);
+              labInp.value = '';
               showToast(bi('تم حفظ المرفق الطبي وتحديث ملخص ' + member.fullName, 'Saved medical upload & updated summary for ' + member.fullName));
               renderApp();
             });
@@ -5655,18 +6364,43 @@
         });
 
         const fileInp = document.getElementById('labResultFileInput');
+        function renderPendingLabPreview() {
+          const prev = document.getElementById('labFilePreview');
+          if (!prev) return;
+          if (!pendingLabFile.dataUrl) {
+            prev.innerHTML = '';
+            return;
+          }
+          prev.innerHTML =
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#F8FAFC;border:1px solid var(--border);border-radius:12px;padding:10px;">' +
+              '<span>' +
+                (pendingLabFile.mimeType === 'application/pdf'
+                  ? '📑 ' + esc(bi('ملف PDF جاهز للرفع: ', 'PDF ready: ')) + esc(pendingLabFile.fileName)
+                  : '✓ ' + esc(bi('صورة التحليل مضغوطة وجاهزة للرفع', 'Compressed image ready'))) +
+              '</span>' +
+              '<button class="btn btn-danger-outline" id="btnClearPendingLabFile" type="button" style="min-height:36px;padding:4px 10px;">🗑️ ' + esc(bi('حذف الملف', 'Remove')) + '</button>' +
+            '</div>' +
+            (pendingLabFile.mimeType !== 'application/pdf'
+              ? '<img class="attach-img" src="' + esc(pendingLabFile.dataUrl) + '" alt="نتيجة التحليل" style="margin-top:6px;" />'
+              : '');
+          const clr = document.getElementById('btnClearPendingLabFile');
+          if (clr) {
+            clr.onclick = function () {
+              pendingLabFile = { dataUrl: '', mimeType: '', fileName: '', extractedText: '' };
+              if (fileInp) fileInp.value = '';
+              renderPendingLabPreview();
+              showToast(bi('تمت إزالة الملف المختار', 'Cleared selected file'));
+            };
+          }
+        }
+
         if (fileInp) {
           fileInp.onchange = function (e) {
             const file = e.target.files[0];
             if (!file) return;
             readAttachmentWithCompression(file, function (res) {
               pendingLabFile = res;
-              const prev = document.getElementById('labFilePreview');
-              if (prev) {
-                prev.innerHTML = res.mimeType === 'application/pdf'
-                  ? '📑 ' + esc(bi('ملف PDF جاهز للرفع: ', 'PDF ready: ')) + esc(res.fileName)
-                  : '✓ ' + esc(bi('صورة التحليل مضغوطة وجاهزة للرفع', 'Compressed image ready')) + '<br/><img class="attach-img" src="' + esc(res.dataUrl) + '" alt="نتيجة التحليل" style="margin-top:6px;" />';
-              }
+              renderPendingLabPreview();
             });
           };
         }
@@ -5700,20 +6434,19 @@
               attachmentDataUrl: pendingLabFile.dataUrl || '',
               attachmentMimeType: pendingLabFile.mimeType || '',
               attachmentName: pendingLabFile.fileName || '',
+              extractedText: pendingLabFile.extractedText || '',
               recordType: 'LAB_RESULT',
               createdAtMillis: Date.now()
             });
             saveState(db);
             showToast(bi('تم إرسال نتيجة ' + title + ' إلى ملف ' + member.fullName + ' بنجاح!', 'Sent lab report to ' + member.fullName + '\'s record!'));
-            pendingLabFile = { dataUrl: '', mimeType: '', fileName: '' };
-            const titleEl = document.getElementById('labTestTitle');
-            const notesEl = document.getElementById('labTestNotes');
-            const prevEl = document.getElementById('labFilePreview');
-            if (titleEl) titleEl.value = '';
-            if (notesEl) notesEl.value = '';
-            if (prevEl) prevEl.innerHTML = '';
+            pendingLabFile = { dataUrl: '', mimeType: '', fileName: '', extractedText: '' };
+            if (fileInp) fileInp.value = '';
+            renderApp();
           };
         }
+
+        bindSharedRecordActions();
       }
 
       function bindDoctorLoginEvents() {

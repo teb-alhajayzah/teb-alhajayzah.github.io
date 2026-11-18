@@ -66,6 +66,7 @@ import com.example.ui.isDeviceOnline
 import com.example.ui.admin.SuperAdminDashboardScreen
 import com.example.ui.components.AccountAndFamilyDialog
 import com.example.ui.components.AdminPinLockDialog
+import com.example.ui.components.AttachmentPreviewTarget
 import com.example.ui.components.FullImagePreviewDialog
 import com.example.ui.components.NotificationsDialog
 import com.example.ui.components.TebTopHeader
@@ -78,6 +79,7 @@ import com.example.ui.patient.DoctorBookingScreen
 import com.example.ui.patient.MedicalFileScreen
 import com.example.ui.patient.PatientHomeScreen
 import com.example.ui.theme.TebAlHajayzahTheme
+import com.example.util.FirebaseAppCheckHelper
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -90,6 +92,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FirebaseAppCheckHelper.configureAppCheck(this, intent)
         enableEdgeToEdge()
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -137,7 +140,7 @@ fun TebAlHajayzahAppRoot(
     var showAccountDialog by remember { mutableStateOf(false) }
     var showNotificationsDialog by remember { mutableStateOf(false) }
     var showAdminPinDialog by remember { mutableStateOf(false) }
-    var previewImage by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var previewAttachment by remember { mutableStateOf<AttachmentPreviewTarget?>(null) }
 
     val showMessage: (String) -> Unit = { msg ->
         coroutineScope.launch {
@@ -335,6 +338,20 @@ fun TebAlHajayzahAppRoot(
                                                 state = state,
                                                 onSelectFamilyMember = viewModel::selectActiveFamilyMember,
                                                 onOpenAccountDialog = { showAccountDialog = true },
+                                                onSaveBioAndChronics = { memberId, age, weightKg, heightCm, bloodType, chronicKeys, drugAllergies, otherNotes, onDone ->
+                                                    viewModel.updateMemberBioAndChronic(
+                                                        memberId = memberId,
+                                                        age = age,
+                                                        weightKg = weightKg,
+                                                        heightCm = heightCm,
+                                                        bloodType = bloodType,
+                                                        chronicConditions = chronicKeys,
+                                                        drugAllergies = drugAllergies,
+                                                        otherChronicNotes = otherNotes,
+                                                        onSaved = onDone,
+                                                    )
+                                                },
+                                                onRefreshAiSummary = viewModel::refreshAiSummaryForMember,
                                                 onUploadAttachment = { member, title, notes, path, mimeType, displayName ->
                                                     viewModel.uploadPatientMedicalAttachment(
                                                         member = member,
@@ -359,7 +376,10 @@ fun TebAlHajayzahAppRoot(
                                                         attachmentName = displayName,
                                                     )
                                                 },
-                                                onPreviewImage = { path, title -> previewImage = path to title },
+                                                onDeleteRecordFile = { recordId ->
+                                                    viewModel.deleteMedicalRecordFile(recordId)
+                                                },
+                                                onPreviewAttachment = { previewAttachment = it },
                                                 onShowMessage = showMessage,
                                             )
                                         }
@@ -424,7 +444,8 @@ fun TebAlHajayzahAppRoot(
                                                         onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
                                                         onSearchPatientsForActivation = viewModel::searchPatientsForClinicActivation,
                                                         onActivatePatientByClinic = viewModel::activatePatientByClinic,
-                                                        onPreviewImage = { path, title -> previewImage = path to title },
+                                                        onRefreshAiSummary = viewModel::refreshAiSummaryForMember,
+                                                        onPreviewAttachment = { previewAttachment = it },
                                                         onShowMessage = showMessage,
                                                     )
                                                 }
@@ -454,6 +475,10 @@ fun TebAlHajayzahAppRoot(
                                                                 attachmentName = displayName,
                                                                 onUploaded = onDone,
                                                             )
+                                                        },
+                                                        onPreviewAttachment = { previewAttachment = it },
+                                                        onDeleteRecordFile = { recordId ->
+                                                            viewModel.deleteMedicalRecordFile(recordId)
                                                         },
                                                         onLogoutLab = viewModel::logoutLab,
                                                         onShowMessage = showMessage,
@@ -596,13 +621,16 @@ fun TebAlHajayzahAppRoot(
         )
     }
 
-    val preview = previewImage
+    val preview = previewAttachment
     if (preview != null) {
         FullImagePreviewDialog(
-            imagePath = preview.first,
-            title = preview.second,
+            target = preview,
             isEn = isEn,
-            onDismiss = { previewImage = null },
+            onDeleteRecordFile = { recId ->
+                viewModel.deleteMedicalRecordFile(recId)
+            },
+            onShowMessage = showMessage,
+            onDismiss = { previewAttachment = null },
         )
     }
 }

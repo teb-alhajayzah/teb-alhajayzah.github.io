@@ -88,11 +88,17 @@ interface TebDao {
     @Query("SELECT * FROM family_members WHERE accountId = :accountId ORDER BY id ASC")
     suspend fun getFamilyMembersOnce(accountId: String): List<FamilyMemberEntity>
 
+    @Query("SELECT * FROM family_members WHERE id = :memberId LIMIT 1")
+    suspend fun getFamilyMemberById(memberId: String): FamilyMemberEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFamilyMember(member: FamilyMemberEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFamilyMembers(members: List<FamilyMemberEntity>)
+
+    @Update
+    suspend fun updateFamilyMember(member: FamilyMemberEntity)
 
     @Query("SELECT * FROM clinic_doctors ORDER BY clinicType ASC, doctorName ASC")
     fun observeDoctors(): Flow<List<ClinicDoctorEntity>>
@@ -171,6 +177,21 @@ interface TebDao {
 
     @Query("SELECT * FROM medical_records ORDER BY createdAtMillis DESC")
     fun observeAllMedicalRecords(): Flow<List<MedicalRecordEntity>>
+
+    @Query("SELECT * FROM medical_records WHERE id = :recordId LIMIT 1")
+    suspend fun getMedicalRecordById(recordId: String): MedicalRecordEntity?
+
+    @Query("SELECT * FROM medical_records WHERE familyMemberId = :memberId OR (:patientName != '' AND patientName = :patientName) ORDER BY createdAtMillis DESC")
+    suspend fun getMedicalRecordsForMemberOnce(memberId: String, patientName: String): List<MedicalRecordEntity>
+
+    @Query("SELECT COUNT(*) FROM medical_records WHERE attachmentPath = :path")
+    suspend fun countRecordsUsingAttachmentPath(path: String): Int
+
+    @Query("UPDATE medical_records SET attachmentPath = '', attachmentMimeType = '', attachmentName = '' WHERE id = :recordId")
+    suspend fun clearMedicalRecordAttachment(recordId: String)
+
+    @Query("DELETE FROM medical_records WHERE id = :recordId")
+    suspend fun deleteMedicalRecordById(recordId: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMedicalRecord(record: MedicalRecordEntity)

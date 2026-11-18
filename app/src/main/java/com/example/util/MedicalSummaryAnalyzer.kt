@@ -1,5 +1,6 @@
 package com.example.util
 
+import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
 
@@ -12,6 +13,12 @@ data class PatientMedicalSummary(
     val currentMedications: List<String>,
     val recentLabsAndImaging: List<String>,
     val headlineSummary: String,
+    val vitalsSummary: String = "",
+    val chronicConditionsSummary: String = "",
+    val drugAllergies: String = "",
+    val aiNarrative: String = "",
+    val aiUpdatedAtMillis: Long = 0L,
+    val aiError: String = "",
     val disclaimer: String = STANDARD_DISCLAIMER,
 ) {
     companion object {
@@ -34,10 +41,76 @@ object MedicalSummaryAnalyzer {
         patientName: String,
         records: List<MedicalRecordEntity>,
         isEn: Boolean = false,
+    ): PatientMedicalSummary = summarize(
+        member = null,
+        patientName = patientName,
+        records = records,
+        isEn = isEn,
+    )
+
+    fun summarize(
+        member: FamilyMemberEntity?,
+        patientName: String,
+        records: List<MedicalRecordEntity>,
+        isEn: Boolean = false,
     ): PatientMedicalSummary {
+        val resolvedName = member?.fullName?.takeIf { it.isNotBlank() } ?: patientName
         val fallbackName = if (isEn) "Patient" else "المريض"
         val disclaimerText = if (isEn) PatientMedicalSummary.STANDARD_DISCLAIMER_EN else PatientMedicalSummary.STANDARD_DISCLAIMER
+
+        val vitalsSummary = if (member != null) {
+            buildList {
+                if (member.age > 0) add(if (isEn) "Age: ${member.age}y" else "السن: ${member.age} سنة")
+                if (member.weightKg > 0.0) {
+                    val w = if (member.weightKg % 1.0 == 0.0) member.weightKg.toInt().toString() else member.weightKg.toString()
+                    add(if (isEn) "Weight: $w kg" else "الوزن: $w كجم")
+                }
+                if (member.heightCm > 0.0) {
+                    val h = if (member.heightCm % 1.0 == 0.0) member.heightCm.toInt().toString() else member.heightCm.toString()
+                    add(if (isEn) "Height: $h cm" else "الطول: $h سم")
+                }
+                if (member.bloodType.isNotBlank()) {
+                    add(if (isEn) "Blood: ${member.bloodType}" else "فصيلة الدم: ${member.bloodType}")
+                }
+            }.joinToString(" • ")
+        } else {
+            ""
+        }
+
+        val chronicSummary = if (member != null) {
+            ChronicConditionsCatalog.formatLabels(
+                rawKeys = member.chronicConditions,
+                otherNotes = member.otherChronicNotes,
+                isEn = isEn,
+            )
+        } else {
+            ""
+        }
+
+        val allergies = member?.drugAllergies?.trim().orEmpty()
+        val aiNarrative = if (member != null) {
+            val preferred = if (isEn) member.aiSummaryEn.trim() else member.aiSummaryAr.trim()
+            preferred.ifBlank { if (isEn) member.aiSummaryAr.trim() else member.aiSummaryEn.trim() }
+        } else {
+            ""
+        }
+        val aiUpdatedAt = member?.aiSummaryUpdatedAtMillis ?: 0L
+        val aiError = member?.aiSummaryError?.trim().orEmpty()
+
         if (records.isEmpty()) {
+            val emptyParts = mutableListOf<String>()
+            if (vitalsSummary.isNotBlank()) emptyParts += vitalsSummary
+            if (chronicSummary.isNotBlank()) {
+                emptyParts += if (isEn) "Chronic Conditions: $chronicSummary" else "الأمراض المزمنة: $chronicSummary"
+            }
+            if (allergies.isNotBlank()) {
+                emptyParts += if (isEn) "Drug Allergies: $allergies" else "حساسية الأدوية: $allergies"
+            }
+            emptyParts += if (isEn) {
+                "No medical records yet for ${resolvedName.ifBlank { fallbackName }}. Upload a lab PDF or log an external visit to analyze it automatically."
+            } else {
+                "لا توجد سجلات أو تحاليل مسجلة بعد لـ ${resolvedName.ifBlank { fallbackName }}. ارفع ملف تحليل PDF أو أضف زيارة ليتم تحليلها تلقائياً."
+            }
             return PatientMedicalSummary(
                 totalRecords = 0,
                 platformPrescriptionsCount = 0,
@@ -46,11 +119,13 @@ object MedicalSummaryAnalyzer {
                 keyDiagnoses = emptyList(),
                 currentMedications = emptyList(),
                 recentLabsAndImaging = emptyList(),
-                headlineSummary = if (isEn) {
-                    "No medical records yet for ${patientName.ifBlank { fallbackName }}. Log an external visit or lab report to generate an automatic summary."
-                } else {
-                    "لا توجد بيانات طبية مسجلة بعد لـ ${patientName.ifBlank { fallbackName }}. أضف زيارة طبيب أو نتيجة تحليل ليتم تحليلها تلقائياً."
-                },
+                headlineSummary = emptyParts.joinToString("\n"),
+                vitalsSummary = vitalsSummary,
+                chronicConditionsSummary = chronicSummary,
+                drugAllergies = allergies,
+                aiNarrative = aiNarrative,
+                aiUpdatedAtMillis = aiUpdatedAt,
+                aiError = aiError,
                 disclaimer = disclaimerText,
             )
         }
@@ -105,12 +180,19 @@ object MedicalSummaryAnalyzer {
             labItems += "$title ($source • ${rec.visitDateLabel})$noteSuffix"
         }
 
-        val nameLabel = patientName.ifBlank { fallbackName }
+        val nameLabel = resolvedName.ifBlank { fallbackName }
         val parts = mutableListOf<String>()
         parts += if (isEn) {
             "Summary for $nameLabel (${sorted.size} records)"
         } else {
             "ملخص الحالة لـ $nameLabel (${sorted.size} سجل طبي)"
+        }
+        if (vitalsSummary.isNotBlank()) parts += vitalsSummary
+        if (chronicSummary.isNotBlank()) {
+            parts += if (isEn) "Chronic Conditions: $chronicSummary" else "الأمراض المزمنة: $chronicSummary"
+        }
+        if (allergies.isNotBlank()) {
+            parts += if (isEn) "Drug Allergies Alert: $allergies" else "تنبيه حساسية الأدوية: $allergies"
         }
         if (diagnoses.isNotEmpty()) {
             parts += if (isEn) {
@@ -143,6 +225,12 @@ object MedicalSummaryAnalyzer {
             currentMedications = medLines.take(8),
             recentLabsAndImaging = labItems,
             headlineSummary = parts.joinToString("\n"),
+            vitalsSummary = vitalsSummary,
+            chronicConditionsSummary = chronicSummary,
+            drugAllergies = allergies,
+            aiNarrative = aiNarrative,
+            aiUpdatedAtMillis = aiUpdatedAt,
+            aiError = aiError,
             disclaimer = disclaimerText,
         )
     }

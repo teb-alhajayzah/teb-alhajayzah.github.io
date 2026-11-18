@@ -24,11 +24,15 @@ import com.example.data.local.MedicalRecordType
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.SlotStatus
 import com.example.data.local.TebDao
+import com.example.ai.GeminiMedicalAnalyzer
 import com.example.data.medications.EgyptianMedicationService
 import com.example.data.medications.MedicationFetchResult
 import com.example.ui.AppLanguage
 import com.example.util.BilingualMedicalTranslator
+import com.example.util.ChronicConditionsCatalog
+import com.example.util.ImageStorageHelper
 import com.example.util.TimeUtils
+import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -54,6 +58,7 @@ class TebRepository(
 ) {
     private val seedMutex = Mutex()
     private val secureRandom = SecureRandom()
+    private val geminiAnalyzer by lazy { GeminiMedicalAnalyzer() }
 
     private val activeAccountKey = stringPreferencesKey("active_account_id")
     private val activeMemberKey = stringPreferencesKey("active_member_id")
@@ -1071,7 +1076,7 @@ class TebRepository(
         attachmentPath: String,
         attachmentMimeType: String = "image/jpeg",
         attachmentName: String = "",
-    ) {
+    ): MedicalRecordEntity {
         val record = MedicalRecordEntity(
             id = "upload_${UUID.randomUUID()}",
             familyMemberId = familyMemberId,
@@ -1091,6 +1096,107 @@ class TebRepository(
             createdAtMillis = System.currentTimeMillis(),
         )
         dao.insertMedicalRecord(record)
+        return record
+    }
+
+    suspend fun updateMemberBioAndChronic(
+        memberId: String,
+        age: Int,
+        weightKg: Double,
+        heightCm: Double,
+        bloodType: String,
+        chronicConditions: List<String>,
+        drugAllergies: String,
+        otherChronicNotes: String,
+    ): Result<FamilyMemberEntity> {
+        val existing = dao.getFamilyMemberById(memberId)
+            ?: return Result.failure(IllegalStateException("الملف الشخصي غير موجود"))
+        val updated = existing.copy(
+            age = age.coerceIn(0, 120),
+            weightKg = weightKg.coerceIn(0.0, 400.0),
+            heightCm = heightCm.coerceIn(0.0, 260.0),
+            bloodType = bloodType.trim(),
+            chronicConditions = ChronicConditionsCatalog.encodeKeys(chronicConditions),
+            drugAllergies = drugAllergies.trim(),
+            otherChronicNotes = otherChronicNotes.trim(),
+        )
+        dao.updateFamilyMember(updated)
+        return Result.success(updated)
+    }
+
+    suspend fun refreshMemberAiSummaryWithGemini(
+        memberId: String,
+        focusRecordId: String? = null,
+    ): Result<FamilyMemberEntity> {
+        val member = dao.getFamilyMemberById(memberId)
+            ?: return Result.failure(IllegalStateException("الملف الشخصي غير موجود"))
+        val records = dao.getMedicalRecordsForMemberOnce(member.id, member.fullName)
+        val hasBioOrChronic = member.chronicConditions.isNotBlank() ||
+            member.drugAllergies.isNotBlank() ||
+            member.otherChronicNotes.isNotBlank() ||
+            member.weightKg > 0.0 ||
+            member.heightCm > 0.0 ||
+            member.bloodType.isNotBlank()
+        if (records.isEmpty() && !hasBioOrChronic) {
+            val cleared = member.copy(
+                aiSummaryAr = "",
+                aiSummaryEn = "",
+                aiSummaryUpdatedAtMillis = 0L,
+                aiSummaryError = "",
+            )
+            dao.updateFamilyMember(cleared)
+            return Result.success(cleared)
+        }
+
+        val firebaseInitialized = runCatching { FirebaseApp.getApps(appContext).isNotEmpty() }.getOrDefault(false)
+        if (!firebaseInitialized) {
+            val msg = "خدمة الذكاء الاصطناعي غير مهيأة في هذا الوضع"
+            dao.updateFamilyMember(member.copy(aiSummaryError = msg))
+            return Result.failure(IllegalStateException(msg))
+        }
+
+        val aiResult = geminiAnalyzer.analyzeMemberHistoryAndFiles(
+            member = member,
+            records = records,
+            focusRecordId = focusRecordId,
+        )
+        return aiResult.fold(
+            onSuccess = { parsed ->
+                val now = System.currentTimeMillis()
+                val updated = member.copy(
+                    aiSummaryAr = parsed.summaryAr,
+                    aiSummaryEn = parsed.summaryEn,
+                    aiSummaryUpdatedAtMillis = now,
+                    aiSummaryError = "",
+                )
+                dao.updateFamilyMember(updated)
+                Result.success(updated)
+            },
+            onFailure = { err ->
+                val errorMsg = err.localizedMessage?.takeIf { it.isNotBlank() }
+                    ?: "تعذر تحديث التحليل الطبي بالذكاء الاصطناعي"
+                dao.updateFamilyMember(member.copy(aiSummaryError = errorMsg))
+                Result.failure(IllegalStateException(errorMsg))
+            },
+        )
+    }
+
+    suspend fun deleteMedicalRecordOrAttachment(recordId: String): Result<String?> {
+        val record = dao.getMedicalRecordById(recordId)
+            ?: return Result.failure(IllegalStateException("السجل أو الملف غير موجود"))
+        val oldPath = record.attachmentPath
+        val affectedMemberId = record.familyMemberId.takeIf { it.isNotBlank() }
+        if (record.recordType == MedicalRecordType.PATIENT_UPLOAD ||
+            record.recordType == MedicalRecordType.LAB_RESULT
+        ) {
+            dao.deleteMedicalRecordById(recordId)
+        } else {
+            dao.clearMedicalRecordAttachment(recordId)
+        }
+        if (oldPath.isNotBlank() && dao.countRecordsUsingAttachmentPath(oldPath) == 0) {
+            ImageStorageHelper.deleteInternalFile(appContext, oldPath)
+        }
+        return Result.success(affectedMemberId)
     }
 
     suspend fun addExternalDoctorVisitRecord(

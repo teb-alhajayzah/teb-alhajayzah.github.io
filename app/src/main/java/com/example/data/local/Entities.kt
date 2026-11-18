@@ -51,6 +51,16 @@ data class FamilyMemberEntity(
     val relation: String,
     val age: Int,
     val phone: String,
+    val weightKg: Double = 0.0,
+    val heightCm: Double = 0.0,
+    val bloodType: String = "",
+    val chronicConditions: String = "",
+    val drugAllergies: String = "",
+    val otherChronicNotes: String = "",
+    val aiSummaryAr: String = "",
+    val aiSummaryEn: String = "",
+    val aiSummaryUpdatedAtMillis: Long = 0L,
+    val aiSummaryError: String = "",
 )
 
 @Entity(tableName = "clinic_doctors")

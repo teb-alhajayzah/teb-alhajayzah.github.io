@@ -1,12 +1,23 @@
 package com.example.util
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.ParcelFileDescriptor
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.util.Base64
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
@@ -97,6 +108,170 @@ object ImageStorageHelper {
     fun isPdfAttachment(path: String, mimeType: String = ""): Boolean {
         return mimeType.equals("application/pdf", ignoreCase = true) ||
             path.lowercase().endsWith(".pdf")
+    }
+
+    suspend fun renderPdfPagesToBitmaps(
+        filePath: String,
+        maxWidthPx: Int = 1400,
+    ): Result<List<Bitmap>> = withContext(Dispatchers.IO) {
+        try {
+            val file = File(filePath)
+            if (!file.exists() || !file.isFile || file.length() == 0L) {
+                return@withContext Result.failure(IllegalStateException("ملف PDF غير موجود أو تالف"))
+            }
+            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            val pages = pfd.use { descriptor ->
+                PdfRenderer(descriptor).use { renderer ->
+                    val pageCount = renderer.pageCount
+                    if (pageCount <= 0) {
+                        return@withContext Result.failure(IllegalStateException("ملف PDF لا يحتوي على صفحات صالحة"))
+                    }
+                    val rendered = ArrayList<Bitmap>(pageCount)
+                    for (i in 0 until pageCount) {
+                        renderer.openPage(i).use { page ->
+                            val targetWidth = maxWidthPx.coerceAtLeast(page.width.coerceAtLeast(600))
+                            val scale = targetWidth.toFloat() / page.width.coerceAtLeast(1).toFloat()
+                            val targetHeight = (page.height * scale).toInt().coerceAtLeast(1)
+                            val bmp = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+                            val canvas = Canvas(bmp)
+                            canvas.drawColor(Color.WHITE)
+                            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            rendered += bmp
+                        }
+                    }
+                    rendered
+                }
+            }
+            Result.success(pages)
+        } catch (ex: Exception) {
+            Result.failure(
+                IllegalStateException(
+                    ex.localizedMessage?.takeIf { it.isNotBlank() }
+                        ?: "تعذر عرض صفحات ملف PDF داخل التطبيق",
+                ),
+            )
+        }
+    }
+
+    suspend fun saveAttachmentToDownloads(
+        context: Context,
+        filePath: String,
+        mimeType: String,
+        displayName: String,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val file = File(filePath)
+            if (!file.exists() || !file.isFile) {
+                return@withContext Result.failure(IllegalStateException("الملف المرفق غير موجود على الجهاز"))
+            }
+            val resolvedMime = when {
+                mimeType.isNotBlank() -> mimeType
+                filePath.lowercase().endsWith(".pdf") -> "application/pdf"
+                else -> "image/jpeg"
+            }
+            val cleanName = sanitizeFileName(
+                raw = displayName.ifBlank { file.name },
+                fallbackExt = if (resolvedMime == "application/pdf") "pdf" else "jpg",
+            )
+            file.inputStream().use { input ->
+                writeStreamToDownloads(context, input, resolvedMime, cleanName)
+            }
+            Result.success(cleanName)
+        } catch (ex: Exception) {
+            Result.failure(
+                IllegalStateException(
+                    ex.localizedMessage?.takeIf { it.isNotBlank() }
+                        ?: "تعذر حفظ الملف في مجلد التنزيلات",
+                ),
+            )
+        }
+    }
+
+    suspend fun saveBase64ToDownloads(
+        context: Context,
+        rawDataUrlOrBase64: String,
+        mimeType: String,
+        displayName: String,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val commaIdx = rawDataUrlOrBase64.indexOf(',')
+            val pureBase64 = if (commaIdx >= 0) rawDataUrlOrBase64.substring(commaIdx + 1) else rawDataUrlOrBase64
+            val bytes = Base64.decode(pureBase64, Base64.DEFAULT)
+            if (bytes.isEmpty()) {
+                return@withContext Result.failure(IllegalStateException("الملف فارغ"))
+            }
+            val resolvedMime = mimeType.ifBlank {
+                if (rawDataUrlOrBase64.startsWith("data:application/pdf", ignoreCase = true)) {
+                    "application/pdf"
+                } else {
+                    "application/octet-stream"
+                }
+            }
+            val cleanName = sanitizeFileName(
+                raw = displayName,
+                fallbackExt = if (resolvedMime == "application/pdf") "pdf" else "bin",
+            )
+            bytes.inputStream().use { input ->
+                writeStreamToDownloads(context, input, resolvedMime, cleanName)
+            }
+            Result.success(cleanName)
+        } catch (ex: Exception) {
+            Result.failure(
+                IllegalStateException(ex.localizedMessage ?: "تعذر تنزيل الملف"),
+            )
+        }
+    }
+
+    private fun writeStreamToDownloads(
+        context: Context,
+        input: java.io.InputStream,
+        mimeType: String,
+        fileName: String,
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/TebAlHajayzah")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val itemUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("تعذر إنشاء ملف في التنزيلات")
+            resolver.openOutputStream(itemUri)?.use { out ->
+                input.copyTo(out)
+            } ?: throw IllegalStateException("تعذر الكتابة في مجلد التنزيلات")
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(itemUri, values, null, null)
+        } else {
+            @Suppress("DEPRECATION")
+            val downloadsDir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "TebAlHajayzah",
+            ).apply { mkdirs() }
+            val dest = File(downloadsDir, fileName)
+            dest.outputStream().use { out -> input.copyTo(out) }
+        }
+    }
+
+    private fun sanitizeFileName(raw: String, fallbackExt: String): String {
+        val cleaned = raw.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        val base = cleaned.ifBlank { "teb_report_${System.currentTimeMillis()}.$fallbackExt" }
+        return if (base.contains('.')) base else "$base.$fallbackExt"
+    }
+
+    fun deleteInternalFile(context: Context, filePath: String) {
+        if (filePath.isBlank()) return
+        try {
+            val file = File(filePath)
+            val internalDir = File(context.filesDir, "medical_images").canonicalPath
+            if (file.exists() && file.canonicalPath.startsWith(internalDir)) {
+                file.delete()
+            }
+        } catch (_: Exception) {
+            // Ignore cleanup errors
+        }
     }
 
     fun openAttachmentExternally(

@@ -76,11 +76,13 @@ import coil.compose.AsyncImage
 import com.example.config.PlatformBrandConfig
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.ClinicDoctorEntity
+import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
 import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
 import com.example.ui.bi
+import com.example.ui.components.DoctorPatientMedicalAlertBanner
 import com.example.ui.theme.SlotAvailableBg
 import com.example.ui.theme.SlotAvailableBorder
 import com.example.ui.theme.SlotAvailableText
@@ -109,6 +111,7 @@ fun SmartPrescriptionDialog(
     medications: List<EgyptianMedication>,
     isLiveRemoteMeds: Boolean,
     favoriteMedIds: Set<String>,
+    patientMember: FamilyMemberEntity? = null,
     isEn: Boolean = false,
     onToggleFavorite: (String) -> Unit,
     onSaveAndComplete: (
@@ -313,6 +316,13 @@ fun SmartPrescriptionDialog(
                         Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
+
+                // Medical Alert Banner (Bio Vitals, Chronic Conditions & Drug Allergies)
+                DoctorPatientMedicalAlertBanner(
+                    member = patientMember,
+                    patientName = slot.patientName,
+                    isEn = isEn,
+                )
 
                 // Egyptian Medications DB Status Badge
                 Surface(

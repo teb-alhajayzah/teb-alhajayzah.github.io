@@ -97,6 +97,7 @@ data class TebUiState(
     val isRefreshing: Boolean = false,
     val isBookingSubmitting: Boolean = false,
     val hasNewDataBanner: Boolean = false,
+    val analyzingAiMemberIds: Set<String> = emptySet(),
 ) {
     val isEn: Boolean
         get() = appLanguage == AppLanguage.EN
@@ -176,6 +177,7 @@ class TebViewModel(
     private val _clinicPatientSearchResults = MutableStateFlow<List<LabPatientSearchResult>>(emptyList())
     private val _clinicLastSearchQuery = MutableStateFlow("")
     private val _hasNewDataBanner = MutableStateFlow(false)
+    private val _analyzingAiMemberIds = MutableStateFlow<Set<String>>(emptySet())
     private var _lastLiveWebSignature: String? = null
 
     private val _snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
@@ -348,8 +350,9 @@ class TebViewModel(
         repository.appLanguageFlow,
         _clinicPatientSearchResults,
         _hasNewDataBanner,
-    ) { activationCodes, labResults, appLang, clinicResults, hasBanner ->
-        listOf(activationCodes, labResults, appLang, clinicResults, hasBanner)
+        _analyzingAiMemberIds,
+    ) { values ->
+        values.toList()
     }
 
     val uiState: StateFlow<TebUiState> = combine(
@@ -377,6 +380,8 @@ class TebViewModel(
         @Suppress("UNCHECKED_CAST")
         val clinicResults = adminOps[3] as List<LabPatientSearchResult>
         val hasBanner = adminOps[4] as Boolean
+        @Suppress("UNCHECKED_CAST")
+        val analyzingIds = adminOps[5] as Set<String>
 
         TebUiState(
             isReady = sel.isSeeded,
@@ -415,6 +420,7 @@ class TebViewModel(
             isRefreshing = medBundle.isRefreshing,
             isBookingSubmitting = medBundle.isBookingSubmitting,
             hasNewDataBanner = hasBanner,
+            analyzingAiMemberIds = analyzingIds,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -683,8 +689,15 @@ class TebViewModel(
                 attachmentMimeType = attachmentMimeType,
                 attachmentName = attachmentName,
             )
-            res.onSuccess {
-                _snackbarMessages.tryEmit("✓ تم رفع نتيجة التحليل إلى ملف ${member.fullName} وتحديث الملخص الطبي تلقائياً")
+            res.onSuccess { rec ->
+                launchAiSummaryRefresh(member.id, rec.id)
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم رفع نتيجة التحليل إلى ملف ${member.fullName} وجاري تحديث الملخص الطبي تلقائياً",
+                        "✓ Lab result uploaded to ${member.fullName} and AI medical summary updated",
+                    )
+                )
                 onUploaded()
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر حفظ نتيجة التحليل")
@@ -1073,7 +1086,10 @@ class TebViewModel(
                 aiReportAr = aiReportAr,
                 aiReportEn = aiReportEn,
             )
-            result.onSuccess {
+            result.onSuccess { rec ->
+                if (rec.familyMemberId.isNotBlank()) {
+                    launchAiSummaryRefresh(rec.familyMemberId, rec.id)
+                }
                 _snackbarMessages.tryEmit("تم إنهاء الكشف وإرسال الروشتة والتقرير لملف المريض")
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر حفظ الروشتة")
@@ -1090,7 +1106,7 @@ class TebViewModel(
         attachmentName: String = "",
     ) {
         viewModelScope.launch {
-            repository.addPatientUploadedAttachment(
+            val savedRec = repository.addPatientUploadedAttachment(
                 familyMemberId = member.id,
                 patientName = member.fullName,
                 patientPhone = member.phone,
@@ -1100,7 +1116,14 @@ class TebViewModel(
                 attachmentMimeType = attachmentMimeType,
                 attachmentName = attachmentName,
             )
-            _snackbarMessages.tryEmit("تم حفظ التحليل/الأشعة في ملف ${member.fullName}")
+            launchAiSummaryRefresh(member.id, savedRec.id)
+            _snackbarMessages.tryEmit(
+                bi(
+                    uiState.value.isEn,
+                    "✓ تم حفظ المرفق في ملف ${member.fullName} وجاري تحليل المحتوى وتحديث الملخص الطبي",
+                    "✓ Saved to ${member.fullName}'s file. Analyzing attachment to update AI summary",
+                )
+            )
         }
     }
 
@@ -1132,11 +1155,87 @@ class TebViewModel(
                 attachmentMimeType = attachmentMimeType,
                 attachmentName = attachmentName,
             )
-            res.onSuccess {
+            res.onSuccess { rec ->
+                launchAiSummaryRefresh(member.id, rec.id)
                 _snackbarMessages.tryEmit("✓ تم تسجيل زيارة الطبيب الخارجي في ملف ${member.fullName} وتحديث الملخص الطبي")
                 onSaved()
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "تعذر تسجيل الزيارة الخارجية")
+            }
+        }
+    }
+
+    fun updateMemberBioAndChronic(
+        memberId: String,
+        age: Int,
+        weightKg: Double,
+        heightCm: Double,
+        bloodType: String,
+        chronicConditions: List<String>,
+        drugAllergies: String,
+        otherChronicNotes: String,
+        onSaved: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val res = repository.updateMemberBioAndChronic(
+                memberId = memberId,
+                age = age,
+                weightKg = weightKg,
+                heightCm = heightCm,
+                bloodType = bloodType,
+                chronicConditions = chronicConditions,
+                drugAllergies = drugAllergies,
+                otherChronicNotes = otherChronicNotes,
+            )
+            res.onSuccess {
+                launchAiSummaryRefresh(memberId, null)
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم حفظ البيانات الحيوية والأمراض المزمنة وتحديث الملخص الطبي",
+                        "✓ Patient vitals & chronic conditions saved; updating medical summary",
+                    )
+                )
+                onSaved()
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر حفظ البيانات الحيوية")
+            }
+        }
+    }
+
+    fun refreshAiSummaryForMember(memberId: String, focusRecordId: String? = null) {
+        launchAiSummaryRefresh(memberId, focusRecordId)
+    }
+
+    private fun launchAiSummaryRefresh(memberId: String, focusRecordId: String? = null) {
+        if (memberId.isBlank()) return
+        viewModelScope.launch {
+            _analyzingAiMemberIds.value = _analyzingAiMemberIds.value + memberId
+            try {
+                repository.refreshMemberAiSummaryWithGemini(memberId, focusRecordId)
+            } finally {
+                _analyzingAiMemberIds.value = _analyzingAiMemberIds.value - memberId
+            }
+        }
+    }
+
+    fun deleteMedicalRecordFile(recordId: String, onDeleted: () -> Unit = {}) {
+        viewModelScope.launch {
+            val res = repository.deleteMedicalRecordOrAttachment(recordId)
+            res.onSuccess { affectedMemberId ->
+                if (!affectedMemberId.isNullOrBlank()) {
+                    launchAiSummaryRefresh(affectedMemberId, null)
+                }
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم حذف الملف بنجاح وتحديث الملخص الطبي",
+                        "✓ File deleted and medical summary updated",
+                    )
+                )
+                onDeleted()
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر حذف الملف")
             }
         }
     }
