@@ -474,6 +474,47 @@ class TebViewModel(
         }
     }
 
+    fun checkAppUpdateAndSync(onOpenApkDownload: (String) -> Unit) {
+        if (_isRefreshing.value) return
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                val cfg = uiState.value.brandConfig
+                val isEn = uiState.value.isEn
+                val verResult = repository.checkAppVersionStatus(
+                    liveBaseUrl = cfg.liveWebUrl,
+                    fallbackApkUrl = cfg.apkDownloadUrl,
+                )
+                val medRes = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
+                _medications.value = medRes.medications
+                _isLiveMedicationsApi.value = medRes.isLiveRemote
+                val (newSig, _) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
+                _lastLiveWebSignature = newSig
+
+                if (verResult.hasNewerApk) {
+                    _snackbarMessages.tryEmit(
+                        bi(
+                            isEn,
+                            "يتوفر إصدار جديد (v${verResult.latestVersion}) — جاري التحميل والتثبيت فوراً...",
+                            "New version available (v${verResult.latestVersion}) — Downloading & installing...",
+                        )
+                    )
+                    onOpenApkDownload(verResult.apkDownloadUrl)
+                } else {
+                    _snackbarMessages.tryEmit(
+                        bi(
+                            isEn,
+                            "أنت تستخدم أحدث إصدار بالفعل (${cfg.appVersionLabel}) ✓",
+                            "You are already using the latest version (${cfg.appVersionLabel}) ✓",
+                        )
+                    )
+                }
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
+    }
+
     fun refreshEgyptianMedications(apiUrl: String) {
         viewModelScope.launch {
             val result = repository.loadEgyptianMedications(apiUrl)

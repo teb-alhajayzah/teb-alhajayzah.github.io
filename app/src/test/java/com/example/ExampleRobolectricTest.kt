@@ -796,6 +796,12 @@ class ExampleRobolectricTest {
         assertEquals("https://teb-alhajayzah.github.io/", json.getString("liveUrl"))
         assertTrue(json.getBoolean("forceCleanCache"))
         assertTrue(json.getBoolean("otaSync"))
+
+        assertEquals(0, repository.compareAppVersions("1.0.0", "1.0.0"))
+        assertEquals(0, repository.compareAppVersions("v1.0.0", "1.0.0"))
+        assertTrue(repository.compareAppVersions("1.0.1", "1.0.0") > 0)
+        assertTrue(repository.compareAppVersions("2.0.0", "1.9.9") > 0)
+        assertTrue(repository.compareAppVersions("1.0.0", "1.0.1") < 0)
     }
 }
 

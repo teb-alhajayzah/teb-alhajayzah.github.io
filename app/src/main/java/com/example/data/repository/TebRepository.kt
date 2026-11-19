@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.BuildConfig
 import com.example.config.AppConfig
 import com.example.config.PlatformBrandConfig
 import com.example.data.local.ActivationOtpCodeEntity
@@ -53,6 +54,14 @@ private val Context.tebDataStore by preferencesDataStore(name = "teb_prefs")
 data class LabPatientSearchResult(
     val account: PatientAccountEntity,
     val familyMembers: List<FamilyMemberEntity>,
+)
+
+data class RemoteVersionCheckResult(
+    val hasNewerApk: Boolean,
+    val latestVersion: String,
+    val latestVersionCode: Int,
+    val apkDownloadUrl: String,
+    val reachable: Boolean,
 )
 
 class TebRepository(
@@ -551,6 +560,86 @@ class TebRepository(
         } finally {
             verConn?.disconnect()
         }
+    }
+
+    suspend fun checkAppVersionStatus(
+        liveBaseUrl: String,
+        fallbackApkUrl: String,
+        installedVersion: String = BuildConfig.VERSION_NAME,
+        installedVersionCode: Int = BuildConfig.VERSION_CODE,
+    ): RemoteVersionCheckResult = withContext(Dispatchers.IO) {
+        val cleanBase = liveBaseUrl.substringBefore("?").trimEnd('/')
+        if (cleanBase.isBlank()) {
+            return@withContext RemoteVersionCheckResult(
+                hasNewerApk = false,
+                latestVersion = installedVersion,
+                latestVersionCode = installedVersionCode,
+                apkDownloadUrl = fallbackApkUrl,
+                reachable = false,
+            )
+        }
+        var verConn: HttpURLConnection? = null
+        try {
+            val verUrl = "$cleanBase/version.json?_t=${System.currentTimeMillis()}"
+            verConn = (URL(verUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 4500
+                readTimeout = 4500
+                useCaches = false
+                setRequestProperty("Cache-Control", "no-cache, no-store")
+                setRequestProperty("Pragma", "no-cache")
+            }
+            if (verConn.responseCode !in 200..299) {
+                return@withContext RemoteVersionCheckResult(
+                    hasNewerApk = false,
+                    latestVersion = installedVersion,
+                    latestVersionCode = installedVersionCode,
+                    apkDownloadUrl = fallbackApkUrl,
+                    reachable = false,
+                )
+            }
+            val body = verConn.inputStream.bufferedReader().use { it.readText() }
+            val json = JSONObject(body)
+            val remoteVersion = json.optString("version", json.optString("versionName", installedVersion))
+                .removePrefix("v")
+                .removePrefix("V")
+                .trim()
+                .ifEmpty { installedVersion }
+            val remoteCode = json.optInt("versionCode", installedVersionCode)
+            val apkUrl = json.optString("apkDownloadUrl", fallbackApkUrl).trim().ifEmpty { fallbackApkUrl }
+            val hasNewer = remoteCode > installedVersionCode ||
+                compareAppVersions(remoteVersion, installedVersion) > 0
+            RemoteVersionCheckResult(
+                hasNewerApk = hasNewer,
+                latestVersion = remoteVersion,
+                latestVersionCode = remoteCode,
+                apkDownloadUrl = apkUrl,
+                reachable = true,
+            )
+        } catch (_: Exception) {
+            RemoteVersionCheckResult(
+                hasNewerApk = false,
+                latestVersion = installedVersion,
+                latestVersionCode = installedVersionCode,
+                apkDownloadUrl = fallbackApkUrl,
+                reachable = false,
+            )
+        } finally {
+            verConn?.disconnect()
+        }
+    }
+
+    internal fun compareAppVersions(remote: String, installed: String): Int {
+        val rParts = remote.removePrefix("v").removePrefix("V").split(".").map { it.toIntOrNull() ?: 0 }
+        val iParts = installed.removePrefix("v").removePrefix("V").split(".").map { it.toIntOrNull() ?: 0 }
+        val len = maxOf(rParts.size, iParts.size)
+        for (idx in 0 until len) {
+            val rv = rParts.getOrElse(idx) { 0 }
+            val iv = iParts.getOrElse(idx) { 0 }
+            if (rv > iv) return 1
+            if (rv < iv) return -1
+        }
+        return 0
     }
 
     suspend fun loginDoctor(identifier: String, password: String): Result<ClinicDoctorEntity> {

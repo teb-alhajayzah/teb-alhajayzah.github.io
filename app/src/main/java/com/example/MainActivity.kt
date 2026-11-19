@@ -1,5 +1,7 @@
 package com.example
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -46,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.LayoutDirection
@@ -135,6 +138,7 @@ fun TebAlHajayzahAppRoot(
     state: TebUiState,
 ) {
     val isEn = state.isEn
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -293,6 +297,19 @@ fun TebAlHajayzahAppRoot(
                                                 onCancelSlot = viewModel::cancelAppointment,
                                                 onOpenOtpAccountDialog = {
                                                     showAccountDialog = true
+                                                },
+                                                onCheckAppUpdate = {
+                                                    viewModel.checkAppUpdateAndSync { apkUrl ->
+                                                        runCatching {
+                                                            context.startActivity(
+                                                                Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)).apply {
+                                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                                }
+                                                            )
+                                                        }.onFailure {
+                                                            showMessage(bi(isEn, "تعذر فتح رابط التحديث", "Could not open update link"))
+                                                        }
+                                                    }
                                                 },
                                                 onShowMessage = showMessage,
                                             )

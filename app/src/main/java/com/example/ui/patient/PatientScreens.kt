@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -115,6 +116,7 @@ fun PatientHomeScreen(
     onOpenDoctorBooking: (String) -> Unit,
     onCancelSlot: (String) -> Unit,
     onOpenOtpAccountDialog: () -> Unit,
+    onCheckAppUpdate: () -> Unit = {},
     onShowMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -537,11 +539,12 @@ fun PatientHomeScreen(
                 }
             }
 
-            // تذييل التواصل وطلب انضمام عيادة + شريط الحقوق (بدون زر تحميل التطبيق داخل الـ APK)
+            // تذييل التواصل وطلب انضمام عيادة + صندوق تثبيت التطبيق والتحقق من التحديثات + شريط الحقوق
             item {
                 FooterContactAndRightsSection(
                     platformName = platformTitle,
                     supportPhone = state.brandConfig.supportPhone,
+                    versionLabel = state.brandConfig.appVersionLabel,
                     isEn = isEn,
                     onWhatsAppClick = {
                         val digits = state.brandConfig.supportPhone.filter { it.isDigit() }
@@ -564,6 +567,7 @@ fun PatientHomeScreen(
                             onShowMessage(bi(isEn, "رقم التواصل: ${state.brandConfig.supportPhone}", "Support phone: ${state.brandConfig.supportPhone}"))
                         }
                     },
+                    onCheckAppUpdate = onCheckAppUpdate,
                 )
             }
         }
@@ -574,9 +578,11 @@ fun PatientHomeScreen(
 private fun FooterContactAndRightsSection(
     platformName: String,
     supportPhone: String,
+    versionLabel: String,
     isEn: Boolean = false,
     onWhatsAppClick: () -> Unit,
     onCallClick: () -> Unit,
+    onCheckAppUpdate: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -634,6 +640,80 @@ private fun FooterContactAndRightsSection(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(supportPhone)
                     }
+                }
+            }
+        }
+
+        // صندوق تطبيق طب الحجايزة (Android) - فوق سطر حقوق النشر مباشرة
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.2.dp, TealPrimary.copy(alpha = 0.35f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("apk_download_card"),
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF059669)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PhoneAndroid,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = bi(isEn, "تطبيق طب الحجايزة (Android)", "Teb Al-Hajayzah App (Android)"),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = bi(
+                                isEn,
+                                "التحقق المباشر من التحديثات وتثبيت النسخة الرسمية",
+                                "Direct update verification & official release installation",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Button(
+                    onClick = onCheckAppUpdate,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF059669),
+                        contentColor = Color.White,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("apk_direct_download_button"),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(
+                        text = bi(
+                            isEn,
+                            "🔄 تثبيت التطبيق / التحقق من التحديثات ($versionLabel)",
+                            "🔄 Install App / Check Updates ($versionLabel)",
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }

@@ -17,6 +17,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import com.example.BuildConfig
 import com.example.ai.GeminiMedicalAnalyzer
 import com.example.util.ImageStorageHelper
 import com.google.firebase.FirebaseApp
@@ -304,7 +305,26 @@ fun LiveWebPortalScreen(
                                 fun isInstalledApk(): Boolean = true
 
                                 @JavascriptInterface
-                                fun getAppVersion(): String = "1.0.0"
+                                fun getAppVersion(): String = BuildConfig.VERSION_NAME
+
+                                @JavascriptInterface
+                                fun getAppVersionCode(): Int = BuildConfig.VERSION_CODE
+
+                                @JavascriptInterface
+                                fun downloadAndInstallApk(apkUrl: String) {
+                                    bridgeScope.launch(Dispatchers.Main) {
+                                        if (apkUrl.isNotBlank()) {
+                                            openExternalUri(ctx, apkUrl)
+                                        }
+                                    }
+                                }
+
+                                @JavascriptInterface
+                                fun clearCacheOnly() {
+                                    bridgeScope.launch(Dispatchers.Main) {
+                                        webViewRef?.clearCache(true)
+                                    }
+                                }
 
                                 @JavascriptInterface
                                 fun clearCacheAndReload() {
