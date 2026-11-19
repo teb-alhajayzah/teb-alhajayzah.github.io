@@ -17,11 +17,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import com.example.ai.GeminiMedicalAnalyzer
 import com.example.util.ImageStorageHelper
+import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,9 +63,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +79,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.ui.theme.TealPrimary
 
 fun isDeviceOnline(context: Context): Boolean {
@@ -133,9 +141,11 @@ fun LiveWebPortalScreen(
     isEn: Boolean,
     hasNewDataBanner: Boolean,
     onDismissBannerAndSync: () -> Unit,
+    onCheckLiveUpdates: () -> Unit = {},
     onSwitchToNativeOffline: () -> Unit,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val liveHost = remember(liveUrl) {
         try {
             Uri.parse(liveUrl).host?.lowercase().orEmpty()
@@ -149,6 +159,8 @@ fun LiveWebPortalScreen(
     var canGoBack by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var pendingFileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    val bridgeScope = rememberCoroutineScope()
+    val geminiAnalyzer = remember { GeminiMedicalAnalyzer() }
 
     val fileChooserLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
@@ -177,6 +189,25 @@ fun LiveWebPortalScreen(
                 "$liveUrl?_sync=${System.currentTimeMillis()}"
             }
             wv.loadUrl(bustUrl, noCacheHeaders)
+        }
+    }
+
+    // تحديث تلقائي فوري داخل التطبيق بمجرد رصد تعديل في version.json أو الموقع دون تدخل المستخدم
+    LaunchedEffect(hasNewDataBanner) {
+        if (hasNewDataBanner && webViewRef != null) {
+            triggerFreshReload()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onCheckLiveUpdates()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -262,7 +293,28 @@ fun LiveWebPortalScreen(
                             useWideViewPort = true
                             loadWithOverviewMode = true
                             loadsImagesAutomatically = true
+                            val baseUa = userAgentString.orEmpty()
+                            if (!baseUa.contains("TebAlHajayzahAPK", ignoreCase = true)) {
+                                userAgentString = "$baseUa TebAlHajayzahAPK/1.0.0".trim()
+                            }
                         }
+                        addJavascriptInterface(
+                            object {
+                                @JavascriptInterface
+                                fun isInstalledApk(): Boolean = true
+
+                                @JavascriptInterface
+                                fun getAppVersion(): String = "1.0.0"
+
+                                @JavascriptInterface
+                                fun clearCacheAndReload() {
+                                    bridgeScope.launch(Dispatchers.Main) {
+                                        triggerFreshReload()
+                                    }
+                                }
+                            },
+                            "AndroidAppHost",
+                        )
                         addJavascriptInterface(
                             object {
                                 @JavascriptInterface
@@ -295,6 +347,44 @@ fun LiveWebPortalScreen(
                                 }
                             },
                             "AndroidPdfBridge",
+                        )
+                        addJavascriptInterface(
+                            object {
+                                @JavascriptInterface
+                                fun isAvailable(): Boolean {
+                                    return runCatching { FirebaseApp.getApps(ctx).isNotEmpty() }.getOrDefault(false)
+                                }
+
+                                @JavascriptInterface
+                                fun analyzeMedicalSummary(callbackId: String, payloadJson: String) {
+                                    val wv = this@apply
+                                    bridgeScope.launch(Dispatchers.IO) {
+                                        val firebaseReady = runCatching { FirebaseApp.getApps(ctx).isNotEmpty() }.getOrDefault(false)
+                                        val responseObj = JSONObject()
+                                        if (firebaseReady) {
+                                            val aiRes = geminiAnalyzer.analyzeWebPayloadJson(payloadJson)
+                                            aiRes.onSuccess { res ->
+                                                responseObj.put("ok", true)
+                                                responseObj.put("summaryAr", res.summaryAr)
+                                                responseObj.put("summaryEn", res.summaryEn)
+                                            }.onFailure {
+                                                responseObj.put("ok", false)
+                                            }
+                                        } else {
+                                            responseObj.put("ok", false)
+                                        }
+                                        val cbLiteral = JSONObject.quote(callbackId)
+                                        val jsonLiteral = JSONObject.quote(responseObj.toString())
+                                        withContext(Dispatchers.Main) {
+                                            wv.evaluateJavascript(
+                                                "if (window.__onAndroidAiSummaryResult) window.__onAndroidAiSummaryResult($cbLiteral, $jsonLiteral);",
+                                                null,
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            "AndroidAiBridge",
                         )
                         setDownloadListener { url, _, contentDisposition, mimeType, _ ->
                             if (!url.isNullOrBlank()) {
@@ -366,7 +456,12 @@ fun LiveWebPortalScreen(
                             }
                         }
                         webViewRef = this
-                        loadUrl(liveUrl, noCacheHeaders)
+                        val initialLiveUrl = if (liveUrl.contains("?")) {
+                            "$liveUrl&_v=${System.currentTimeMillis()}"
+                        } else {
+                            "$liveUrl?_v=${System.currentTimeMillis()}"
+                        }
+                        loadUrl(initialLiveUrl, noCacheHeaders)
                     }
                 },
             )

@@ -438,6 +438,17 @@ class TebViewModel(
         _hasNewDataBanner.value = false
     }
 
+    fun checkLiveWebNow() {
+        viewModelScope.launch {
+            val cfg = uiState.value.brandConfig
+            val (newSig, changed) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
+            _lastLiveWebSignature = newSig
+            if (changed) {
+                _hasNewDataBanner.value = true
+            }
+        }
+    }
+
     fun smartRefreshData() {
         if (_isRefreshing.value) return
         viewModelScope.launch {

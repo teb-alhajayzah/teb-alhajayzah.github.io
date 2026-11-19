@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -31,6 +32,7 @@ import com.example.ui.AppLanguage
 import com.example.util.BilingualMedicalTranslator
 import com.example.util.ChronicConditionsCatalog
 import com.example.util.ImageStorageHelper
+import com.example.util.MedicalSummaryAnalyzer
 import com.example.util.TimeUtils
 import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +46,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.SecureRandom
 import java.util.UUID
+import org.json.JSONObject
 
 private val Context.tebDataStore by preferencesDataStore(name = "teb_prefs")
 
@@ -485,9 +488,11 @@ class TebRepository(
     suspend fun checkLiveWebHasUpdate(url: String, previousSignature: String?): Pair<String?, Boolean> =
         withContext(Dispatchers.IO) {
             if (url.isBlank()) return@withContext previousSignature to false
+            val cleanBase = url.substringBefore("?").trimEnd('/')
+            val verSig = fetchRemoteVersionSignature(cleanBase)
             var conn: HttpURLConnection? = null
             try {
-                val targetUrl = if (url.contains("?")) "$url&_t=${System.currentTimeMillis()}" else "${url.trimEnd('/')}/index.html?_t=${System.currentTimeMillis()}"
+                val targetUrl = "$cleanBase/index.html?_t=${System.currentTimeMillis()}"
                 conn = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
                     requestMethod = "HEAD"
                     connectTimeout = 4500
@@ -497,16 +502,56 @@ class TebRepository(
                     setRequestProperty("Pragma", "no-cache")
                 }
                 val code = conn.responseCode
-                if (code !in 200..399) return@withContext previousSignature to false
-                val sig = "${conn.getHeaderField("ETag").orEmpty()}|${conn.getHeaderField("Last-Modified").orEmpty()}|${conn.getHeaderField("Content-Length").orEmpty()}"
-                val changed = !previousSignature.isNullOrBlank() && sig.replace("|", "").isNotBlank() && sig != previousSignature
-                sig to changed
+                if (code !in 200..399 && verSig.isBlank()) {
+                    return@withContext previousSignature to false
+                }
+                val pageSig = if (code in 200..399) {
+                    "${conn.getHeaderField("ETag").orEmpty()}|${conn.getHeaderField("Last-Modified").orEmpty()}|${conn.getHeaderField("Content-Length").orEmpty()}"
+                } else {
+                    ""
+                }
+                val combinedSig = "$verSig||$pageSig"
+                val hasMeaningfulSig = combinedSig.replace("|", "").isNotBlank()
+                val changed = !previousSignature.isNullOrBlank() && hasMeaningfulSig && combinedSig != previousSignature
+                combinedSig to changed
             } catch (_: Exception) {
-                previousSignature to false
+                if (verSig.isNotBlank()) {
+                    val changed = !previousSignature.isNullOrBlank() && verSig != previousSignature.substringBefore("||")
+                    val combinedSig = "$verSig||"
+                    combinedSig to changed
+                } else {
+                    previousSignature to false
+                }
             } finally {
                 conn?.disconnect()
             }
         }
+
+    private fun fetchRemoteVersionSignature(cleanBaseUrl: String): String {
+        var verConn: HttpURLConnection? = null
+        return try {
+            val verUrl = "$cleanBaseUrl/version.json?_t=${System.currentTimeMillis()}"
+            verConn = (URL(verUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 4000
+                readTimeout = 4000
+                useCaches = false
+                setRequestProperty("Cache-Control", "no-cache, no-store")
+                setRequestProperty("Pragma", "no-cache")
+            }
+            if (verConn.responseCode !in 200..299) return ""
+            val body = verConn.inputStream.bufferedReader().use { it.readText() }
+            val json = JSONObject(body)
+            val version = json.optString("version", "1.0.0")
+            val versionCode = json.optInt("versionCode", 1)
+            val updatedAt = json.optString("updatedAt", "")
+            "v:$version:$versionCode:$updatedAt"
+        } catch (_: Exception) {
+            ""
+        } finally {
+            verConn?.disconnect()
+        }
+    }
 
     suspend fun loginDoctor(identifier: String, password: String): Result<ClinicDoctorEntity> {
         val cleanUser = identifier.trim()
@@ -1149,36 +1194,43 @@ class TebRepository(
         }
 
         val firebaseInitialized = runCatching { FirebaseApp.getApps(appContext).isNotEmpty() }.getOrDefault(false)
-        if (!firebaseInitialized) {
-            val msg = "خدمة الذكاء الاصطناعي غير مهيأة في هذا الوضع"
-            dao.updateFamilyMember(member.copy(aiSummaryError = msg))
-            return Result.failure(IllegalStateException(msg))
+        val aiResult = if (firebaseInitialized) {
+            geminiAnalyzer.analyzeMemberHistoryAndFiles(
+                member = member,
+                records = records,
+                focusRecordId = focusRecordId,
+            )
+        } else {
+            Result.failure(IllegalStateException("FirebaseApp not initialized in current runtime"))
         }
 
-        val aiResult = geminiAnalyzer.analyzeMemberHistoryAndFiles(
-            member = member,
-            records = records,
-            focusRecordId = focusRecordId,
-        )
-        return aiResult.fold(
+        val now = System.currentTimeMillis()
+        val updated = aiResult.fold(
             onSuccess = { parsed ->
-                val now = System.currentTimeMillis()
-                val updated = member.copy(
+                member.copy(
                     aiSummaryAr = parsed.summaryAr,
                     aiSummaryEn = parsed.summaryEn,
                     aiSummaryUpdatedAtMillis = now,
                     aiSummaryError = "",
                 )
-                dao.updateFamilyMember(updated)
-                Result.success(updated)
             },
             onFailure = { err ->
-                val errorMsg = err.localizedMessage?.takeIf { it.isNotBlank() }
-                    ?: "تعذر تحديث التحليل الطبي بالذكاء الاصطناعي"
-                dao.updateFamilyMember(member.copy(aiSummaryError = errorMsg))
-                Result.failure(IllegalStateException(errorMsg))
+                Log.w("TebRepository", "Gemini unavailable or quota exceeded; applying Smart Offline Fallback", err)
+                val offlineBundle = MedicalSummaryAnalyzer.buildOfflineFallbackBundle(
+                    member = member,
+                    patientName = member.fullName,
+                    records = records,
+                )
+                member.copy(
+                    aiSummaryAr = offlineBundle.summaryAr,
+                    aiSummaryEn = offlineBundle.summaryEn,
+                    aiSummaryUpdatedAtMillis = now,
+                    aiSummaryError = "",
+                )
             },
         )
+        dao.updateFamilyMember(updated)
+        return Result.success(updated)
     }
 
     suspend fun deleteMedicalRecordOrAttachment(recordId: String): Result<String?> {

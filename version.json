@@ -1,0 +1,12 @@
+{
+  "appName": "طب الحجايزة",
+  "appNameEn": "Teb Al-Hajayzah",
+  "version": "1.0.0",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "liveUrl": "https://teb-alhajayzah.github.io/",
+  "apkFileName": "طب الحجايزة.apk",
+  "apkDownloadUrl": "https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk",
+  "forceCleanCache": true,
+  "otaSync": true
+}

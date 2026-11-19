@@ -1226,6 +1226,7 @@
     @media (min-width: 720px) {
       .sections-grid { grid-template-columns: repeat(4, 1fr); }
       .footer-grid { grid-template-columns: 1.2fr 1fr 1fr; }
+      .footer-grid.inside-apk { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -1565,7 +1566,11 @@
             ? mem.chronicConditions.map((x) => String(x || '').trim()).filter(Boolean)
             : [],
           drugAllergies: String(mem.drugAllergies || ''),
-          otherChronicNotes: String(mem.otherChronicNotes || '')
+          otherChronicNotes: String(mem.otherChronicNotes || ''),
+          aiSummaryAr: String(mem.aiSummaryAr || ''),
+          aiSummaryEn: String(mem.aiSummaryEn || ''),
+          aiSummaryUpdatedAtMillis: Number(mem.aiSummaryUpdatedAtMillis) || 0,
+          aiSummarySource: String(mem.aiSummarySource || '')
         }, mem, {
           chronicConditions: Array.isArray(mem.chronicConditions)
             ? mem.chronicConditions.map((x) => String(x || '').trim()).filter(Boolean)
@@ -2210,7 +2215,8 @@
         otpErrorMsg: '',
         cardLangOverrides: {}, // { [recordId]: 'ar' | 'en' }
         aiSummaryLang: null, // null | 'ar' | 'en'
-        lastAiSummaryContext: null // { memberName, records, memberObj }
+        lastAiSummaryContext: null, // { memberName, records, memberObj }
+        aiAnalyzingMemberIds: {} // { [memberId]: true }
       };
 
       const EXTERNAL_SPECIALTIES = SPECIALTIES_CATALOG;
@@ -2259,17 +2265,39 @@
         try {
           const loadingTask = window.pdfjsLib.getDocument({ data: bytes.slice() });
           const pdfDoc = await loadingTask.promise;
-          const pageLimit = Math.min(pdfDoc.numPages || 0, 10);
-          const chunks = [];
+          const pageLimit = Math.min(pdfDoc.numPages || 0, 15);
+          const pagesOut = [];
           for (let p = 1; p <= pageLimit; p++) {
             const page = await pdfDoc.getPage(p);
             const tc = await page.getTextContent();
-            const txt = (tc && Array.isArray(tc.items))
-              ? tc.items.map((item) => item.str || '').join(' ').replace(/\s+/g, ' ').trim()
-              : '';
-            if (txt) chunks.push(txt);
+            const items = (tc && Array.isArray(tc.items)) ? tc.items : [];
+            const lines = [];
+            let currentLine = [];
+            let lastY = null;
+            for (let i = 0; i < items.length; i++) {
+              const item = items[i];
+              const str = String(item && item.str ? item.str : '').trim();
+              const y = item && Array.isArray(item.transform) ? item.transform[5] : null;
+              if (lastY !== null && y !== null && Math.abs(y - lastY) > 3.5 && currentLine.length > 0) {
+                lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim());
+                currentLine = [];
+              }
+              if (str) currentLine.push(str);
+              if (item && item.hasEOL && currentLine.length > 0) {
+                lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim());
+                currentLine = [];
+                lastY = null;
+              } else if (y !== null) {
+                lastY = y;
+              }
+            }
+            if (currentLine.length > 0) {
+              lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim());
+            }
+            const pageText = lines.filter(Boolean).join('\n');
+            if (pageText) pagesOut.push(pageText);
           }
-          return chunks.join('\n').slice(0, 6000);
+          return pagesOut.join('\n').slice(0, 12000);
         } catch (e) {
           return '';
         }
@@ -2354,10 +2382,45 @@
         reader.readAsDataURL(file);
       }
 
+      function isLabMetadataHeaderLine(line) {
+        const lower = String(line || '').toLowerCase();
+        const headerTokens = [
+          'patient name', 'patient id', 'sample date', 'report date', 'collection date',
+          'printed on', 'referred by', 'ref. by', 'doctor name', 'lab name', 'laboratory',
+          'page ', 'tel:', 'phone:', 'mobile:', 'address:', 'اسم المريض', 'تاريخ التقرير',
+          'تاريخ العينة', 'اسم المعمل', 'الطبيب المعالج', 'رقم الهاتف', 'العنوان', 'رقم العينة'
+        ];
+        return headerTokens.some((tok) => lower.includes(tok));
+      }
+
+      function extractInlineRefRangeFromTail(line, startIdx) {
+        const tail = typeof startIdx === 'number' && startIdx >= 0 && startIdx < line.length ? line.slice(startIdx) : line;
+        const m = tail.match(/(?:\(|\[|ref\.?\s*range\s*[:=]?)?\s*(\d+(?:\.\d+)?)\s*(?:-|to|–|~)\s*(\d+(?:\.\d+)?)/i);
+        if (!m) return null;
+        const low = parseFloat(m[1]);
+        const high = parseFloat(m[2]);
+        return (!isNaN(low) && !isNaN(high) && high >= low) ? [low, high] : null;
+      }
+
+      function evaluateSemiQuantOrRange(rawVal, lowNormal, highNormal) {
+        const lower = String(rawVal || '').trim().toLowerCase();
+        if (['nil', 'absent', 'negative', 'neg', 'none', 'normal'].includes(lower)) return 0;
+        if (lower.startsWith('+') || ['positive', 'pos', 'present', 'many', 'heavy', 'moderate', 'few', 'trace'].includes(lower)) {
+          return (lower === 'few' || lower === 'trace') ? 1 : 2;
+        }
+        const nums = (lower.match(/\d+(?:\.\d+)?/g) || []).map(parseFloat).filter((n) => !isNaN(n));
+        if (nums.length === 0) return -1;
+        const maxVal = Math.max.apply(null, nums);
+        const minVal = Math.min.apply(null, nums);
+        return (maxVal > highNormal || minVal < lowNormal) ? 1 : 0;
+      }
+
       function extractClinicalLabFindingsFromRecords(records, memberObj, isEn) {
-        const findings = [];
+        const normalHighlights = [];
+        const followUpPoints = [];
         const alerts = [];
-        const seenFinding = new Set();
+        const seenKeys = new Set();
+
         const chronicKeys = memberObj && Array.isArray(memberObj.chronicConditions)
           ? memberObj.chronicConditions.map((x) => String(x).toLowerCase())
           : [];
@@ -2365,11 +2428,16 @@
         const hasKidney = chronicKeys.some((k) => k.includes('kidney') || k.includes('كل'));
         const hasHeartOrBp = chronicKeys.some((k) => k.includes('heart') || k.includes('hyper') || k.includes('قلب') || k.includes('ضغط'));
 
-        function addFinding(labelAr, labelEn) {
-          const val = isEn ? labelEn : labelAr;
-          if (!seenFinding.has(val) && findings.length < 6) {
-            seenFinding.add(val);
-            findings.push(val);
+        function addNormal(key, arText, enText) {
+          if (!seenKeys.has('N:' + key) && normalHighlights.length < 8) {
+            seenKeys.add('N:' + key);
+            normalHighlights.push(isEn ? enText : arText);
+          }
+        }
+        function addFollowUp(key, arText, enText) {
+          if (!seenKeys.has('A:' + key) && followUpPoints.length < 8) {
+            seenKeys.add('A:' + key);
+            followUpPoints.push(isEn ? enText : arText);
           }
         }
         function addAlert(ar, en) {
@@ -2377,79 +2445,404 @@
           if (!alerts.includes(val) && alerts.length < 5) alerts.push(val);
         }
 
+        const allLines = [];
         (records || []).forEach((rec) => {
-          const rawBlob = [rec.diagnosis, rec.notes, rec.extractedText].filter(Boolean).join(' • ');
-          const text = rawBlob.replace(/\s+/g, ' ');
-          if (!text) return;
+          [rec.extractedText, rec.notes, rec.diagnosis].forEach((chunk) => {
+            if (!chunk) return;
+            String(chunk)
+              .replace(/\r\n/g, '\n')
+              .split(/[\n;|•]+/)
+              .map((l) => l.replace(/\s+/g, ' ').trim())
+              .filter((l) => l.length >= 3 && !isLabMetadataHeaderLine(l))
+              .forEach((l) => allLines.push(l));
+          });
+        });
 
-          const hbMatch = text.match(/(?:hemoglobin|hgb|\bhb\b|الهيموجلوبين)\s*[:=\-]?\s*(\d{1,2}(?:\.\d+)?)/i);
-          if (hbMatch) {
+        allLines.forEach((line) => {
+          // 1) Pus Cells / WBCs in urine microscopy
+          const pusMatch = line.match(/(?:pus\s*cells?|p\.?u\.?s\.?\s*cells?|leucocytes?|leukocytes?|صديد|خلايا\s*صديدية)\s*[:=\-]?\s*([0-9]+(?:\s*[-–]\s*[0-9]+)?|\+{1,4}|positive|present|many|moderate|few|nil|absent|negative)/i);
+          if (pusMatch) {
+            const rawVal = pusMatch[1].trim();
+            const tailStart = (pusMatch.index || 0) + pusMatch[0].length;
+            const inlineRef = extractInlineRefRangeFromTail(line, tailStart);
+            const highRef = inlineRef ? inlineRef[1] : 5;
+            const refLabel = inlineRef ? (inlineRef[0] + ' - ' + inlineRef[1]) : '0 - 5 /HPF';
+            const evalRes = evaluateSemiQuantOrRange(rawVal, 0, highRef);
+            if (evalRes > 0) {
+              addFollowUp(
+                'pus',
+                'ارتفاع خلايا الصديد Pus Cells (' + rawVal + ' مقارنة بالطبيعي ' + refLabel + '): قد يشير إلى التهاب بسيط أو عدوى مسالك بولية ويحتاج مراجعة الطبيب لتحديد السبب.',
+                'Elevated Pus Cells (' + rawVal + ' vs Ref ' + refLabel + '): may suggest urinary inflammation or infection; discuss with your doctor.'
+              );
+              addAlert('ارتفاع خلايا الصديد بالتحليل (' + rawVal + ') يستدعي متابعة الطبيب.', 'Elevated pus cells (' + rawVal + ') require physician review.');
+            } else if (evalRes === 0) {
+              addNormal('pus', 'خلايا الصديد (' + rawVal + ' — طبيعي)', 'Pus Cells (' + rawVal + ' — Normal)');
+            }
+          }
+
+          // 2) RBCs
+          const rbcMatch = line.match(/(?:r\.?b\.?c\.?s?|red\s*(?:blood\s*)?cells?|كرات\s*(?:الدم\s*)?الحمراء|خلايا\s*دم\s*حمراء)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?(?:\s*[-–]\s*[0-9]+(?:\.[0-9]+)?)?|\+{1,4}|positive|present|many|moderate|few|nil|absent|negative)/i);
+          if (rbcMatch) {
+            const rawVal = rbcMatch[1].trim();
+            const tailStart = (rbcMatch.index || 0) + rbcMatch[0].length;
+            const inlineRef = extractInlineRefRangeFromTail(line, tailStart);
+            const firstNum = parseFloat(rawVal);
+            const isUrine = /\/hpf/i.test(line) || rawVal.includes('-') || (inlineRef && inlineRef[1] <= 10) || (!inlineRef && !isNaN(firstNum) && firstNum > 6.5) || rawVal.startsWith('+');
+            if (isUrine) {
+              const highRef = inlineRef ? inlineRef[1] : 3;
+              const refLabel = inlineRef ? (inlineRef[0] + ' - ' + inlineRef[1]) : '0 - 3 /HPF';
+              const evalRes = evaluateSemiQuantOrRange(rawVal, 0, highRef);
+              if (evalRes > 0) {
+                addFollowUp(
+                  'rbc_urine',
+                  'ارتفاع كرات الدم الحمراء RBCs (' + rawVal + ' مقارنة بالطبيعي ' + refLabel + '): قد يرتبط بأملاح أو التهاب بسيط ويستدعي مراجعة الطبيب.',
+                  'Elevated RBCs (' + rawVal + ' vs Ref ' + refLabel + '): microscopic red cells noted; share with your physician.'
+                );
+              } else if (evalRes === 0) {
+                addNormal('rbc_urine', 'كرات الدم الحمراء (' + rawVal + ' — طبيعي)', 'Urine RBCs (' + rawVal + ' — Normal)');
+              }
+            } else if (!isNaN(firstNum)) {
+              const low = inlineRef ? inlineRef[0] : 3.8;
+              const high = inlineRef ? inlineRef[1] : 5.8;
+              const refLabel = low + ' - ' + high;
+              if (firstNum < low || firstNum > high) {
+                addFollowUp(
+                  'rbc_cbc',
+                  'عدد كرات الدم الحمراء RBCs (' + rawVal + ' خارج المعدل الطبيعي ' + refLabel + '): يُنصح بعرضه على الطبيب.',
+                  'RBC Count out of range (' + rawVal + ' vs Ref ' + refLabel + '): review with physician.'
+                );
+              } else {
+                addNormal('rbc_cbc', 'كرات الدم الحمراء (' + rawVal + ' — طبيعي)', 'RBCs (' + rawVal + ' — Normal)');
+              }
+            }
+          }
+
+          // 3) Crystals / Calcium Oxalate / Urate / Phosphates
+          const crystalMatch = line.match(/(?:calcium\s*oxalate|oxalate|uric\s*acid\s*crystals?|amorphous\s*(?:urates?|phosphates?)|crystals?|أملاح|اوكسالات|أوكسالات|بلورات|يورات)\s*[:=\-]?\s*(\+{1,4}|positive|present|many|heavy|moderate|few|rare|trace|nil|absent|negative|none|[0-9]+(?:\s*[-–]\s*[0-9]+)?)/i);
+          if (crystalMatch) {
+            const rawVal = crystalMatch[1].trim();
+            const evalRes = evaluateSemiQuantOrRange(rawVal, 0, 0);
+            const isOxalate = /oxalate|أوكسالات|اوكسالات/i.test(line);
+            if (evalRes > 0) {
+              addFollowUp(
+                'crystals',
+                (isOxalate ? 'وجود أملاح أوكسالات الكالسيوم' : 'وجود أملاح / بلورات بالبول') + ' (' + rawVal + ' مقارنة بالطبيعي Nil/غائب): يُنصح بالإكثار من شرب الماء ومراجعة الطبيب لتنظيم السوائل والغذاء.',
+                (isOxalate ? 'Calcium Oxalate Crystals detected' : 'Urinary Crystals / Salts detected') + ' (' + rawVal + ' vs Ref Nil): stay well hydrated and discuss with your doctor.'
+              );
+            } else if (evalRes === 0) {
+              addNormal('crystals', 'الأملاح والبلورات (' + rawVal + ' — طبيعي)', 'Crystals (' + rawVal + ' — Normal)');
+            }
+          }
+
+          // 4) Bacteria / Yeast / Casts
+          const bactMatch = line.match(/(?:bacteria|bacteriuria|casts?|yeast|فطريات|بكتيريا)\s*[:=\-]?\s*(\+{1,4}|positive|present|many|heavy|moderate|few|nil|absent|negative|none)/i);
+          if (bactMatch) {
+            const rawVal = bactMatch[1].trim();
+            const evalRes = evaluateSemiQuantOrRange(rawVal, 0, 0);
+            if (evalRes > 0) {
+              addFollowUp(
+                'bacteria',
+                'ملاحظة بكتيريا أو مكونات مجهرية (' + rawVal + ' مقارنة بالطبيعي Nil): تستدعي تقييم الطبيب عند الفحص.',
+                'Microbial / Bacteria finding (' + rawVal + ' vs Ref Nil): warrants physician review.'
+              );
+            } else if (evalRes === 0) {
+              addNormal('bacteria', 'البكتيريا (' + rawVal + ' — طبيعي)', 'Bacteria (' + rawVal + ' — Normal)');
+            }
+          }
+
+          // 5) Hemoglobin (Hb)
+          const hbMatch = line.match(/(?:hemoglobin|haemoglobin|hgb|\bhb\b|الهيموجلوبين)\s*[:=\-]?\s*(\d{1,2}(?:\.\d+)?)/i);
+          if (hbMatch && !/hba1c|a1c/i.test(line)) {
             const hb = parseFloat(hbMatch[1]);
             if (hb > 2 && hb < 25) {
-              const flag = hb < 11.5 ? (isEn ? ' (Low — check Anemia)' : ' (منخفض — يُرجى متابعة الأنيميا)') : '';
-              addFinding('الهيموجلوبين (Hb): ' + hb + flag, 'Hemoglobin (Hb): ' + hb + flag);
+              const tailStart = (hbMatch.index || 0) + hbMatch[0].length;
+              const inlineRef = extractInlineRefRangeFromTail(line, tailStart);
+              const low = inlineRef ? inlineRef[0] : 11.5;
+              const high = inlineRef ? inlineRef[1] : 17.5;
+              const refLabel = low + ' - ' + high;
+              if (hb < low) {
+                addFollowUp(
+                  'hb',
+                  'انخفاض الهيموجلوبين Hb (' + hb + ' أقل من الطبيعي ' + refLabel + '): قد يدل على أنيميا ويحتاج تقييم الطبيب.',
+                  'Low Hemoglobin (' + hb + ' vs Ref ' + refLabel + ' g/dL): below reference range — check with doctor.'
+                );
+              } else if (hb > high) {
+                addFollowUp(
+                  'hb',
+                  'ارتفاع الهيموجلوبين Hb (' + hb + ' أعلى من الطبيعي ' + refLabel + '): يُنصح بمراجعة الطبيب.',
+                  'Elevated Hemoglobin (' + hb + ' vs Ref ' + refLabel + ' g/dL): review with doctor.'
+                );
+              } else {
+                addNormal('hb', 'الهيموجلوبين (' + hb + ' — طبيعي)', 'Hemoglobin (' + hb + ' — Normal)');
+              }
             }
           }
 
-          const gluMatch = text.match(/(?:glucose|fbs|rbs|blood\s*sugar|السكر(?:\s*العشوائي|\s*الصائم)?)\s*[:=\-]?\s*(\d{2,3}(?:\.\d+)?)/i);
-          if (gluMatch) {
-            const g = parseFloat(gluMatch[1]);
-            const high = g >= 140;
-            addFinding(
-              'سكر الدم: ' + g + ' mg/dL' + (high ? ' (مرتفع)' : ''),
-              'Blood Glucose: ' + g + ' mg/dL' + (high ? ' (Elevated)' : '')
-            );
-            if (high && hasDiabetes) {
-              addAlert('ارتفاع مستوى السكر (' + g + ') مع وجود تاريخ لمرض السكري — يُنصح بمراجعة الجرعة.', 'Elevated glucose (' + g + ') in diabetic patient — review regimen.');
+          // 6) Glucose (Blood or Urine)
+          const gluMatch = line.match(/(?:glucose|fbs|rbs|ppbs|blood\s*sugar|urine\s*sugar|sugar|الجلوكوز|سكر\s*الدم|السكر)\s*[:=\-]?\s*(\d{2,3}(?:\.\d+)?|\+{1,4}|trace|positive|present|nil|absent|negative)/i);
+          if (gluMatch && !/hba1c/i.test(line)) {
+            const rawVal = gluMatch[1].trim();
+            const numVal = parseFloat(rawVal);
+            if (!isNaN(numVal)) {
+              const tailStart = (gluMatch.index || 0) + gluMatch[0].length;
+              const inlineRef = extractInlineRefRangeFromTail(line, tailStart);
+              const upperMatch = line.slice(tailStart).match(/(?:<|<=|up\s*to)\s*(\d+(?:\.\d+)?)/i);
+              const low = inlineRef ? inlineRef[0] : 70;
+              const high = inlineRef ? inlineRef[1] : (upperMatch ? parseFloat(upperMatch[1]) : 139);
+              const refLabel = inlineRef ? (low + ' - ' + high) : ('< ' + high);
+              if (numVal > high || numVal < low) {
+                addFollowUp(
+                  'glucose',
+                  (numVal > high ? 'ارتفاع' : 'انخفاض') + ' مستوى السكر (' + numVal + ' مقارنة بالطبيعي ' + refLabel + ')' + (hasDiabetes ? ' — مهم جداً مع سجل السكري' : '') + ': يُرجى المتابعة مع الطبيب.',
+                  (numVal > high ? 'Elevated' : 'Low') + ' Glucose (' + numVal + ' vs Ref ' + refLabel + ')' + (hasDiabetes ? ' — diabetes history' : '') + ': review with doctor.'
+                );
+                if (numVal > high && hasDiabetes) {
+                  addAlert('ارتفاع مستوى السكر (' + numVal + ') مع سجل مرض السكري يستدعي مراجعة الطبيب.', 'Elevated glucose (' + numVal + ') with diabetes history needs physician review.');
+                }
+              } else {
+                addNormal('glucose', 'مستوى السكر (' + numVal + ' — طبيعي)', 'Glucose (' + numVal + ' — Normal)');
+              }
+            } else {
+              const evalRes = evaluateSemiQuantOrRange(rawVal, 0, 0);
+              if (evalRes > 0) {
+                addFollowUp(
+                  'glucose_urine',
+                  'ظهور سكر في البول (' + rawVal + ' مقارنة بالطبيعي Nil): يستدعي مراجعة الطبيب وفحص سكر الدم.',
+                  'Sugar detected in urine (' + rawVal + ' vs Ref Nil): consult your doctor.'
+                );
+              } else if (evalRes === 0) {
+                addNormal('glucose_urine', 'سكر البول (' + rawVal + ' — طبيعي)', 'Urine Glucose (' + rawVal + ' — Normal)');
+              }
             }
           }
 
-          const a1cMatch = text.match(/(?:hba1c|a1c|السكر\s*التراكمي)\s*[:=\-]?\s*(\d{1,2}(?:\.\d+)?)/i);
+          // 7) HbA1c
+          const a1cMatch = line.match(/(?:hba1c|a1c|السكر\s*التراكمي)\s*[:=\-]?\s*(\d{1,2}(?:\.\d+)?)/i);
           if (a1cMatch) {
             const a1c = parseFloat(a1cMatch[1]);
-            addFinding('السكر التراكمي (HbA1c): ' + a1c + '%', 'HbA1c: ' + a1c + '%');
-            if (a1c >= 6.5) {
-              addAlert('قيمة HbA1c (' + a1c + '%) تتطلب متابعة ضبط السكري.', 'HbA1c (' + a1c + '%) indicates need for glycemic control review.');
+            if (a1c >= 2 && a1c <= 20) {
+              const tailStart = (a1cMatch.index || 0) + a1cMatch[0].length;
+              const inlineRef = extractInlineRefRangeFromTail(line, tailStart);
+              const high = inlineRef ? inlineRef[1] : 5.7;
+              const refLabel = inlineRef ? (inlineRef[0] + ' - ' + inlineRef[1] + '%') : '4.0 - 5.7%';
+              if (a1c > high) {
+                addFollowUp(
+                  'hba1c',
+                  'ارتفاع السكر التراكمي HbA1c (' + a1c + '% مقارنة بالطبيعي ' + refLabel + '): يُنصح بمراجعة الطبيب لتنظيم السكر.',
+                  'Elevated HbA1c (' + a1c + '% vs Ref ' + refLabel + '): discuss glycemic control with your doctor.'
+                );
+              } else {
+                addNormal('hba1c', 'السكر التراكمي (' + a1c + '% — طبيعي)', 'HbA1c (' + a1c + '% — Normal)');
+              }
             }
           }
 
-          const creatMatch = text.match(/(?:creatinine|الكرياتينين)\s*[:=\-]?\s*(\d(?:\.\d+)?)/i);
-          if (creatMatch) {
-            const cr = parseFloat(creatMatch[1]);
-            const high = cr > 1.3;
-            addFinding('الكرياتينين: ' + cr + (high ? ' (مرتفع)' : ''), 'Creatinine: ' + cr + (high ? ' (Elevated)' : ''));
-            if (high || hasKidney) {
-              addAlert('ملاحظة لوظائف الكلى (Creatinine ' + cr + ') — تجنّب المسكنات الضارة بالكلى (NSAIDs).', 'Renal monitoring noted (Creatinine ' + cr + ') — avoid nephrotoxic NSAIDs.');
-            }
-          }
-
-          const pusMatch = text.match(/(?:pus\s*cells?|صديد)\s*[:=\-]?\s*([0-9]+(?:\s*-\s*[0-9]+)?)/i);
-          if (pusMatch) {
-            const pVal = pusMatch[1].trim();
-            addFinding('خلايا صديد (Pus Cells): ' + pVal, 'Pus Cells: ' + pVal);
-            const firstNum = parseInt(pVal, 10);
-            if (firstNum >= 8) {
-              addAlert('ارتفاع خلايا الصديد بالبول (' + pVal + ') قد يشير إلى التهاب مسالك بولية.', 'Elevated urinary pus cells (' + pVal + ') may suggest UTI.');
-            }
-          }
-
-          const albMatch = text.match(/(?:albumin|protein|الألبيومين|زلال)\s*[:=\-]?\s*(positive|\+{1,3}|\d+(?:\.\d+)?)/i);
+          // 8) Albumin / Protein
+          const albMatch = line.match(/(?:albumin|protein|الألبيومين|زلال|بروتين)\s*[:=\-]?\s*(\+{1,4}|trace|positive|present|nil|absent|negative|\d+(?:\.\d+)?)/i);
           if (albMatch) {
-            addFinding('البروتين / الزلال: ' + albMatch[1], 'Protein / Albumin: ' + albMatch[1]);
-            if (hasHeartOrBp || hasKidney) {
-              addAlert('ظهور زلال بالتحليل مع ضغط الدم أو الكلى يستدعي تقييم الطبيب.', 'Albuminuria with hypertension/renal history warrants physician review.');
+            const rawVal = albMatch[1].trim();
+            const evalRes = evaluateSemiQuantOrRange(rawVal, 0, 0);
+            if (evalRes > 0) {
+              addFollowUp(
+                'albumin',
+                'وجود زلال / بروتين (' + rawVal + ' مقارنة بالطبيعي Nil)' + (hasHeartOrBp || hasKidney ? ' — يستدعي انتباهاً مع الضغط/الكلى' : '') + ': يُنصح بمراجعة الطبيب.',
+                'Albumin / Protein detected (' + rawVal + ' vs Ref Nil)' + (hasHeartOrBp || hasKidney ? ' — important with BP/renal history' : '') + ': physician review advised.'
+              );
+              if (hasHeartOrBp || hasKidney) {
+                addAlert('ظهور زلال بالتحليل مع ضغط الدم أو الكلى يستدعي تقييم الطبيب.', 'Albuminuria with hypertension/renal history warrants physician review.');
+              }
+            } else if (evalRes === 0) {
+              addNormal('albumin', 'الزلال/البروتين (' + rawVal + ' — طبيعي)', 'Albumin/Protein (' + rawVal + ' — Normal)');
             }
           }
 
-          if (rec.extractedText && findings.length === 0) {
-            const cleanFirst = rec.extractedText.replace(/\s+/g, ' ').trim().slice(0, 110);
-            if (cleanFirst) {
-              addFinding((rec.diagnosis ? rec.diagnosis + ': ' : '') + cleanFirst + '…', (rec.diagnosis ? rec.diagnosis + ': ' : '') + cleanFirst + '…');
+          // 9) Generic Ref-Range Comparator on the same line (Test Value ... RefLow - RefHigh)
+          const genMatch = line.match(/^([A-Za-z][A-Za-z0-9\s\/\-\.\(\)]{1,34}?)\s*[:=\-]?\s*(\d+(?:\.\d+)?)\s*(?:[A-Za-z%\/\^0-9µμ]+)?\s*(?:\(|\[|ref\.?\s*range\s*[:=]?)?\s*(\d+(?:\.\d+)?)\s*(?:-|to|–|~)\s*(\d+(?:\.\d+)?)\s*(?:\)|\])?/i);
+          if (genMatch) {
+            const testName = genMatch[1].trim();
+            const val = parseFloat(genMatch[2]);
+            const low = parseFloat(genMatch[3]);
+            const high = parseFloat(genMatch[4]);
+            const normKey = testName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const handled = /pus|rbc|hb|hemoglob|haemoglob|gluc|sugar|a1c|albumin|protein|crystal|oxalate|bacteria/.test(normKey);
+            if (!handled && normKey.length >= 2 && !isNaN(val) && !isNaN(low) && !isNaN(high) && high >= low) {
+              const refLabel = low + ' - ' + high;
+              if (val < low) {
+                addFollowUp(
+                  'gen_' + normKey,
+                  'انخفاض ' + testName + ' (' + val + ' أقل من الطبيعي ' + refLabel + '): يُنصح بعرضه على الطبيب.',
+                  'Low ' + testName + ' (' + val + ' vs Ref ' + refLabel + '): bring to your doctor\'s attention.'
+                );
+              } else if (val > high) {
+                addFollowUp(
+                  'gen_' + normKey,
+                  'ارتفاع ' + testName + ' (' + val + ' أعلى من الطبيعي ' + refLabel + '): يحتاج متابعة الطبيب.',
+                  'Elevated ' + testName + ' (' + val + ' vs Ref ' + refLabel + '): requires physician review.'
+                );
+              } else {
+                addNormal('gen_' + normKey, testName + ' (' + val + ' — طبيعي)', testName + ' (' + val + ' — Normal)');
+              }
             }
           }
         });
 
-        return { findings: findings, alerts: alerts };
+        const allergyStr = memberObj && memberObj.drugAllergies ? memberObj.drugAllergies.trim() : '';
+        if (allergyStr) {
+          addFollowUp(
+            'allergy',
+            'تنبيه حساسية الأدوية: المريض لديه حساسية مسجلة تجاه (' + allergyStr + ')؛ يجب إبلاغ الطبيب قبل صرف أي دواء.',
+            'Drug Allergy Reminder: Recorded allergy to (' + allergyStr + ') — always inform the prescribing doctor.'
+          );
+        }
+
+        return {
+          normalCount: normalHighlights.length,
+          normalHighlights: normalHighlights,
+          findings: followUpPoints,
+          alerts: alerts
+        };
+      }
+
+      // Bridge & Callback registry for real Gemini API execution inside Android APK WebView (Firebase.ai)
+      const __pendingAndroidAiCallbacks = {};
+      window.__onAndroidAiSummaryResult = function (callbackId, rawJson) {
+        const entry = __pendingAndroidAiCallbacks[callbackId];
+        if (!entry) return;
+        delete __pendingAndroidAiCallbacks[callbackId];
+        clearTimeout(entry.timer);
+        try {
+          entry.resolve(JSON.parse(rawJson));
+        } catch (e) {
+          entry.resolve({ ok: false });
+        }
+      };
+
+      function callAndroidGeminiBridge(payloadObj) {
+        return new Promise((resolve) => {
+          if (!window.AndroidAiBridge || typeof window.AndroidAiBridge.analyzeMedicalSummary !== 'function') {
+            resolve({ ok: false });
+            return;
+          }
+          const cbId = 'ai_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+          const timer = setTimeout(function () {
+            if (__pendingAndroidAiCallbacks[cbId]) {
+              delete __pendingAndroidAiCallbacks[cbId];
+              resolve({ ok: false });
+            }
+          }, 58000);
+          __pendingAndroidAiCallbacks[cbId] = { resolve: resolve, timer: timer };
+          try {
+            window.AndroidAiBridge.analyzeMedicalSummary(cbId, JSON.stringify(payloadObj));
+          } catch (e) {
+            clearTimeout(timer);
+            delete __pendingAndroidAiCallbacks[cbId];
+            resolve({ ok: false });
+          }
+        });
+      }
+
+      function buildLocalStructuredNarrative(mem, records, isEn) {
+        const parsed = extractClinicalLabFindingsFromRecords(records, mem, isEn);
+        let generalPart = '';
+        if (parsed.normalCount > 0 && parsed.findings.length === 0) {
+          generalPart = isEn
+            ? 'Most readable lab indicators (' + parsed.normalCount + ') are within normal reference limits: ' + parsed.normalHighlights.slice(0, 4).join(' • ') + '.'
+            : 'معظم مؤشرات التحليل المقروءة (' + parsed.normalCount + ') ضمن المعدل الطبيعي: ' + parsed.normalHighlights.slice(0, 4).join(' • ') + '.';
+        } else if (parsed.normalCount > 0 && parsed.findings.length > 0) {
+          generalPart = isEn
+            ? parsed.normalCount + ' indicators are within normal limits (' + parsed.normalHighlights.slice(0, 3).join(' • ') + '), while the numbered points below require physician attention.'
+            : 'يوجد ' + parsed.normalCount + ' مؤشرات ضمن المعدل الطبيعي (' + parsed.normalHighlights.slice(0, 3).join(' • ') + ')، مع وجود النقاط المرقمة أدناه التي تحتاج لمتابعة الطبيب.';
+        } else if (parsed.findings.length > 0) {
+          generalPart = isEn
+            ? 'Specific clinical indicators or precautions were detected in the uploaded report for physician review.'
+            : 'تم رصد مؤشرات وتنبيهات مهمة في التقرير المرفوع تستدعي انتباه الطبيب المعالج.';
+        } else {
+          generalPart = isEn
+            ? 'Patient bio profile, chronic history, and uploaded files are organized below for clinical review.'
+            : 'البيانات الحيوية والأمراض المزمنة والملفات المرفوعة منظمة أدناه لمراجعة الطبيب المعالج.';
+        }
+
+        const followUpsText = parsed.findings.length > 0
+          ? parsed.findings.map((pt, idx) => (idx + 1) + '. ' + pt).join('\n')
+          : (isEn
+              ? '1. No out-of-range numeric flags were found in the readable text; please show the original report to your doctor.'
+              : '1. لم تُرصد قيم خارجة عن المعدل الطبيعي في النص المقروء، ويُنصح بعرض أصل التقرير على الطبيب في الزيارة القادمة.');
+
+        return (isEn ? '✅ Overall Status & Normal Values:\n' : '✅ الحالة العامة والقيم الطبيعية:\n') +
+          generalPart + '\n\n' +
+          (isEn ? '📌 Points Requiring Physician Follow-Up:\n' : '📌 نقاط تحتاج لمتابعة أو انتباه الطبيب:\n') +
+          followUpsText;
+      }
+
+      async function refreshMemberAiSummaryAsync(memberId, focusRecordId) {
+        if (!memberId) return;
+        const idx = (db.familyMembers || []).findIndex((m) => m.id === memberId);
+        if (idx < 0) return;
+        const member = normalizeFamilyMemberObj(db.familyMembers[idx]);
+        const memberRecords = (db.records || []).filter((r) =>
+          r.familyMemberId === member.id || (member.fullName && r.patientName === member.fullName)
+        ).sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+
+        const hasBioOrChronic = (member.chronicConditions && member.chronicConditions.length > 0) ||
+          Boolean(member.drugAllergies) || Boolean(member.otherChronicNotes) ||
+          member.weightKg > 0 || member.heightCm > 0 || Boolean(member.bloodType);
+
+        if (memberRecords.length === 0 && !hasBioOrChronic) {
+          db.familyMembers[idx].aiSummaryAr = '';
+          db.familyMembers[idx].aiSummaryEn = '';
+          db.familyMembers[idx].aiSummaryUpdatedAtMillis = 0;
+          db.familyMembers[idx].aiSummarySource = '';
+          saveState(db);
+          return;
+        }
+
+        ui.aiAnalyzingMemberIds[member.id] = true;
+        const visibleCard = document.getElementById('aiMedicalSummaryCard');
+        if (visibleCard && ui.lastAiSummaryContext && ui.lastAiSummaryContext.memberObj && ui.lastAiSummaryContext.memberObj.id === member.id) {
+          visibleCard.outerHTML = renderAiMedicalSummaryCardHtml(member.fullName, memberRecords, db.familyMembers[idx]);
+          bindSharedRecordActions();
+        }
+
+        let resolvedAr = '';
+        let resolvedEn = '';
+        let resolvedSource = 'local';
+
+        // Primary: Real Gemini API via Firebase AI Logic (AndroidAiBridge inside APK)
+        const bridgeRes = await callAndroidGeminiBridge({
+          focusRecordId: focusRecordId || '',
+          member: member,
+          records: memberRecords.slice(0, 8)
+        });
+        if (bridgeRes && bridgeRes.ok && (bridgeRes.summaryAr || bridgeRes.summaryEn)) {
+          resolvedAr = bridgeRes.summaryAr || bridgeRes.summaryEn;
+          resolvedEn = bridgeRes.summaryEn || bridgeRes.summaryAr;
+          resolvedSource = 'gemini';
+        } else {
+          // Seamless Smart Local Parser Fallback (Zero UI error even offline or outside APK)
+          resolvedAr = buildLocalStructuredNarrative(member, memberRecords, false);
+          resolvedEn = buildLocalStructuredNarrative(member, memberRecords, true);
+          resolvedSource = 'local';
+        }
+
+        delete ui.aiAnalyzingMemberIds[member.id];
+        const freshIdx = (db.familyMembers || []).findIndex((m) => m.id === member.id);
+        if (freshIdx >= 0) {
+          db.familyMembers[freshIdx] = normalizeFamilyMemberObj(Object.assign({}, db.familyMembers[freshIdx], {
+            aiSummaryAr: resolvedAr,
+            aiSummaryEn: resolvedEn,
+            aiSummaryUpdatedAtMillis: Date.now(),
+            aiSummarySource: resolvedSource
+          }));
+          saveState(db);
+          const curCard = document.getElementById('aiMedicalSummaryCard');
+          if (curCard) {
+            const latestRecs = (db.records || []).filter((r) =>
+              r.familyMemberId === member.id || (member.fullName && r.patientName === member.fullName)
+            ).sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+            curCard.outerHTML = renderAiMedicalSummaryCardHtml(member.fullName, latestRecs, db.familyMembers[freshIdx]);
+            bindSharedRecordActions();
+          }
+        }
       }
 
       function buildMedicalSummary(memberName, records, isEnOverride, memberObj) {
@@ -2467,19 +2860,26 @@
         sorted.forEach((rec) => {
           const localized = BilingualMedicalTranslator.resolveForDisplay(rec, isEn);
           if (rec.recordType === 'LAB_RESULT' || rec.recordType === 'PATIENT_UPLOAD') {
-            if (localized.diagnosis && labsSet.size < 4) {
-              labsSet.add(localized.diagnosis + (rec.visitDateLabel ? ' (' + rec.visitDateLabel + ')' : ''));
+            if (labsSet.size < 8) {
+              const title = localized.diagnosis || rec.attachmentName || (isEn ? 'Uploaded Lab / File' : 'تحليل / مرفق مرفوع');
+              const fileBadge = (rec.attachmentName && !title.toLowerCase().includes(rec.attachmentName.toLowerCase()))
+                ? (' [' + rec.attachmentName + ']')
+                : '';
+              labsSet.add(title + fileBadge + (rec.visitDateLabel ? ' (' + rec.visitDateLabel + ')' : ''));
             }
           } else {
             if (localized.diagnosis && diagnosesSet.size < 5) {
               diagnosesSet.add(localized.diagnosis + (rec.visitDateLabel ? ' — ' + rec.visitDateLabel : ''));
+            }
+            if (rec.attachmentName && rec.attachmentDataUrl && labsSet.size < 8) {
+              labsSet.add((isEn ? 'Attached File: ' : 'مرفق طبي: ') + rec.attachmentName + (rec.visitDateLabel ? ' (' + rec.visitDateLabel + ')' : ''));
             }
             String(localized.medications || '')
               .split('\n')
               .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
               .filter(Boolean)
               .forEach((line) => {
-                if (medsSet.size < 6) medsSet.add(line);
+                if (medsSet.size < 8) medsSet.add(line);
               });
           }
         });
@@ -2490,13 +2890,23 @@
           : [];
         const bioParts = [];
         if (mem) {
-          if (mem.age > 0) bioParts.push(isEn ? (mem.age + ' yrs') : (mem.age + ' سنة'));
-          if (mem.weightKg > 0) bioParts.push(mem.weightKg + (isEn ? ' kg' : ' كجم'));
-          if (mem.heightCm > 0) bioParts.push(mem.heightCm + (isEn ? ' cm' : ' سم'));
+          if (mem.age > 0) bioParts.push(isEn ? ('Age: ' + mem.age + ' yrs') : ('السن: ' + mem.age + ' سنة'));
+          if (mem.weightKg > 0) bioParts.push((isEn ? 'Weight: ' : 'الوزن: ') + mem.weightKg + (isEn ? ' kg' : ' كجم'));
+          if (mem.heightCm > 0) bioParts.push((isEn ? 'Height: ' : 'الطول: ') + mem.heightCm + (isEn ? ' cm' : ' سم'));
           if (mem.bloodType) bioParts.push((isEn ? 'Blood: ' : 'فصيلة الدم: ') + mem.bloodType);
         }
 
+        const storedNarrative = mem
+          ? (isEn ? (mem.aiSummaryEn || mem.aiSummaryAr) : (mem.aiSummaryAr || mem.aiSummaryEn))
+          : '';
+        const structuredNarrative = (storedNarrative && storedNarrative.trim())
+          ? storedNarrative.trim()
+          : ((sorted.length > 0 || bioParts.length > 0 || chronicsList.length > 0 || (mem && mem.drugAllergies))
+              ? buildLocalStructuredNarrative(mem, sorted, isEn)
+              : '');
+
         return {
+          memberId: mem ? mem.id : '',
           memberName: memberName || (mem ? mem.fullName : '') || (isEn ? 'Patient' : 'المريض'),
           totalRecords: sorted.length,
           clinicVisitsCount: clinicVisitsCount,
@@ -2509,11 +2919,15 @@
           diagnoses: Array.from(diagnosesSet),
           medications: Array.from(medsSet),
           labs: Array.from(labsSet),
+          normalCount: parsedLab.normalCount,
+          normalHighlights: parsedLab.normalHighlights,
           extractedFindings: parsedLab.findings,
           clinicalAlerts: parsedLab.alerts,
+          aiNarrative: structuredNarrative,
+          aiSource: mem ? (mem.aiSummarySource || 'local') : 'local',
           disclaimer: isEn
-            ? 'Standard Medical Disclaimer: This summary is auto-generated for clinical reference only and does not replace a full medical evaluation by the treating physician.'
-            : 'تنبيه طبي قياسي: هذا الملخص مولّد آلياً للاستئناس الطبي فقط بناءً على السجلات وملفات الـ PDF المضافة ولا يُغني عن التقييم السريري الكامل للطبيب المعالج.'
+            ? 'Medical Notice: This summary is for patient/physician guidance only; it does not diagnose or prescribe medications and does not replace direct clinical evaluation.'
+            : 'تنبيه طبي قياسي: هذا الملخص استرشادي لمساعدة المريض والطبيب المعالج فقط، ولا يُعد تشخيصاً قاطعاً أو وصفاً علاجياً، ولا يُغني عن مراجعة أصل التقرير مع الطبيب.'
         };
       }
 
@@ -2522,7 +2936,8 @@
         const cardIsEn = ui.aiSummaryLang ? (ui.aiSummaryLang === 'en') : (ui.lang === 'en');
         const t = (ar, en) => (cardIsEn ? en : ar);
         const s = buildMedicalSummary(memberName, records, cardIsEn, memberObj);
-        const hasBioOrRecords = s.totalRecords > 0 || Boolean(s.vitalsSummary) || s.chronicsList.length > 0 || Boolean(s.drugAllergies);
+        const isAnalyzingNow = Boolean(s.memberId && ui.aiAnalyzingMemberIds && ui.aiAnalyzingMemberIds[s.memberId]);
+        const hasBioOrRecords = s.totalRecords > 0 || Boolean(s.vitalsSummary) || s.chronicsList.length > 0 || Boolean(s.drugAllergies) || Boolean(s.otherChronicNotes);
 
         return '<section class="ai-summary-card" id="aiMedicalSummaryCard" dir="' + (cardIsEn ? 'ltr' : 'rtl') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
@@ -2530,11 +2945,11 @@
               '<span style="font-size:1.3rem;">🧠</span>' +
               '<div>' +
                 '<div style="font-weight:800;font-size:1rem;color:var(--teal-text);">' + esc(t('الملخص الطبي المختصر (AI Summary)', 'AI Comprehensive Medical Summary')) + '</div>' +
-                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(t('تحليل فوري للملف ونتائج الـ PDF لـ ', 'Instant clinical & PDF summary for ')) + esc(s.memberName) + '</div>' +
+                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(t('تفسير ذكي للتحاليل والبيانات الحيوية والأدوية لـ ', 'Smart clinical interpretation of labs, vitals & meds for ')) + esc(s.memberName) + '</div>' +
               '</div>' +
             '</div>' +
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
-              '<button class="rx-lang-pill" type="button" data-refresh-ai-summary="1">🔄 ' + esc(t('تحديث الملخص', 'Refresh')) + '</button>' +
+              '<button class="rx-lang-pill" type="button" data-refresh-ai-summary="1"' + (isAnalyzingNow ? ' disabled' : '') + '>🔄 ' + esc(t(isAnalyzingNow ? 'جاري التحليل...' : 'تحديث التحليل', isAnalyzingNow ? 'Analyzing...' : 'Refresh AI')) + '</button>' +
               '<button class="rx-lang-pill" type="button" data-toggle-ai-summary-lang="1">' +
                 '🌐 ' + esc(cardIsEn ? 'عرض بالعربية (AR)' : 'عرض بالإنجليزية (EN)') +
               '</button>' +
@@ -2544,38 +2959,40 @@
             '</div>' +
           '</div>' +
           (!hasBioOrRecords
-            ? '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(t('لا توجد بيانات كافية بعد. سجّل البيانات الحيوية والأمراض المزمنة أو ارفع تحليل PDF لتحديث الملخص فوراً.', 'No clinical data yet. Update bio/chronic profile or upload a lab PDF to populate this summary.')) + '</div>'
-            : ((s.vitalsSummary || s.chronicsList.length > 0 || s.drugAllergies)
-                ? '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:4px;font-size:0.84rem;">' +
-                    (s.vitalsSummary ? '<div><strong>📊 ' + esc(t('البيانات الحيوية:', 'Vitals:')) + '</strong> ' + esc(s.vitalsSummary) + '</div>' : '') +
-                    (s.chronicsList.length > 0 ? '<div style="color:#B45309;"><strong>🩺 ' + esc(t('الأمراض المزمنة:', 'Chronic Conditions:')) + '</strong> ' + esc(s.chronicsList.join(' • ')) + '</div>' : '') +
-                    (s.drugAllergies ? '<div style="color:#DC2626;font-weight:700;">⚠️ ' + esc(t('حساسية الأدوية: ', 'Drug Allergies: ')) + esc(s.drugAllergies) + '</div>' : '') +
-                    (s.otherChronicNotes ? '<div style="color:var(--text-muted);"><strong>📝 ' + esc(t('ملاحظات:', 'Notes:')) + '</strong> ' + esc(s.otherChronicNotes) + '</div>' : '') +
+            ? '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(t('لا توجد بيانات كافية بعد. سجّل البيانات الحيوية والأمراض المزمنة أو ارفع تحليل PDF لتفسيره وتلخيصه فوراً.', 'No clinical data yet. Update bio/chronic profile or upload a lab PDF for instant summary.')) + '</div>'
+            : ((isAnalyzingNow
+                ? '<div style="background:#F0FDFA;border:1px solid var(--teal);border-radius:12px;padding:12px;color:var(--teal-text);font-size:0.86rem;font-weight:700;">⏳ ' +
+                    esc(t('جاري قراءة نتائج التحليل والبيانات الحيوية وتلخيصها عبر الذكاء الاصطناعي...', 'Analyzing lab values and patient history via Gemini AI...')) +
                   '</div>'
-                : '') +
+                : (s.aiNarrative
+                    ? '<div style="background:#F0FDFA;border:1.5px solid var(--teal);border-radius:14px;padding:12px;font-size:0.86rem;line-height:1.75;white-space:pre-line;color:var(--text);">' +
+                        esc(s.aiNarrative) +
+                      '</div>'
+                    : '')) +
+              '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:0.84rem;">' +
+                '<div style="font-weight:800;color:var(--teal-text);">📋 ' + esc(t('البيانات الحيوية والأمراض المزمنة:', 'Vitals & Chronic Profile:')) + '</div>' +
+                '<div><strong>📊 ' + esc(t('البيانات الحيوية:', 'Vitals:')) + '</strong> ' + esc(s.vitalsSummary || t('غير مسجلة بالكامل بعد', 'Not logged yet')) + '</div>' +
+                '<div style="color:#B45309;"><strong>🩺 ' + esc(t('الأمراض المزمنة:', 'Chronic Conditions:')) + '</strong> ' + esc(s.chronicsList.length > 0 ? s.chronicsList.join(' • ') : t('لا توجد أمراض مزمنة مسجلة', 'None logged')) + '</div>' +
+                (s.drugAllergies ? '<div style="color:#DC2626;font-weight:700;">⚠️ ' + esc(t('حساسية الأدوية: ', 'Drug Allergies: ')) + esc(s.drugAllergies) + '</div>' : '') +
+                (s.otherChronicNotes ? '<div style="color:var(--text-muted);"><strong>📝 ' + esc(t('ملاحظات صحية:', 'Health Notes:')) + '</strong> ' + esc(s.otherChronicNotes) + '</div>' : '') +
+              '</div>' +
               '<div class="stats-row">' +
                 '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:var(--teal);font-size:1.15rem;">' + s.clinicVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(t('كشوفات المنصة', 'Clinic Visits')) + '</div></div>' +
                 '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#C2410C;font-size:1.15rem;">' + s.externalVisitsCount + '</div><div style="font-size:0.74rem;">' + esc(t('زيارات خارجية', 'External Visits')) + '</div></div>' +
                 '<div class="stat-box" style="background:#fff;border:1px solid var(--border);"><div class="stat-num" style="color:#3730A3;font-size:1.15rem;">' + s.labReportsCount + '</div><div style="font-size:0.74rem;">' + esc(t('تحاليل وأشعة', 'Lab Reports')) + '</div></div>' +
               '</div>' +
-              (s.clinicalAlerts.length > 0
-                ? '<div style="background:#FEF2F2;border:1px solid #DC2626;border-radius:12px;padding:10px;color:#7F1D1D;font-size:0.84rem;"><strong>🚨 ' + esc(t('تنبيهات سريرية من التحاليل والأمراض المزمنة:', 'Clinical Alerts from Labs & Chronics:')) + '</strong><div style="margin-top:4px;">' + s.clinicalAlerts.map((a) => '• ' + esc(a)).join('<br/>') + '</div></div>'
-                : '') +
-              (s.extractedFindings.length > 0
-                ? '<div style="background:#EEF2FF;border:1px solid #6366F1;border-radius:12px;padding:10px;color:#312E81;font-size:0.84rem;"><strong>📑 ' + esc(t('نتائج مستخرجة من ملفات التحاليل المرفوعة:', 'Extracted Lab PDF Values:')) + '</strong><div style="margin-top:4px;">' + s.extractedFindings.map((f) => '• ' + esc(f)).join('<br/>') + '</div></div>'
-                : '') +
-              (s.diagnoses.length > 0
-                ? '<div><strong style="font-size:0.84rem;color:var(--teal-text);">🩺 ' + esc(t('أبرز التشخيصات المسجلة:', 'Key Recorded Diagnoses:')) + '</strong>' +
-                    '<div style="font-size:0.84rem;margin-top:3px;">' + s.diagnoses.map((d) => '• ' + esc(d)).join('<br/>') + '</div></div>'
+              (s.labs.length > 0
+                ? '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px;"><strong style="font-size:0.84rem;color:#3730A3;">🧪 ' + esc(t('التحاليل والملفات المرفوعة (' + s.labs.length + '):', 'Uploaded Labs & Files (' + s.labs.length + '):')) + '</strong>' +
+                    '<div style="font-size:0.84rem;margin-top:4px;">' + s.labs.map((l) => '• ' + esc(l)).join('<br/>') + '</div></div>'
                 : '') +
               (s.medications.length > 0
-                ? '<div><strong style="font-size:0.84rem;color:var(--teal-text);">💊 ' + esc(t('الأدوية الحالية / الحديثة:', 'Current / Recent Medications:')) + '</strong>' +
-                    '<div style="font-size:0.84rem;margin-top:3px;">' + s.medications.map((m) => '• ' + esc(m)).join('<br/>') + '</div></div>'
+                ? '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px;"><strong style="font-size:0.84rem;color:#15803D;">💊 ' + esc(t('الأدوية الحالية والمسجلة (' + s.medications.length + '):', 'Current & Recorded Medications (' + s.medications.length + '):')) + '</strong>' +
+                    '<div style="font-size:0.84rem;margin-top:4px;">' + s.medications.map((m) => '• ' + esc(m)).join('<br/>') + '</div></div>'
                 : '') +
-              (s.labs.length > 0
-                ? '<div><strong style="font-size:0.84rem;color:#3730A3;">🧪 ' + esc(t('أحدث نتائج التحاليل والأشعة:', 'Latest Labs & Imaging:')) + '</strong>' +
-                    '<div style="font-size:0.84rem;margin-top:3px;">' + s.labs.map((l) => '• ' + esc(l)).join('<br/>') + '</div></div>'
-                : '')) +
+              (s.diagnoses.length > 0
+                ? '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px;"><strong style="font-size:0.84rem;color:var(--teal-text);">🩺 ' + esc(t('أبرز التشخيصات المسجلة:', 'Key Recorded Diagnoses:')) + '</strong>' +
+                    '<div style="font-size:0.84rem;margin-top:4px;">' + s.diagnoses.map((d) => '• ' + esc(d)).join('<br/>') + '</div></div>'
+                : ''))) +
           '<div class="disclaimer-banner">⚠️ ' + esc(s.disclaimer) + '</div>' +
         '</section>';
       }
@@ -3032,12 +3449,37 @@
         }, 320);
       }
 
+      function isInsideAndroidApk() {
+        try {
+          if (
+            typeof window.AndroidAppHost !== 'undefined' ||
+            typeof window.AndroidPdfBridge !== 'undefined' ||
+            typeof window.AndroidAiBridge !== 'undefined'
+          ) {
+            return true;
+          }
+          const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? String(navigator.userAgent) : '';
+          if (/TebAlHajayzahAPK/i.test(ua) || /;\s*wv\)/i.test(ua)) {
+            return true;
+          }
+          if (/\bAndroid\b/i.test(ua) && /\bVersion\/\d/i.test(ua) && !/\bChrome\/\d+.*Mobile Safari/i.test(ua)) {
+            return true;
+          }
+          const search = (typeof window !== 'undefined' && window.location && window.location.search) ? String(window.location.search) : '';
+          if (/[?&](?:inApp|apk|webview)=1\b/i.test(search)) {
+            return true;
+          }
+        } catch (e) { /* safe fallback */ }
+        return false;
+      }
+
       let apkNoticeTimer = null;
       function startBackgroundApkDownload(customUrl) {
         const downloadUrl = (customUrl && String(customUrl).trim()) || DEFAULT_CONFIG.apkDownloadUrl;
+        const targetFileName = 'طب الحجايزة.apk';
         const noticeText = bi(
-          'جاري تحميل تطبيق طب الحجايزة... تابع شريط الإشعارات في الأعلى',
-          'Downloading Teb Al-Hajayzah APK... Check your notification bar above'
+          'جاري تحميل تطبيق طب الحجايزة (v1.0.0)... تابع شريط الإشعارات في الأعلى',
+          'Downloading Teb Al-Hajayzah APK (v1.0.0)... Check your notification bar above'
         );
 
         const noticeEl = document.getElementById('apkDownloadNotice');
@@ -3054,6 +3496,20 @@
         }
 
         showToast(noticeText, 5000);
+
+        try {
+          const resolved = new URL(downloadUrl, window.location.href);
+          if (resolved.origin === window.location.origin) {
+            const tempLink = document.createElement('a');
+            tempLink.href = resolved.href;
+            tempLink.setAttribute('download', targetFileName);
+            tempLink.style.display = 'none';
+            document.body.appendChild(tempLink);
+            tempLink.click();
+            document.body.removeChild(tempLink);
+            return;
+          }
+        } catch (e) { /* fallback to hidden frame */ }
 
         const oldFrame = document.getElementById('apkDownloadFrame');
         if (oldFrame && oldFrame.parentNode) {
@@ -3286,25 +3742,32 @@
         const phoneDigits = (cfg.supportPhone || '01125002428').replace(/\D/g, '');
         const waPhone = phoneDigits.startsWith('2') ? phoneDigits : ('2' + phoneDigits);
         const brandTitle = bi(cfg.platformNameAr, cfg.platformNameEn || 'Teb Al-Hajayzah');
+        const versionTag = cfg.appVersionLabel || 'v1.0.0';
         const waMsg = encodeURIComponent('مرحباً، أود الاستفسار أو تسجيل عيادة جديدة في منصة ' + cfg.platformNameAr);
+        const inApk = isInsideAndroidApk();
+        const resolvedApkUrl = cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl;
 
-        return '<div class="footer-inner">' +
-          '<div class="footer-grid">' +
-
-            // 1. بطاقة التحميل والتحديث المباشر
-            '<div class="apk-card" id="apkDownloadSection">' +
+        // يظهر زر التحميل المباشر في آخر الصفحة للمتصفحات فقط (Chrome / Safari) ويختفي بالكامل داخل تطبيق الأندرويد (APK)
+        const apkFooterCardHtml = inApk
+          ? ''
+          : '<div class="apk-card" id="apkDownloadSection">' +
               '<div style="display:flex;align-items:center;gap:12px;">' +
                 '<img src="./icon.svg" alt="' + esc(brandTitle) + '" style="width:48px;height:48px;border-radius:14px;flex-shrink:0;" />' +
                 '<div>' +
-                  '<h3 style="font-size:1.05rem;color:var(--teal-text);">' + esc(brandTitle) + ' (' + esc(cfg.appVersionLabel) + ')</h3>' +
-                  '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('تحميل وتحديث تطبيق الأندرويد الرسمي مباشرة بدون صفحات وسيطة', 'Direct official Android APK download & updates')) + '</div>' +
+                  '<h3 style="font-size:1.05rem;color:var(--teal-text);">' + esc(brandTitle) + ' (' + esc(versionTag) + ')</h3>' +
+                  '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('تحميل مباشر للنسخة الإنتاجية الرسمية باسم طب الحجايزة.apk', 'Direct official release APK download (طب الحجايزة.apk)')) + '</div>' +
                 '</div>' +
               '</div>' +
-              '<a class="btn btn-primary btn-block" id="btnApkDirectDownload" href="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '" download="teb-alhajayzah.apk" data-apk-url="' + esc(cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl) + '">' +
-                '⬇️ ' + esc(bi('تحميل مباشر للتطبيق (APK)', 'Direct APK Download')) +
+              '<a class="btn btn-primary btn-block" id="btnApkDirectDownload" href="' + esc(resolvedApkUrl) + '" download="طب الحجايزة.apk" data-apk-url="' + esc(resolvedApkUrl) + '">' +
+                '⬇️ ' + esc(bi('تحميل وتحديث تطبيق طب الحجايزة (' + versionTag + ')', 'Download & Update Teb Al-Hajayzah (' + versionTag + ')')) +
               '</a>' +
               '<div id="apkDownloadNotice" class="apk-download-notice" role="status" aria-live="polite" style="display:none;"></div>' +
-            '</div>' +
+            '</div>';
+
+        return '<div class="footer-inner">' +
+          '<div class="footer-grid' + (inApk ? ' inside-apk' : '') + '">' +
+
+            apkFooterCardHtml +
 
             // 2. روابط سريعة
             '<div class="footer-box">' +
@@ -3386,7 +3849,8 @@
             '</div>' +
             (rec.extractedText
               ? '<div style="margin-top:6px;padding:8px 10px;background:#F8FAFC;border:1px solid var(--border);border-radius:10px;font-size:0.78rem;color:var(--text-muted);">' +
-                  '📄 <strong>' + esc(t('مقتطف مستخرج من الملف:', 'Extracted PDF snippet:')) + '</strong> ' + esc(rec.extractedText.slice(0, 140)) + (rec.extractedText.length > 140 ? '…' : '') +
+                  '📄 <strong>' + esc(t('حالة قراءة الملف:', 'Report text status:')) + '</strong> ' +
+                  esc(t('تم استخراج محتوى التحليل تلقائياً لتلخيصه في الملخص الطبي أعلاه', 'Extracted report content automatically for clinical summary above')) +
                 '</div>'
               : '');
           } else {
@@ -5148,8 +5612,9 @@
                 notesInput: notes
               });
 
+              const newExtRecId = 'ext_' + Date.now();
               db.records.unshift({
-                id: 'ext_' + Date.now(),
+                id: newExtRecId,
                 familyMemberId: member.id,
                 patientName: member.fullName,
                 patientPhone: member.phone,
@@ -5174,8 +5639,9 @@
               });
               saveState(db);
               closeModal();
-              showToast(bi('تم حفظ زيارة الطبيب الخارجي وتحديث الملخص الطبي بنجاح', 'External visit saved & AI summary updated'));
+              showToast(bi('تم حفظ زيارة الطبيب الخارجي وجاري تحديث الملخص الطبي', 'External visit saved; updating AI summary'));
               renderApp();
+              refreshMemberAiSummaryAsync(member.id, newExtRecId);
             };
           }
         );
@@ -5825,8 +6291,9 @@
                 saveState(db);
               }
               closeModal();
-              showToast(bi('تم حفظ البيانات الحيوية وتحديث الملخص الطبي بنجاح', 'Bio & chronic conditions saved; AI summary updated'));
+              showToast(bi('تم حفظ البيانات الحيوية وجاري تحديث الملخص الطبي', 'Bio & chronic conditions saved; updating AI summary'));
               renderApp();
+              refreshMemberAiSummaryAsync(mem.id, null);
             };
           }
         );
@@ -5871,6 +6338,7 @@
         const idx = (db.records || []).findIndex((r) => r.id === recId);
         if (idx < 0) return;
         const rec = db.records[idx];
+        const affectedMemberId = rec.familyMemberId || '';
         if (rec.recordType === 'PATIENT_UPLOAD' || rec.recordType === 'LAB_RESULT') {
           db.records.splice(idx, 1);
         } else {
@@ -5882,6 +6350,9 @@
         saveState(db);
         showToast(bi('تم حذف الملف وتحديث الملخص الطبي بنجاح', 'File deleted & AI summary refreshed'));
         renderApp();
+        if (affectedMemberId) {
+          refreshMemberAiSummaryAsync(affectedMemberId, null);
+        }
       }
 
       function openDeleteFileConfirmModal(recId, onDeleted) {
@@ -6018,17 +6489,21 @@
       function bindSharedRecordActions() {
         document.querySelectorAll('[data-refresh-ai-summary]').forEach((btn) => {
           btn.onclick = function () {
-            const cardEl = btn.closest('#aiMedicalSummaryCard');
-            if (cardEl && ui.lastAiSummaryContext) {
-              cardEl.outerHTML = renderAiMedicalSummaryCardHtml(
-                ui.lastAiSummaryContext.memberName,
-                ui.lastAiSummaryContext.records,
-                ui.lastAiSummaryContext.memberObj
-              );
-              bindSharedRecordActions();
-              showToast(bi('تم تحديث الملخص الطبي المختصر بنجاح', 'AI Medical Summary refreshed'));
+            const ctxMember = ui.lastAiSummaryContext && ui.lastAiSummaryContext.memberObj;
+            if (ctxMember && ctxMember.id) {
+              refreshMemberAiSummaryAsync(ctxMember.id, null);
             } else {
-              renderApp();
+              const cardEl = btn.closest('#aiMedicalSummaryCard');
+              if (cardEl && ui.lastAiSummaryContext) {
+                cardEl.outerHTML = renderAiMedicalSummaryCardHtml(
+                  ui.lastAiSummaryContext.memberName,
+                  ui.lastAiSummaryContext.records,
+                  ui.lastAiSummaryContext.memberObj
+                );
+                bindSharedRecordActions();
+              } else {
+                renderApp();
+              }
             }
           };
         });
@@ -6223,8 +6698,9 @@
             const title = (document.getElementById('uploadLabTitle').value || '').trim() || bi('تحليل / أشعة', 'Lab / Scan Upload');
             const notes = (document.getElementById('uploadLabNotes').value || '').trim();
             readAttachmentWithCompression(file, function (res) {
+              const newUploadId = 'upload_' + Date.now();
               db.records.unshift({
-                id: 'upload_' + Date.now(),
+                id: newUploadId,
                 familyMemberId: member.id,
                 patientName: member.fullName,
                 patientPhone: member.phone,
@@ -6244,8 +6720,9 @@
               });
               saveState(db);
               labInp.value = '';
-              showToast(bi('تم حفظ المرفق الطبي وتحديث ملخص ' + member.fullName, 'Saved medical upload & updated summary for ' + member.fullName));
+              showToast(bi('تم حفظ المرفق الطبي وجاري تفسير النتائج في ملخص ' + member.fullName, 'Saved medical upload; analyzing results for ' + member.fullName));
               renderApp();
+              refreshMemberAiSummaryAsync(member.id, newUploadId);
             });
           };
         }
@@ -6419,8 +6896,9 @@
               showToast(bi('يرجى كتابة اسم التحليل أو الأشعة', 'Please enter test or scan title'));
               return;
             }
+            const newLabRecId = 'labrec_' + Date.now();
             db.records.unshift({
-              id: 'labrec_' + Date.now(),
+              id: newLabRecId,
               familyMemberId: member.id,
               patientName: member.fullName,
               patientPhone: ui.labTargetAccountPhone || member.phone,
@@ -6439,10 +6917,11 @@
               createdAtMillis: Date.now()
             });
             saveState(db);
-            showToast(bi('تم إرسال نتيجة ' + title + ' إلى ملف ' + member.fullName + ' بنجاح!', 'Sent lab report to ' + member.fullName + '\'s record!'));
+            showToast(bi('تم إرسال نتيجة ' + title + ' إلى ملف ' + member.fullName + ' وجاري تلخيصها ذكياً!', 'Sent lab report to ' + member.fullName + '; updating AI summary!'));
             pendingLabFile = { dataUrl: '', mimeType: '', fileName: '', extractedText: '' };
             if (fileInp) fileInp.value = '';
             renderApp();
+            refreshMemberAiSummaryAsync(member.id, newLabRecId);
           };
         }
 
@@ -7061,7 +7540,43 @@
         }
       });
 
-      // Background Live Update & Data Sync Checker (every 25s + on visibility return)
+      // Background Live Update & OTA Sync Checker (version.json + index.html every 25s & on visibility return)
+      let baselineVersionSig = null;
+      async function clearAllBrowserCachesSilently() {
+        try {
+          if ('caches' in window && caches.keys) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+          if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => {
+              try {
+                if (r.active) r.active.postMessage({ type: 'CLEAR_CACHES' });
+                return r.update ? r.update().catch(() => {}) : Promise.resolve();
+              } catch (err) { return Promise.resolve(); }
+            }));
+          }
+        } catch (e) { /* ignore cache clear failure */ }
+      }
+
+      function tryAutoOtaReloadInsideApk() {
+        if (!isInsideAndroidApk()) return false;
+        try {
+          const lastAuto = Number(sessionStorage.getItem('teb_last_auto_ota_ts') || '0');
+          if (Date.now() - lastAuto < 15000) return false;
+          sessionStorage.setItem('teb_last_auto_ota_ts', String(Date.now()));
+        } catch (e) { /* ignore sessionStorage error */ }
+        if (window.AndroidAppHost && typeof window.AndroidAppHost.clearCacheAndReload === 'function') {
+          window.AndroidAppHost.clearCacheAndReload();
+          return true;
+        }
+        try {
+          window.location.reload();
+          return true;
+        } catch (e) { return false; }
+      }
+
       async function checkForLivePlatformUpdates() {
         try {
           const latestDb = loadState();
@@ -7071,6 +7586,21 @@
             updateHeader();
           }
           if (typeof fetch === 'function' && /^https?:$/i.test(window.location.protocol)) {
+            let remoteUpdated = false;
+            try {
+              const verResp = await fetch('./version.json?_t=' + Date.now(), { cache: 'no-store' });
+              if (verResp && verResp.ok) {
+                const verJson = await verResp.json();
+                const verSig = [verJson.version || '1.0.0', verJson.versionCode || 1, verJson.updatedAt || ''].join('|');
+                if (!baselineVersionSig) {
+                  baselineVersionSig = verSig;
+                } else if (verSig !== baselineVersionSig) {
+                  baselineVersionSig = verSig;
+                  remoteUpdated = true;
+                }
+              }
+            } catch (e) { /* ignore version.json fetch if offline */ }
+
             const resp = await fetch('./index.html?live_check=' + Date.now(), { cache: 'no-store' });
             if (resp && resp.ok) {
               const etag = resp.headers.get('etag') || '';
@@ -7080,6 +7610,14 @@
               if (!baselineRemotePageSig) {
                 baselineRemotePageSig = sig;
               } else if (sig && sig !== baselineRemotePageSig) {
+                baselineRemotePageSig = sig;
+                remoteUpdated = true;
+              }
+            }
+
+            if (remoteUpdated) {
+              await clearAllBrowserCachesSilently();
+              if (!tryAutoOtaReloadInsideApk()) {
                 ui.hasNewDataBanner = true;
                 updateHeader();
               }

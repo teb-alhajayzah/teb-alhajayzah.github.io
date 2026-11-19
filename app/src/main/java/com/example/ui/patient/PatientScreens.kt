@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.LocalHospital
@@ -47,7 +46,6 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -539,33 +537,7 @@ fun PatientHomeScreen(
                 }
             }
 
-            // بطاقة التحميل المباشر وتحديث تطبيق طب الحجايزة (الإصدار v1.0.0) في أسفل الصفحة الرئيسية
-            item {
-                ApkDownloadCard(
-                    platformName = platformTitle,
-                    versionLabel = state.brandConfig.appVersionLabel,
-                    isEn = isEn,
-                    onDownloadClick = {
-                        try {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse(state.brandConfig.apkDownloadUrl),
-                            )
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                            onShowMessage(
-                                bi(
-                                    isEn,
-                                    "تعذر فتح رابط التحميل: ${state.brandConfig.apkDownloadUrl}",
-                                    "Could not open download link: ${state.brandConfig.apkDownloadUrl}",
-                                )
-                            )
-                        }
-                    },
-                )
-            }
-
-            // تذييل التواصل وطلب انضمام عيادة + شريط الحقوق
+            // تذييل التواصل وطلب انضمام عيادة + شريط الحقوق (بدون زر تحميل التطبيق داخل الـ APK)
             item {
                 FooterContactAndRightsSection(
                     platformName = platformTitle,
@@ -592,87 +564,6 @@ fun PatientHomeScreen(
                             onShowMessage(bi(isEn, "رقم التواصل: ${state.brandConfig.supportPhone}", "Support phone: ${state.brandConfig.supportPhone}"))
                         }
                     },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ApkDownloadCard(
-    platformName: String,
-    versionLabel: String,
-    isEn: Boolean = false,
-    onDownloadClick: () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-        border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.45f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("apk_download_card"),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(TealPrimary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.SystemUpdate,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp),
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = bi(
-                            isEn,
-                            "تحميل وتحديث تطبيق $platformName (الإصدار $versionLabel)",
-                            "Download & Update $platformName App ($versionLabel)",
-                        ),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    Text(
-                        text = bi(
-                            isEn,
-                            "تحميل مباشر لنسخة الأندرويد الرسمية المحدّثة تلقائياً من GitHub Releases",
-                            "Direct download for the official Android release from GitHub Releases",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Button(
-                onClick = onDownloadClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("apk_direct_download_button"),
-                shape = RoundedCornerShape(14.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Download,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = bi(isEn, "تحميل مباشر للتطبيق (APK)", "Direct Download (APK)"),
-                    style = MaterialTheme.typography.labelLarge,
                 )
             }
         }

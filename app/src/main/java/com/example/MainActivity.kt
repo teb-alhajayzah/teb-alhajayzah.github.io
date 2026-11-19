@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
                             isEn = state.isEn,
                             hasNewDataBanner = state.hasNewDataBanner,
                             onDismissBannerAndSync = viewModel::dismissNewDataBanner,
+                            onCheckLiveUpdates = viewModel::checkLiveWebNow,
                             onSwitchToNativeOffline = { useLiveWebMode = false },
                         )
                     } else {

@@ -20,6 +20,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
+  if (url.pathname.endsWith('/version.json') || url.pathname.endsWith('.apk')) {
+    event.respondWith(fetch(new Request(event.request, { cache: 'no-store' })));
+    return;
+  }
+
   const isHtmlNav =
     event.request.mode === 'navigate' ||
     url.pathname === '/' ||

@@ -717,6 +717,47 @@ class ExampleRobolectricTest {
         assertEquals(1, summaryAr.labAndImagingCount)
         assertEquals(1, summaryAr.externalVisitsCount)
 
+        // 3b) Smart Offline Fallback: when Gemini/Firebase is unreachable or quota exceeded,
+        // refreshMemberAiSummaryWithGemini succeeds seamlessly with an organized 2-part structured summary and ZERO error.
+        val fallbackRefreshRes = repository.refreshMemberAiSummaryWithGemini(updatedMem.id)
+        assertTrue(fallbackRefreshRes.isSuccess)
+        val afterFallback = fallbackRefreshRes.getOrThrow()
+        assertEquals("", afterFallback.aiSummaryError)
+        assertTrue(afterFallback.aiSummaryAr.contains("الحالة العامة والقيم الطبيعية"))
+        assertTrue(afterFallback.aiSummaryAr.contains("نقاط تحتاج لمتابعة أو انتباه الطبيب"))
+        assertTrue(afterFallback.aiSummaryAr.contains("1."))
+        assertTrue(afterFallback.aiSummaryAr.contains("البيانات الحيوية"))
+        assertTrue(afterFallback.aiSummaryAr.contains("O+"))
+        assertTrue(afterFallback.aiSummaryAr.contains("السكر"))
+        assertTrue(afterFallback.aiSummaryAr.contains("Urine Analysis") || afterFallback.aiSummaryAr.contains("urine_test.pdf"))
+        assertTrue(afterFallback.aiSummaryAr.contains("كونكور"))
+        assertTrue(afterFallback.aiSummaryEn.contains("Overall Status & Normal Values"))
+        assertTrue(afterFallback.aiSummaryEn.contains("Points Requiring Physician Follow-Up"))
+        assertTrue(afterFallback.aiSummaryEn.contains("Vitals & Bio"))
+        assertTrue(afterFallback.aiSummaryEn.contains("Diabetes"))
+        assertTrue(afterFallback.aiSummaryEn.contains("urine_test.pdf"))
+
+        // 3c) Smart Local Clinical Parser ignores lab metadata headers (date/patient/lab name)
+        // and accurately compares Pus cells, RBCs, Crystals/Oxalate, Glucose & Hemoglobin against Ref Ranges.
+        val sampleLabText = """
+            Lab Name: Al-Shifa Medical Lab
+            Patient Name: سعيد إبراهيم محمد
+            Report Date: 19/11/2026
+            Hemoglobin: 13.8 g/dL (12.0 - 16.0)
+            Glucose: 215 mg/dL (70 - 140)
+            Pus cells: 15-20 /HPF (0 - 5)
+            RBCs: 8-10 /HPF (0 - 3)
+            Calcium Oxalate Crystals: ++ (Nil)
+        """.trimIndent()
+        val parsedLocalAr = MedicalSummaryAnalyzer.parseClinicalLabText(listOf(sampleLabText), updatedMem, isEn = false)
+        assertTrue(parsedLocalAr.normalCount >= 1)
+        assertTrue(parsedLocalAr.normalHighlights.any { it.contains("13.8") })
+        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("Pus Cells") || it.contains("الصديد") })
+        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("RBCs") || it.contains("الحمراء") })
+        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("أوكسالات") || it.contains("أملاح") })
+        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("215") })
+        assertFalse(parsedLocalAr.followUpPoints.any { it.contains("Al-Shifa") || it.contains("19/11/2026") })
+
         // 4) Delete patient PDF upload -> deletes record and physical file
         val delPdfRes = repository.deleteMedicalRecordOrAttachment(uploadRec.id)
         assertTrue(delPdfRes.isSuccess)
@@ -733,4 +774,28 @@ class ExampleRobolectricTest {
         assertEquals("", remainingVisit.attachmentPath)
         assertEquals("ارتفاع ضغط الدم", remainingVisit.diagnosis)
     }
+
+    @Test
+    fun otaVersionLockAndFooterContractMatchProductionRelease() {
+        assertEquals("1.0.0", BuildConfig.VERSION_NAME)
+        assertEquals(1, BuildConfig.VERSION_CODE)
+        assertEquals("https://teb-alhajayzah.github.io/", AppConfig.defaultBrand.liveWebUrl)
+
+        val versionFile = listOf(
+            java.io.File("version.json"),
+            java.io.File("../version.json"),
+        ).firstOrNull { it.exists() }
+        assertTrue("Root version.json must exist", versionFile != null && versionFile.exists())
+
+        val json = org.json.JSONObject(versionFile!!.readText())
+        assertEquals("طب الحجايزة", json.getString("appName"))
+        assertEquals("1.0.0", json.getString("version"))
+        assertEquals("1.0.0", json.getString("versionName"))
+        assertEquals(1, json.getInt("versionCode"))
+        assertEquals("طب الحجايزة.apk", json.getString("apkFileName"))
+        assertEquals("https://teb-alhajayzah.github.io/", json.getString("liveUrl"))
+        assertTrue(json.getBoolean("forceCleanCache"))
+        assertTrue(json.getBoolean("otaSync"))
+    }
 }
+

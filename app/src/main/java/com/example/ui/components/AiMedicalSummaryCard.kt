@@ -217,6 +217,25 @@ fun AiMedicalSummaryCard(
                 }
             }
 
+            val hasStructuredSource = summary.totalRecords > 0 ||
+                summary.vitalsSummary.isNotBlank() ||
+                summary.chronicConditionsSummary.isNotBlank() ||
+                summary.drugAllergies.isNotBlank()
+            val displayedNarrative = remember(summary.aiNarrative, hasStructuredSource, member, patientName, records, cardIsEn) {
+                summary.aiNarrative.ifBlank {
+                    if (hasStructuredSource) {
+                        val offline = MedicalSummaryAnalyzer.buildOfflineFallbackBundle(
+                            member = member,
+                            patientName = patientName,
+                            records = records,
+                        )
+                        if (cardIsEn) offline.summaryEn else offline.summaryAr
+                    } else {
+                        ""
+                    }
+                }
+            }
+
             if (isAnalyzing) {
                 Surface(
                     color = TealPrimary.copy(alpha = 0.08f),
@@ -229,9 +248,9 @@ fun AiMedicalSummaryCard(
                     ) {
                         Text(
                             text = if (cardIsEn) {
-                                "Reading attached PDF / images and updating AI medical summary..."
+                                "Organizing medical files and updating summary..."
                             } else {
-                                "جاري قراءة ملفات PDF والمرفقات وتحديث الملخص الطبي بالذكاء الاصطناعي..."
+                                "جاري قراءة ملفات PDF والمرفقات وتحديث الملخص الطبي المنظم..."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = TealPrimary,
@@ -243,7 +262,7 @@ fun AiMedicalSummaryCard(
                         )
                     }
                 }
-            } else if (summary.aiNarrative.isNotBlank()) {
+            } else if (displayedNarrative.isNotBlank()) {
                 Surface(
                     color = Color(0xFFF0FDFA),
                     shape = RoundedCornerShape(14.dp),
@@ -268,9 +287,9 @@ fun AiMedicalSummaryCard(
                             )
                             Text(
                                 text = if (cardIsEn) {
-                                    "Smart Clinical Analysis (PDFs & History)"
+                                    "Smart Clinical Summary (Files, Vitals & Meds)"
                                 } else {
-                                    "القراءة والتحليل الذكي للتقارير والتحاليل"
+                                    "الملخص السريري المنظم (البيانات، التحاليل والأدوية)"
                                 },
                                 style = MaterialTheme.typography.labelLarge,
                                 color = TealPrimary,
@@ -278,39 +297,10 @@ fun AiMedicalSummaryCard(
                             )
                         }
                         Text(
-                            text = summary.aiNarrative,
+                            text = displayedNarrative,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                    }
-                }
-            } else if (summary.aiError.isNotBlank()) {
-                Surface(
-                    color = SlotBookedBg.copy(alpha = 0.65f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Filled.Warning, contentDescription = null, tint = SlotBookedBorder, modifier = Modifier.size(16.dp))
-                            Text(
-                                text = summary.aiError,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = SlotBookedText,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        if (onRefreshAiSummary != null) {
-                            OutlinedButton(onClick = onRefreshAiSummary, modifier = Modifier.fillMaxWidth()) {
-                                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (cardIsEn) "Retry AI Analysis" else "إعادة محاولة التحليل الذكي")
-                            }
-                        }
                     }
                 }
             }
@@ -402,7 +392,7 @@ fun AiMedicalSummaryCard(
                         }
                     }
                 }
-            } else if (summary.aiNarrative.isBlank()) {
+            } else if (displayedNarrative.isBlank()) {
                 Text(
                     text = summary.headlineSummary,
                     style = MaterialTheme.typography.bodySmall,
