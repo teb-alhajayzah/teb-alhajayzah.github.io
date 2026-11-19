@@ -56,6 +56,10 @@
 
     body {
       margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
       background: var(--bg);
       color: var(--text);
       font-family: 'Tajawal', 'Cairo', system-ui, -apple-system, sans-serif;
@@ -300,6 +304,8 @@
 
     /* Layout Container */
     .container {
+      width: 100%;
+      flex: 1 0 auto;
       max-width: 960px;
       margin: 0 auto;
       padding: 16px;
@@ -633,15 +639,60 @@
 
     .nav-icon { font-size: 1.2rem; }
 
-    /* APK Download Card */
-    .apk-card {
-      background: linear-gradient(135deg, #E0F5F3 0%, #D9F2F2 100%);
-      border: 1.5px solid rgba(13, 115, 119, 0.45);
-      border-radius: 20px;
-      padding: 18px;
+    /* Browser-Only Bottom Footer Smart APK Bar */
+    .footer-smart-apk-bar {
+      background: linear-gradient(135deg, #0D7377 0%, #09585B 100%);
+      color: #fff;
+      border-radius: 18px;
+      padding: 14px 16px;
       display: flex;
       flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 8px 22px rgba(13, 115, 119, 0.22);
+    }
+
+    .footer-smart-apk-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .footer-smart-apk-btn {
+      background: #FFFFFF;
+      color: #09585B;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 16px;
+      min-height: 46px;
+      font-weight: 800;
+      font-size: 0.92rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.14);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .footer-smart-apk-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+    }
+
+    .footer-version-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.3px;
     }
 
     .apk-download-notice {
@@ -1069,7 +1120,7 @@
     .site-footer {
       background: linear-gradient(180deg, #FFFFFF 0%, #EDF6F6 100%);
       border-top: 2px solid rgba(13, 115, 119, 0.22);
-      margin-top: 24px;
+      margin-top: auto;
       padding: 24px 16px 28px;
     }
 
@@ -1225,8 +1276,7 @@
 
     @media (min-width: 720px) {
       .sections-grid { grid-template-columns: repeat(4, 1fr); }
-      .footer-grid { grid-template-columns: 1.2fr 1fr 1fr; }
-      .footer-grid.inside-apk { grid-template-columns: 1fr 1fr; }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -3474,12 +3524,27 @@
       }
 
       let apkNoticeTimer = null;
+      async function syncSiteDataAndCacheInPage() {
+        try {
+          if (typeof clearAllBrowserCachesSilently === 'function') {
+            await clearAllBrowserCachesSilently();
+          }
+          if (typeof fetch === 'function' && /^https?:$/i.test(window.location.protocol)) {
+            await fetch('./version.json?_t=' + Date.now(), { cache: 'no-store' }).catch(function () {});
+          }
+          await refreshMedicationsFromApi();
+          db = loadState();
+          ui.hasNewDataBanner = false;
+          baselineDbSyncSig = computeDbSyncSignature(db);
+        } catch (e) { /* safe offline fallback */ }
+      }
+
       function startBackgroundApkDownload(customUrl) {
         const downloadUrl = (customUrl && String(customUrl).trim()) || DEFAULT_CONFIG.apkDownloadUrl;
         const targetFileName = 'طب الحجايزة.apk';
         const noticeText = bi(
-          'جاري تحميل تطبيق طب الحجايزة (v1.0.0)... تابع شريط الإشعارات في الأعلى',
-          'Downloading Teb Al-Hajayzah APK (v1.0.0)... Check your notification bar above'
+          'جاري تحميل «طب الحجايزة.apk» (v1.0.0) وتحديث بيانات الموقع والكاش...',
+          'Downloading Teb Al-Hajayzah.apk (v1.0.0) & syncing site cache...'
         );
 
         const noticeEl = document.getElementById('apkDownloadNotice');
@@ -3492,11 +3557,12 @@
           apkNoticeTimer = setTimeout(function () {
             const activeNotice = document.getElementById('apkDownloadNotice');
             if (activeNotice) activeNotice.style.display = 'none';
-          }, 6500);
+          }, 7000);
         }
 
         showToast(noticeText, 5000);
 
+        let triggeredSameOrigin = false;
         try {
           const resolved = new URL(downloadUrl, window.location.href);
           if (resolved.origin === window.location.origin) {
@@ -3507,22 +3573,41 @@
             document.body.appendChild(tempLink);
             tempLink.click();
             document.body.removeChild(tempLink);
-            return;
+            triggeredSameOrigin = true;
           }
         } catch (e) { /* fallback to hidden frame */ }
 
-        const oldFrame = document.getElementById('apkDownloadFrame');
-        if (oldFrame && oldFrame.parentNode) {
-          oldFrame.parentNode.removeChild(oldFrame);
+        if (!triggeredSameOrigin) {
+          const oldFrame = document.getElementById('apkDownloadFrame');
+          if (oldFrame && oldFrame.parentNode) {
+            oldFrame.parentNode.removeChild(oldFrame);
+          }
+          const frame = document.createElement('iframe');
+          frame.id = 'apkDownloadFrame';
+          frame.title = 'تحميل تطبيق طب الحجايزة';
+          frame.setAttribute('aria-hidden', 'true');
+          frame.tabIndex = -1;
+          frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute;left:-9999px;';
+          frame.src = downloadUrl;
+          document.body.appendChild(frame);
         }
-        const frame = document.createElement('iframe');
-        frame.id = 'apkDownloadFrame';
-        frame.title = 'تحميل تطبيق طب الحجايزة';
-        frame.setAttribute('aria-hidden', 'true');
-        frame.tabIndex = -1;
-        frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute;left:-9999px;';
-        frame.src = downloadUrl;
-        document.body.appendChild(frame);
+
+        // فحص وتحديث بيانات الموقع والكاش في نفس الصفحة دون تحويل لصفحات خارجية
+        syncSiteDataAndCacheInPage().then(function () {
+          updateHeader();
+          const doneMsg = bi(
+            'بدأ تنزيل «طب الحجايزة.apk» وتم فحص وتحديث الكاش وبيانات الموقع (v1.0.0)',
+            'Download started for طب الحجايزة.apk & site cache synced (v1.0.0)'
+          );
+          const activeNotice = document.getElementById('apkDownloadNotice');
+          if (activeNotice) {
+            activeNotice.innerHTML =
+              '<span class="apk-notice-icon" aria-hidden="true">✅</span>' +
+              '<span>' + esc(doneMsg) + '</span>';
+            activeNotice.style.display = 'flex';
+          }
+          showToast(doneMsg, 4500);
+        });
       }
 
       function getActiveMember() {
@@ -3747,29 +3832,32 @@
         const inApk = isInsideAndroidApk();
         const resolvedApkUrl = cfg.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl;
 
-        // يظهر زر التحميل المباشر في آخر الصفحة للمتصفحات فقط (Chrome / Safari) ويختفي بالكامل داخل تطبيق الأندرويد (APK)
-        const apkFooterCardHtml = inApk
+        // يظهر الشريط الذكي الموحد (تحميل + تحديث) في آخر الصفحة للمتصفحات فقط ويختفي تلقائياً داخل تطبيق الـ APK
+        const smartBottomBarHtml = inApk
           ? ''
-          : '<div class="apk-card" id="apkDownloadSection">' +
-              '<div style="display:flex;align-items:center;gap:12px;">' +
-                '<img src="./icon.svg" alt="' + esc(brandTitle) + '" style="width:48px;height:48px;border-radius:14px;flex-shrink:0;" />' +
-                '<div>' +
-                  '<h3 style="font-size:1.05rem;color:var(--teal-text);">' + esc(brandTitle) + ' (' + esc(versionTag) + ')</h3>' +
-                  '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('تحميل مباشر للنسخة الإنتاجية الرسمية باسم طب الحجايزة.apk', 'Direct official release APK download (طب الحجايزة.apk)')) + '</div>' +
+          : '<div class="footer-smart-apk-bar" id="apkDownloadSection">' +
+              '<div class="footer-smart-apk-row">' +
+                '<div style="display:flex;align-items:center;gap:10px;min-width:0;">' +
+                  '<img src="./icon.svg" alt="' + esc(brandTitle) + '" style="width:42px;height:42px;border-radius:12px;flex-shrink:0;background:#fff;padding:2px;" />' +
+                  '<div style="min-width:0;">' +
+                    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+                      '<strong style="font-size:1rem;">' + esc(brandTitle) + '</strong>' +
+                      '<span class="footer-version-pill">' + esc(versionTag) + '</span>' +
+                    '</div>' +
+                    '<div style="font-size:0.82rem;opacity:0.9;">' + esc(bi('تحميل مباشر باسم طب الحجايزة.apk مع فحص وتحديث بيانات الموقع والكاش تلقائياً', 'Direct طب الحجايزة.apk download + in-page live cache & data update')) + '</div>' +
+                  '</div>' +
                 '</div>' +
+                '<a class="footer-smart-apk-btn" id="btnApkDirectDownload" href="' + esc(resolvedApkUrl) + '" download="طب الحجايزة.apk" data-apk-url="' + esc(resolvedApkUrl) + '">' +
+                  '⬇️ ' + esc(bi('تحميل وتحديث تطبيق طب الحجايزة (' + versionTag + ')', 'Download & Update Teb Al-Hajayzah (' + versionTag + ')')) +
+                '</a>' +
               '</div>' +
-              '<a class="btn btn-primary btn-block" id="btnApkDirectDownload" href="' + esc(resolvedApkUrl) + '" download="طب الحجايزة.apk" data-apk-url="' + esc(resolvedApkUrl) + '">' +
-                '⬇️ ' + esc(bi('تحميل وتحديث تطبيق طب الحجايزة (' + versionTag + ')', 'Download & Update Teb Al-Hajayzah (' + versionTag + ')')) +
-              '</a>' +
               '<div id="apkDownloadNotice" class="apk-download-notice" role="status" aria-live="polite" style="display:none;"></div>' +
             '</div>';
 
         return '<div class="footer-inner">' +
-          '<div class="footer-grid' + (inApk ? ' inside-apk' : '') + '">' +
+          '<div class="footer-grid">' +
 
-            apkFooterCardHtml +
-
-            // 2. روابط سريعة
+            // 1. روابط سريعة
             '<div class="footer-box">' +
               '<h3 style="font-size:1.02rem;color:var(--teal);">🔗 ' + esc(bi('روابط سريعة', 'Quick Links')) + '</h3>' +
               '<div class="footer-quick-links">' +
@@ -3780,7 +3868,7 @@
               '</div>' +
             '</div>' +
 
-            // 3. التواصل وطلب انضمام عيادة
+            // 2. التواصل وطلب انضمام عيادة
             '<div class="footer-box">' +
               '<h3 style="font-size:1.02rem;color:var(--teal);">📞 ' + esc(bi('التواصل وطلب انضمام عيادة', 'Contact & Clinic Onboarding')) + '</h3>' +
               '<div style="font-size:0.86rem;color:var(--text-muted);">' + esc(bi('لتسجيل العيادات الجديدة أو استفسارات المرضى والأطباء:', 'For adding new clinics or patient/doctor support:')) + '</div>' +
@@ -3792,13 +3880,16 @@
 
           '</div>' +
 
-          // 4. شريط الحقوق
+          // 3. شريط الحقوق
           '<div class="footer-bottom-bar">' +
             esc(bi(
               'جميع الحقوق محفوظة © 2026 منصة ' + cfg.platformNameAr + ' - لخدمة أهالي الحجايزة والقرى المجاورة',
               '© 2026 ' + (cfg.platformNameEn || 'Teb Al-Hajayzah') + ' Platform — Serving Al-Hajayzah & Neighboring Villages'
             )) +
           '</div>' +
+
+          // 4. الشريط الذكي الموحد (تحميل + تحديث) في آخر الصفحة أسفل كل المحتوى (يظهر في المتصفح فقط)
+          smartBottomBarHtml +
         '</div>';
       }
 
