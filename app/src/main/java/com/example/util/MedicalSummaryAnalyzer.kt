@@ -332,7 +332,7 @@ object MedicalSummaryAnalyzer {
         allLines.forEach { line ->
             // Pus cells / WBCs in urine/microscopy or blood
             val pusMatch = Regex(
-                "(?:pus\\s*cells?|p\\.?u\\.?s\\.?\\s*cells?|leucocytes?|leukocytes?|صديد|خلايا\\s*صديدية)\\s*[:=\\-]?\\s*([0-9]+(?:\\s*[-–]\\s*[0-9]+)?|\\+{1,4}|positive|present|many|moderate|few|nil|absent|negative)",
+                "(?:pus\\s*cells?|p\\.?u\\.?s\\.?\\s*cells?|leucocytes?|leukocytes?|صديد|خلايا\\s*صديدية)\\s*[:=\\-]?\\s*([0-9]+(?:\\s*[-–]\\s*[0-9]+)?|\\+{1,4}|positive|pos|present|many|heavy|moderate|few|rare|trace|nil|absent|negative|neg|none|normal)",
                 RegexOption.IGNORE_CASE,
             ).find(line)
             if (pusMatch != null) {
@@ -345,33 +345,36 @@ object MedicalSummaryAnalyzer {
                     addAbnormal(
                         "pus",
                         if (isEn) {
-                            "Elevated Pus Cells ($rawVal vs Ref $refLabel): may indicate urinary tract inflammation or infection; discuss with your doctor."
+                            "Elevated Pus Cells ($rawVal vs Ref $refLabel): may indicate mild urinary inflammation or infection; follow up with your doctor for proper treatment."
                         } else {
-                            "ارتفاع خلايا الصديد Pus Cells ($rawVal مقارنة بالطبيعي $refLabel): قد يشير إلى التهاب بسيط أو عدوى مسالك بولية ويحتاج مراجعة الطبيب لتأكيد السبب."
+                            "وجود نسبة بسيطة من خلايا الصديد في البول، وتحتاج للمتابعة مع الطبيب لوصف العلاج المناسب"
                         },
                     )
                 } else if (eval == 0) {
+                    val isQualNeg = isQualitativeNegative(rawVal)
                     addNormal(
                         "pus",
-                        if (isEn) "Pus Cells ($rawVal)" else "خلايا الصديد ($rawVal — طبيعي)",
+                        if (isEn) "Pus Cells ($rawVal)" else if (isQualNeg) "خلايا الصديد: سلبية / طبيعية ولا يوجد بها أي مشكلة" else "خلايا الصديد: طبيعية ($rawVal) ولا يوجد بها أي مشكلة",
                     )
                 }
             }
 
             // RBCs
             val rbcMatch = Regex(
-                "(?:r\\.?b\\.?c\\.?s?|red\\s*(?:blood\\s*)?cells?|كرات\\s*(?:الدم\\s*)?الحمراء|خلايا\\s*دم\\s*حمراء)\\s*[:=\\-]?\\s*([0-9]+(?:\\.[0-9]+)?(?:\\s*[-–]\\s*[0-9]+(?:\\.[0-9]+)?)?|\\+{1,4}|positive|present|many|moderate|few|nil|absent|negative)",
+                "(?:r\\.?b\\.?c\\.?s?|red\\s*(?:blood\\s*)?cells?|كرات\\s*(?:الدم\\s*)?الحمراء|خلايا\\s*دم\\s*حمراء)\\s*[:=\\-]?\\s*([0-9]+(?:\\.[0-9]+)?(?:\\s*[-–]\\s*[0-9]+(?:\\.[0-9]+)?)?|\\+{1,4}|positive|pos|present|many|heavy|moderate|few|rare|trace|nil|absent|negative|neg|none|normal)",
                 RegexOption.IGNORE_CASE,
             ).find(line)
             if (rbcMatch != null) {
                 val rawVal = rbcMatch.groupValues[1].trim()
                 val inlineRef = extractInlineNumericRange(line, rbcMatch.range.last + 1)
                 val firstNum = extractFirstNumber(rawVal)
+                val isQual = firstNum == null
                 val isUrineMicroscopy = line.contains("/hpf", ignoreCase = true) ||
                     rawVal.contains("-") ||
                     (inlineRef != null && inlineRef.second <= 10.0) ||
                     (inlineRef == null && firstNum != null && firstNum > 6.5) ||
-                    rawVal.startsWith("+")
+                    rawVal.startsWith("+") ||
+                    isQual
                 if (isUrineMicroscopy) {
                     val high = inlineRef?.second ?: 3.0
                     val eval = evaluateSemiQuantOrRange(rawVal, lowNormal = 0.0, highNormal = high)
@@ -380,13 +383,17 @@ object MedicalSummaryAnalyzer {
                         addAbnormal(
                             "rbc_urine",
                             if (isEn) {
-                                "Elevated RBCs ($rawVal vs Ref $refLabel): microscopic red blood cells noticed (possible salts irritation or inflammation); needs doctor review."
+                                "Elevated RBCs ($rawVal vs Ref $refLabel): microscopic red blood cells noticed; follow up with your doctor."
                             } else {
-                                "ارتفاع كرات الدم الحمراء RBCs ($rawVal مقارنة بالطبيعي $refLabel): وجود كرات دم حمراء يستدعي متابعة الطبيب (قد يرتبط بأملاح أو التهاب بسيط)."
+                                "وجود نسبة بسيطة من كرات الدم الحمراء في البول، وتحتاج للمتابعة مع الطبيب للاطمئنان"
                             },
                         )
                     } else if (eval == 0) {
-                        addNormal("rbc_urine", if (isEn) "Urine RBCs ($rawVal)" else "كرات الدم الحمراء ($rawVal — طبيعي)")
+                        val isQualNeg = isQualitativeNegative(rawVal)
+                        addNormal(
+                            "rbc_urine",
+                            if (isEn) "Urine RBCs ($rawVal)" else if (isQualNeg) "كرات الدم الحمراء: سلبية / طبيعية ولا يوجد بها أي مشكلة" else "كرات الدم الحمراء: طبيعية ($rawVal) ولا يوجد بها أي مشكلة",
+                        )
                     }
                 } else if (firstNum != null) {
                     val low = inlineRef?.first ?: 3.8
@@ -398,44 +405,47 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "RBC Count out of range ($rawVal vs Ref $refLabel): discuss with your physician."
                             } else {
-                                "عدد كرات الدم الحمراء ($rawVal خارج المعدل الطبيعي $refLabel): يُنصح بمراجعة الطبيب."
+                                "عدد كرات الدم الحمراء خارج المعدل الطبيعي المعتاد، ويُنصح بمراجعة الطبيب للاطمئنان"
                             },
                         )
                     } else {
-                        addNormal("rbc_cbc", if (isEn) "RBCs ($rawVal)" else "كرات الدم الحمراء ($rawVal — طبيعي)")
+                        addNormal("rbc_cbc", if (isEn) "RBCs ($rawVal)" else "كرات الدم الحمراء: ضمن المعدل الطبيعي ($rawVal)")
                     }
                 }
             }
 
             // Crystals / Oxalate / Urate / Phosphates
             val crystalMatch = Regex(
-                "(?:calcium\\s*oxalate|oxalate|uric\\s*acid\\s*crystals?|amorphous\\s*(?:urates?|phosphates?)|crystals?|أملاح|اوكسالات|أوكسالات|بلورات|يورات)\\s*[:=\\-]?\\s*(\\+{1,4}|positive|present|many|heavy|moderate|few|rare|trace|nil|absent|negative|none|[0-9]+(?:\\s*[-–]\\s*[0-9]+)?)",
+                "(?:calcium\\s*oxalate|ca\\.?\\s*oxalate|oxalate|uric\\s*acid\\s*crystals?|amorphous\\s*(?:urates?|phosphates?)|crystals?|أملاح|اوكسالات|أوكسالات|بلورات|يورات)\\s*[:=\\-]?\\s*(\\+{1,4}|positive|pos|present|many|heavy|moderate|few|rare|trace|nil|absent|negative|neg|none|normal|[0-9]+(?:\\s*[-–]\\s*[0-9]+)?)",
                 RegexOption.IGNORE_CASE,
             ).find(line)
             if (crystalMatch != null) {
-                val matchedLabel = crystalMatch.groupValues[0].substringBefore(':').substringBefore('=').trim()
                 val rawVal = crystalMatch.groupValues[1].trim()
                 val eval = evaluateSemiQuantOrRange(rawVal, lowNormal = 0.0, highNormal = 0.0)
                 val isCalciumOxalate = line.contains("oxalate", ignoreCase = true) || line.contains("أوكسالات") || line.contains("اوكسالات")
                 if (eval > 0) {
-                    val displaySaltAr = if (isCalciumOxalate) "أملاح أوكسالات الكالسيوم" else "أملاح / بلورات ($matchedLabel)"
-                    val displaySaltEn = if (isCalciumOxalate) "Calcium Oxalate Crystals" else "Crystals / Salts ($matchedLabel)"
+                    val displaySaltEn = if (isCalciumOxalate) "Calcium Oxalate Crystals" else "Urinary Crystals / Salts"
                     addAbnormal(
                         "crystals",
                         if (isEn) {
-                            "$displaySaltEn detected ($rawVal vs Ref Nil): urinary salts/crystals present — share with your doctor for hydration/diet guidance."
+                            "$displaySaltEn detected ($rawVal vs Ref Nil): urinary salts present — drink plenty of water and review with your doctor."
+                        } else if (isCalciumOxalate) {
+                            "وجود نسبة أملاح (أوكسالات) في البول، ويُنصح بشرب كميات كافية من الماء ومراجعة الطبيب"
                         } else {
-                            "وجود $displaySaltAr ($rawVal مقارنة بالطبيعي Nil/غائب): يشير لوجود أملاح بالبول؛ يُنصح بشرب الماء جيداً ومراجعة الطبيب."
+                            "وجود نسبة أملاح في البول، ويُنصح بشرب كميات كافية من الماء ومراجعة الطبيب"
                         },
                     )
                 } else if (eval == 0) {
-                    addNormal("crystals", if (isEn) "Crystals ($rawVal)" else "الأملاح والبلورات ($rawVal — طبيعي)")
+                    addNormal(
+                        "crystals",
+                        if (isEn) "Crystals ($rawVal)" else "الأملاح والبلورات: سلبية / طبيعية ولا يوجد بها أي مشكلة",
+                    )
                 }
             }
 
             // Bacteria / Epithelial / Casts
             val bactMatch = Regex(
-                "(?:bacteria|bacteriuria|casts?|yeast|فطريات|بكتيريا)\\s*[:=\\-]?\\s*(\\+{1,4}|positive|present|many|heavy|moderate|few|nil|absent|negative|none)",
+                "(?:bacteria|bacteriuria|casts?|yeast|فطريات|بكتيريا)\\s*[:=\\-]?\\s*(\\+{1,4}|positive|pos|present|many|heavy|moderate|few|rare|trace|nil|absent|negative|neg|none|normal)",
                 RegexOption.IGNORE_CASE,
             ).find(line)
             if (bactMatch != null) {
@@ -447,11 +457,11 @@ object MedicalSummaryAnalyzer {
                         if (isEn) {
                             "Microbial/Bacteria finding ($rawVal vs Ref Nil): requires doctor evaluation of urine report."
                         } else {
-                            "ملاحظة بكتيريا أو مكونات مجهرية ($rawVal مقارنة بالطبيعي Nil): تستدعي تقييم الطبيب."
+                            "وجود بكتيريا أو مكونات بسيطة في عينة البول، وتحتاج للمتابعة مع الطبيب لوصف العلاج المناسب"
                         },
                     )
                 } else if (eval == 0) {
-                    addNormal("bacteria", if (isEn) "Bacteria ($rawVal)" else "البكتيريا ($rawVal — طبيعي)")
+                    addNormal("bacteria", if (isEn) "Bacteria ($rawVal)" else "البكتيريا: سلبية / طبيعية ولا يوجد بها أي مشكلة")
                 }
             }
 
@@ -473,7 +483,7 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "Low Hemoglobin ($hb vs Ref $refLabel g/dL): below reference range — doctor review recommended for possible anemia."
                             } else {
-                                "انخفاض الهيموجلوبين Hb ($hb أقل من الطبيعي $refLabel جم/دل): قد يدل على أنيميا ويحتاج تقييم الطبيب."
+                                "نسبة الهيموجلوبين (الأنيميا) أقل من المعدل الطبيعي وتحتاج لمتابعة الطبيب"
                             },
                         )
                     } else if (hb > high) {
@@ -482,18 +492,18 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "Elevated Hemoglobin ($hb vs Ref $refLabel g/dL): slightly above range; review with doctor."
                             } else {
-                                "ارتفاع الهيموجلوبين Hb ($hb أعلى من الطبيعي $refLabel): يُنصح بمراجعة الطبيب."
+                                "نسبة الهيموجلوبين أعلى قليلاً من المعدل الطبيعي ($hb)، ويُنصح بمراجعة الطبيب"
                             },
                         )
                     } else {
-                        addNormal("hb", if (isEn) "Hemoglobin ($hb g/dL)" else "الهيموجلوبين ($hb — طبيعي)")
+                        addNormal("hb", if (isEn) "Hemoglobin ($hb g/dL)" else "الهيموجلوبين: ضمن المعدل الطبيعي ($hb)")
                     }
                 }
             }
 
             // Glucose (Blood or Urine)
             val gluMatch = Regex(
-                "(?:glucose|fbs|rbs|ppbs|blood\\s*sugar|urine\\s*sugar|sugar|الجلوكوز|سكر\\s*الدم|السكر)\\s*[:=\\-]?\\s*(\\d{2,3}(?:\\.\\d+)?|\\+{1,4}|trace|positive|present|nil|absent|negative)",
+                "(?:glucose|fbs|rbs|ppbs|blood\\s*sugar|urine\\s*sugar|sugar|الجلوكوز|سكر\\s*الدم|السكر)\\s*[:=\\-]?\\s*(\\d{2,3}(?:\\.\\d+)?|\\+{1,4}|trace|positive|pos|present|nil|absent|negative|neg|none|normal)",
                 RegexOption.IGNORE_CASE,
             ).find(line)
             if (gluMatch != null && !line.contains("hba1c", ignoreCase = true)) {
@@ -514,11 +524,11 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "$dirEn Glucose ($numVal vs Ref $refLabel mg/dL)$chronicLinkEn: bring to your doctor's attention."
                             } else {
-                                "$dirAr مستوى السكر ($numVal مقارنة بالطبيعي $refLabel)$chronicLinkAr: يُرجى عرضه على الطبيب لمراجعة خطة المتابعة."
+                                "$dirAr نسبة السكر في الدم (${formatNum(numVal)})$chronicLinkAr، وتحتاج للمتابعة مع الطبيب"
                             },
                         )
                     } else {
-                        addNormal("glucose", if (isEn) "Glucose ($numVal)" else "مستوى السكر ($numVal — طبيعي)")
+                        addNormal("glucose", if (isEn) "Glucose ($numVal)" else "مستوى السكر: ضمن المعدل الطبيعي (${formatNum(numVal)})")
                     }
                 } else {
                     val eval = evaluateSemiQuantOrRange(rawVal, 0.0, 0.0)
@@ -528,11 +538,11 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "Sugar/Glucose detected in urine ($rawVal vs Ref Nil): check with your physician."
                             } else {
-                                "ظهور سكر في البول ($rawVal مقارنة بالطبيعي Nil): يستلزم متابعة الطبيب وفحص سكر الدم."
+                                "وجود نسبة سكر في البول، ويستلزم المتابعة مع الطبيب للاطمئنان"
                             },
                         )
                     } else if (eval == 0) {
-                        addNormal("glucose_urine", if (isEn) "Urine Sugar ($rawVal)" else "سكر البول ($rawVal — طبيعي)")
+                        addNormal("glucose_urine", if (isEn) "Urine Sugar ($rawVal)" else "سكر البول: سلبية / طبيعية ولا يوجد بها أي مشكلة")
                     }
                 }
             }
@@ -551,40 +561,40 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "Elevated HbA1c ($a1c% vs Ref $refLabel): indicates average blood sugar above normal range; review with doctor."
                             } else {
-                                "ارتفاع السكر التراكمي HbA1c ($a1c% أعلى من الطبيعي $refLabel): يستدعي مراجعة الطبيب لتنظيم السكر."
+                                "ارتفاع نسبة السكر التراكمي ($a1c%) عن المعدل الطبيعي، وتحتاج للمتابعة مع الطبيب"
                             },
                         )
                     } else {
-                        addNormal("hba1c", if (isEn) "HbA1c ($a1c%)" else "السكر التراكمي ($a1c% — طبيعي)")
+                        addNormal("hba1c", if (isEn) "HbA1c ($a1c%)" else "السكر التراكمي: ضمن المعدل الطبيعي ($a1c%)")
                     }
                 }
             }
 
             // Albumin / Protein
             val albMatch = Regex(
-                "(?:albumin|protein|الألبيومين|زلال|بروتين)\\s*[:=\\-]?\\s*(\\+{1,4}|trace|positive|present|nil|absent|negative|\\d+(?:\\.\\d+)?)",
+                "(?:albumin|protein|الألبيومين|زلال|بروتين)\\s*[:=\\-]?\\s*(\\+{1,4}|trace|positive|pos|present|nil|absent|negative|neg|none|normal|\\d+(?:\\.\\d+)?)",
                 RegexOption.IGNORE_CASE,
             ).find(line)
             if (albMatch != null) {
                 val rawVal = albMatch.groupValues[1].trim()
                 val eval = evaluateSemiQuantOrRange(rawVal, 0.0, 0.0)
                 if (eval > 0) {
-                    val linkAr = if (hasKidney || hasBpOrHeart) " (يستدعي انتباهاً خاصاً مع الضغط/الكلى)" else ""
+                    val linkAr = if (hasKidney || hasBpOrHeart) " (يستدعي انتباهاً خاصاً مع الضغط أو الكلى)" else ""
                     val linkEn = if (hasKidney || hasBpOrHeart) " (needs special attention with BP/kidney history)" else ""
                     addAbnormal(
                         "albumin",
                         if (isEn) {
                             "Albumin / Protein detected ($rawVal vs Ref Nil)$linkEn: physician evaluation advised."
                         } else {
-                            "وجود زلال / بروتين ($rawVal مقارنة بالطبيعي Nil)$linkAr: يحتاج مراجعة الطبيب."
+                            "وجود نسبة زلال أو بروتين في البول$linkAr، وتحتاج للمتابعة مع الطبيب"
                         },
                     )
                 } else if (eval == 0) {
-                    addNormal("albumin", if (isEn) "Albumin/Protein ($rawVal)" else "الزلال/البروتين ($rawVal — طبيعي)")
+                    addNormal("albumin", if (isEn) "Albumin/Protein ($rawVal)" else "الزلال والبروتين: سلبية / طبيعية ولا يوجد بها أي مشكلة")
                 }
             }
 
-            // Generic inline Ref-Range comparator for any other lab test line (e.g. "Creatinine 1.8 mg/dL (0.6 - 1.3)")
+            // Generic inline Ref-Range comparator (excludes dates, barcodes, ages, years, & admin metadata)
             val genericMatch = Regex(
                 "^([A-Za-z][A-Za-z0-9\\s/\\-.()]{1,34}?)\\s*[:=\\-]?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:[A-Za-z%/^0-9µμ]+)?\\s*(?:\\(|\\[|Ref\\.?\\s*Range\\s*[:=]?)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:-|to|–|~)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:\\)|\\])?",
                 RegexOption.IGNORE_CASE,
@@ -600,7 +610,11 @@ object MedicalSummaryAnalyzer {
                     normKey.contains("gluc") || normKey.contains("sugar") ||
                     normKey.contains("albumin") || normKey.contains("protein") ||
                     normKey.contains("crystal") || normKey.contains("oxalate") || normKey.contains("bacteria")
-                if (!alreadyHandled && testName.length >= 2 && value != null && low != null && high != null && high >= low && normKey.isNotBlank()) {
+                val isMetaName = isMetadataTestName(testName)
+                val looksLikeDateNumbers = value != null && low != null && high != null &&
+                    (value >= 1900.0 || low >= 1900.0 || high >= 1900.0 ||
+                        Regex("\\b\\d{1,4}[/\\-]\\d{1,2}[/\\-](?:19|20)\\d{2}\\b").containsMatchIn(line))
+                if (!alreadyHandled && !isMetaName && !looksLikeDateNumbers && testName.length >= 2 && value != null && low != null && high != null && high >= low && normKey.isNotBlank()) {
                     val refLabel = "${formatNum(low)} - ${formatNum(high)}"
                     if (value < low) {
                         addAbnormal(
@@ -608,7 +622,7 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "$testName is below normal ($value vs Ref $refLabel): mention to your doctor."
                             } else {
-                                "انخفاض $testName ($value أقل من المعدل الطبيعي $refLabel): يُنصح بعرضه على الطبيب."
+                                "انخفاض ${translateLabTermToAr(testName)} (${formatNum(value)}) أقل من المعدل الطبيعي، ويُنصح بعرضه على الطبيب"
                             },
                         )
                     } else if (value > high) {
@@ -617,11 +631,14 @@ object MedicalSummaryAnalyzer {
                             if (isEn) {
                                 "$testName is above normal ($value vs Ref $refLabel): requires physician review."
                             } else {
-                                "ارتفاع $testName ($value أعلى من المعدل الطبيعي $refLabel): يحتاج متابعة الطبيب."
+                                "ارتفاع ${translateLabTermToAr(testName)} (${formatNum(value)}) أعلى من المعدل الطبيعي، ويحتاج لمتابعة الطبيب"
                             },
                         )
                     } else {
-                        addNormal("gen_$normKey", "$testName ($value)")
+                        addNormal(
+                            "gen_$normKey",
+                            if (isEn) "$testName ($value)" else "${translateLabTermToAr(testName)}: ضمن المعدل الطبيعي (${formatNum(value)})",
+                        )
                     }
                 }
             }
@@ -737,23 +754,99 @@ object MedicalSummaryAnalyzer {
         }
     }
 
+    fun stripMetadataLines(raw: String): String {
+        if (raw.isBlank()) return ""
+        return raw.replace("\r\n", "\n")
+            .split('\n')
+            .filterNot { line ->
+                val cleaned = line.replace(Regex("\\s+"), " ").trim()
+                cleaned.isNotEmpty() && isMetadataHeaderLine(cleaned)
+            }
+            .joinToString("\n")
+    }
+
     private fun isMetadataHeaderLine(line: String): Boolean {
-        val lower = line.lowercase()
-        val headerPrefixes = listOf(
-            "patient name", "patient id", "sample date", "report date", "collection date",
-            "printed on", "referred by", "ref. by", "doctor name", "lab name", "laboratory",
-            "page ", "tel:", "phone:", "mobile:", "address:", "اسم المريض", "تاريخ التقرير",
-            "تاريخ العينة", "اسم المعمل", "الطبيب المعالج", "رقم الهاتف", "العنوان",
+        val lower = line.lowercase().trim()
+        val headerKeywords = listOf(
+            "patient name", "patient id", "patient no", "sample date", "report date", "reporting date",
+            "reported on", "reported at", "request date", "request id", "request no", "ordered date",
+            "collection date", "collection time", "printed on", "printed at", "print date",
+            "referred by", "ref. by", "ref by", "ref. no", "ref no", "doctor name", "physician",
+            "lab name", "laboratory", "branch", "accession", "specimen", "barcode", "serial",
+            "receipt", "invoice", "gender", "sex:", "age:", "age ", "dob", "date of birth",
+            "national id", "passport", "page ", "tel:", "phone:", "mobile:", "address:",
+            "اسم المريض", "تاريخ التقرير", "تاريخ الطلب", "تاريخ الطباعة", "تاريخ العينة",
+            "تاريخ التحليل", "اسم المعمل", "الطبيب المعالج", "رقم الهاتف", "العنوان",
+            "رقم العينة", "رقم الطلب", "كود المريض", "الباركود", "السن:", "العمر:", "النوع:",
         )
-        return headerPrefixes.any { lower.contains(it) }
+        if (headerKeywords.any { lower.contains(it) }) return true
+        // Ignore lines starting with common admin labels like "Date:", "ID:", "Request:", "Reporting:"
+        if (Regex("^(?:date|reporting|reported|request|ordered|received|registered|sample|specimen|accession|barcode|id|code|age|gender|sex|name|patient|doctor|dr\\.?|time|tel|mobile|fax)\\b\\s*[:\\-#/]", RegexOption.IGNORE_CASE).containsMatchIn(lower)) {
+            return true
+        }
+        // Ignore pure date / timestamp lines (e.g., 19/11/2026 or 2026-11-19 10:30 AM)
+        val withoutDates = lower
+            .replace(Regex("\\b\\d{1,4}[/\\-]\\d{1,2}[/\\-](?:19|20)\\d{2}\\b"), "")
+            .replace(Regex("\\b(?:19|20)\\d{2}[/\\-]\\d{1,2}[/\\-]\\d{1,2}\\b"), "")
+            .replace(Regex("\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\s*(?:am|pm)?\\b"), "")
+            .replace(Regex("[\\s\\-/:.,]+"), "")
+        if (withoutDates.isEmpty()) return true
+        return false
+    }
+
+    private fun isMetadataTestName(testName: String): Boolean {
+        val lower = testName.lowercase().trim()
+        return Regex(
+            "\\b(?:date|report|reporting|reported|request|requested|order|ordered|collect|collection|sample|specimen|accession|barcode|serial|receipt|invoice|age|gender|sex|dob|birth|patient|doctor|lab|page|tel|phone|mobile|address|time|year|month|day|code|id|no)\\b|\\b20(?:2[0-9]|3[0-9])\\b",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(lower)
+    }
+
+    private fun isQualitativeNegative(rawVal: String): Boolean {
+        return rawVal.trim().lowercase() in setOf("nil", "absent", "negative", "neg", "none", "normal")
+    }
+
+    private fun translateLabTermToAr(testName: String): String {
+        val lower = testName.lowercase().trim()
+        return when {
+            lower.contains("wbc") || lower.contains("leuk") || lower.contains("leuc") || lower.contains("white") -> "كرات الدم البيضاء"
+            lower.contains("plt") || lower.contains("platelet") -> "الصفائح الدموية"
+            lower.contains("creatin") -> "وظائف الكلى (الكرياتينين)"
+            lower.contains("urea") || lower.contains("bun") -> "وظائف الكلى (البولينا)"
+            lower.contains("uric") -> "حمض البوليك (النقرس)"
+            lower.contains("alt") || lower.contains("sgpt") || lower.contains("ast") || lower.contains("sgot") -> "إنزيمات الكبد"
+            lower.contains("bilirubin") -> "نسبة الصفراء"
+            lower.contains("cholest") -> "نسبة الكوليسترول"
+            lower.contains("triglycer") -> "الدهون الثلاثية"
+            lower.contains("tsh") || lower.contains("thyroid") -> "هرمون الغدة الدرقية"
+            lower.contains("vit") && lower.contains("d") -> "فيتامين د"
+            lower.contains("calcium") || lower == "ca" -> "نسبة الكالسيوم"
+            lower.contains("iron") || lower == "fe" -> "نسبة الحديد"
+            lower.contains("ferritin") -> "مخزون الحديد"
+            lower.contains("esr") -> "سرعة الترسيب"
+            lower.contains("crp") -> "معامل الالتهاب"
+            lower.contains("specific gravity") || lower == "sg" -> "كثافة البول"
+            lower == "ph" -> "درجة حموضة البول"
+            lower.contains("epithel") -> "الخلايا الطلائية في البول"
+            lower.contains("mucus") -> "المخاط في البول"
+            lower.contains("ketone") -> "الأسيتون في البول"
+            lower.contains("sodium") || lower == "na" -> "الصوديوم"
+            lower.contains("potassium") || lower == "k" -> "البوتاسيوم"
+            else -> "أحد مؤشرات التحليل"
+        }
     }
 
     private fun extractInlineNumericRange(line: String, startIndex: Int): Pair<Double, Double>? {
         val tail = if (startIndex in 0 until line.length) line.substring(startIndex) else line
+        // Avoid interpreting dates like 19/11/2026 or 11-2026 as reference ranges
+        val sanitizedTail = tail
+            .replace(Regex("\\b\\d{1,4}[/\\-]\\d{1,2}[/\\-](?:19|20)\\d{2}\\b"), " ")
+            .replace(Regex("\\b(?:19|20)\\d{2}[/\\-]\\d{1,2}[/\\-]\\d{1,2}\\b"), " ")
         val m = Regex("(?:\\(|\\[|ref\\.?\\s*range\\s*[:=]?)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:-|to|–|~)\\s*(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE)
-            .find(tail) ?: return null
+            .find(sanitizedTail) ?: return null
         val low = m.groupValues[1].toDoubleOrNull() ?: return null
         val high = m.groupValues[2].toDoubleOrNull() ?: return null
+        if (low >= 1900.0 || high >= 1900.0) return null
         return if (high >= low) (low to high) else null
     }
 
@@ -772,8 +865,8 @@ object MedicalSummaryAnalyzer {
     private fun evaluateSemiQuantOrRange(rawVal: String, lowNormal: Double, highNormal: Double): Int {
         val lower = rawVal.trim().lowercase()
         if (lower in setOf("nil", "absent", "negative", "neg", "none", "normal")) return 0
-        if (lower.startsWith("+") || lower in setOf("positive", "pos", "present", "many", "heavy", "moderate", "few", "trace")) {
-            return if (lower == "few" || lower == "trace") 1 else 2
+        if (lower.startsWith("+") || lower in setOf("positive", "pos", "present", "many", "heavy", "moderate", "few", "rare", "trace")) {
+            return if (lower == "few" || lower == "rare" || lower == "trace") 1 else 2
         }
         val rangeNums = Regex("\\d+(?:\\.\\d+)?").findAll(lower).mapNotNull { it.value.toDoubleOrNull() }.toList()
         if (rangeNums.isEmpty()) return -1

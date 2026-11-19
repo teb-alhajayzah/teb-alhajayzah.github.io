@@ -37,13 +37,13 @@ class GeminiMedicalAnalyzer {
                 responseSchema = Schema.obj(
                     mapOf(
                         "generalStatusAr" to Schema.string(
-                            "Part 1 in Arabic (الحالة العامة والقيم الطبيعية): State clearly in simple patient-friendly Arabic whether most lab/clinical indicators are within normal range and summarize overall stability considering age and chronic conditions.",
+                            "Part 1 in simple patient-friendly Arabic ONLY (الحالة العامة والقيم الطبيعية): Write 100% pure Arabic with ZERO English words or medical abbreviations (never write Absent, Nil, Ref, Pus cells, RBCs, Oxalate, Hemoglobin, Hb, etc.). Describe normal/negative values calmly as 'سلبية / طبيعية ولا يوجد بها أي مشكلة' and ignore all dates, reporting/request IDs, ages, genders, and barcode numbers.",
                         ),
                         "followUpPointsAr" to Schema.string(
-                            "Part 2 in Arabic (نقاط تحتاج لمتابعة أو انتباه الطبيب): Numbered list ONLY formatted as 1. ...\\n2. ...\\n3. ... highlighting abnormal/elevated/low lab values, pus cells, RBCs, crystals/salts, or chronic-condition/allergy alerts in simple Arabic WITHOUT giving a definitive diagnosis or prescribing any medication.",
+                            "Part 2 in simple patient-friendly Arabic ONLY (نقاط تحتاج لمتابعة أو انتباه الطبيب): Numbered list formatted as 1. ...\\n2. ...\\n3. ... with ZERO English words, units, or abbreviations. Use reassuring simple Arabic (e.g. 'وجود نسبة بسيطة من خلايا الصديد في البول، وتحتاج للمتابعة مع الطبيب لوصف العلاج المناسب', 'وجود نسبة أملاح (أوكسالات) في البول، ويُنصح بشرب كميات كافية من الماء ومراجعة الطبيب', 'نسبة الهيموجلوبين (الأنيميا) أقل من المعدل الطبيعي وتحتاج لمتابعة الطبيب'). Ignore all dates/IDs/barcodes. Never diagnose definitively or prescribe drugs.",
                         ),
                         "generalStatusEn" to Schema.string(
-                            "Part 1 in English (Overall Status & Normal Values): State clearly in simple English whether most indicators are within normal limits and summarize overall stability.",
+                            "Part 1 in simple patient-friendly English (Overall Status & Normal Values): State clearly whether most indicators are within normal limits and ignore all dates, request/reporting IDs, barcodes, age/gender lines.",
                         ),
                         "followUpPointsEn" to Schema.string(
                             "Part 2 in English (Points Requiring Physician Follow-Up): Numbered list ONLY formatted as 1. ...\\n2. ...\\n3. ... highlighting abnormal values, pus cells, RBCs, crystals, or chronic-condition/allergy alerts WITHOUT definitive diagnosis or prescribing medications.",
@@ -180,12 +180,14 @@ class GeminiMedicalAnalyzer {
                     "لا توجد زيارات أو تحاليل مسجلة حتى الآن."
                 } else {
                     orderedRecords.take(8).joinToString("\n\n") { rec ->
-                        val extracted = rec.optString("extractedText").trim().take(4000)
+                        val extracted = com.example.util.MedicalSummaryAnalyzer.stripMetadataLines(
+                            rec.optString("extractedText").trim().take(4000),
+                        )
                         val meds = rec.optString("medications").trim().replace("\n", "; ")
-                        val notes = rec.optString("notes").trim()
+                        val notes = com.example.util.MedicalSummaryAnalyzer.stripMetadataLines(rec.optString("notes").trim())
                         val attName = rec.optString("attachmentName").trim()
                         buildString {
-                            append("- [${rec.optString("recordType")}] ${rec.optString("visitDateLabel")} | ${rec.optString("doctorName")} | العنوان/التشخيص: ${rec.optString("diagnosis")}")
+                            append("- [${rec.optString("recordType")}] ${rec.optString("doctorName")} | العنوان/التشخيص: ${rec.optString("diagnosis")}")
                             if (meds.isNotBlank()) append(" | الأدوية: $meds")
                             if (notes.isNotBlank()) append(" | ملاحظات: $notes")
                             if (attName.isNotBlank()) append(" | مرفق: $attName")
@@ -259,8 +261,8 @@ class GeminiMedicalAnalyzer {
             .trim()
         val obj = JSONObject(cleaned)
 
-        val generalAr = obj.optString("generalStatusAr").trim()
-        val rawFollowUpAr = obj.optString("followUpPointsAr").trim()
+        val generalAr = sanitizeArabicPlainLanguage(obj.optString("generalStatusAr").trim())
+        val rawFollowUpAr = sanitizeArabicPlainLanguage(obj.optString("followUpPointsAr").trim())
         val generalEn = obj.optString("generalStatusEn").trim()
         val rawFollowUpEn = obj.optString("followUpPointsEn").trim()
 
@@ -348,6 +350,23 @@ class GeminiMedicalAnalyzer {
         )
     }
 
+    private fun sanitizeArabicPlainLanguage(text: String): String {
+        if (text.isBlank()) return ""
+        return text
+            .replace(Regex("\\b(?:Ca\\.?\\s*Oxalate|Calcium\\s*Oxalate)\\b", RegexOption.IGNORE_CASE), "أملاح (أوكسالات)")
+            .replace(Regex("\\bOxalate\\b", RegexOption.IGNORE_CASE), "أوكسالات")
+            .replace(Regex("\\bPus\\s*cells?\\b", RegexOption.IGNORE_CASE), "خلايا الصديد")
+            .replace(Regex("\\bR\\.?B\\.?C\\.?s?\\b", RegexOption.IGNORE_CASE), "كرات الدم الحمراء")
+            .replace(Regex("\\b(?:Hemoglobin|Haemoglobin|Hb|Hgb)\\b", RegexOption.IGNORE_CASE), "الهيموجلوبين")
+            .replace(Regex("\\bHbA1c\\b", RegexOption.IGNORE_CASE), "السكر التراكمي")
+            .replace(Regex("\\b(?:Absent|Nil|Negative)\\b", RegexOption.IGNORE_CASE), "سلبية / طبيعية")
+            .replace(Regex("\\bRef\\.?\\s*(?:Range)?\\b", RegexOption.IGNORE_CASE), "المعدل الطبيعي")
+            .replace(Regex("/HPF\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\b(?:mg/dL|g/dL|mmol/L|U/L)\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim()
+    }
+
     private fun buildClinicalInstructionHeader(
         vitals: String,
         chronicLabels: String,
@@ -355,21 +374,28 @@ class GeminiMedicalAnalyzer {
         historyBlock: String,
     ): String {
         return """
-            أنت مساعد طبي ذكي لمنصة "طب الحجايزة" متخصص في تفسير تقارير التحاليل والأشعة والملف الطبي للمريض والطبيب.
-            المطلوب قراءة البيانات الحيوية للمريض (السن والأمراض المزمنة وحساسية الأدوية) وجميع القيم الفعلية الموجودة في النص المستخرج أو ملفات الـ PDF/الصور المرفقة وتلخيصها للمريض بلغة عربية بسيطة ومنظمة (وبالإنجليزية في الحقول الإنجليزية).
+            أنت مساعد طبي ذكي لمنصة "طب الحجايزة" متخصص في تفسير تقارير التحاليل والأشعة للمريض بلغة عربية بسيطة ومطمئنة جداً.
+            المطلوب قراءة البيانات الحيوية للمريض (السن والأمراض المزمنة وحساسية الأدوية) وجميع القيم السريرية الفعلية الموجودة في النص المستخرج أو ملفات الـ PDF/الصور المرفقة وتلخيصها للمريض في نقطتين رئيسيتين: الحالة العامة، ونقاط المتابعة المرقمة (1، 2، 3).
 
-            قواعد صارمة يجب الالتزام بها:
-            1. تجاهل تماماً بيانات الترويسة مثل اسم المعمل أو تاريخ الطباعة أو رقم العينة أو العنوان ولا تذكرها كـ "نتائج تحليل".
-            2. قسّم الملخص دائماً إلى جزأين واضحين داخل JSON:
-               - الجزء الأول (generalStatusAr / generalStatusEn): الحالة العامة والقيم الطبيعية — اذكر بوضوح ما إذا كانت معظم مؤشرات التحليل ضمن المعدل الطبيعي وما هي المؤشرات السليمة.
-               - الجزء الثاني (followUpPointsAr / followUpPointsEn): نقاط تحتاج لمتابعة أو انتباه الطبيب — استخرج أي قيمة غير طبيعية أو مرتفعة أو منخفضة أو وجود أملاح (مثل Oxalate/Urate/Crystals) أو خلايا صديدية (Pus cells) أو كرات دم حمراء (RBCs) أو زلال/سكر ومقارنتها بالمعدل الطبيعي في التقرير، واكتبها في نقاط مرقمة إلزامياً بصيغة:
+            قواعد صارمة لا تقبل الاستثناء:
+            1. تجاهل تماماً أي أرقام أو سطور مرتبطة بالتواريخ أو الأكواد الإدارية أو الترويسة مثل: (Date, Reporting Date, Request, Age, Gender, Sex, ID, Barcode, Specimen, Accession, 2026) واسم المعمل أو رقم الهاتف أو العنوان، وممنوع نهائياً اعتبار أي تاريخ أو رقم باركود نتيجة طبية مرتفعة أو منخفضة.
+            2. اللغة العربية المبسطة والمطمئنة فقط في الحقول العربية (generalStatusAr و followUpPointsAr):
+               - ممنوع منعاً باتاً كتابة أي كلمات أو مصطلحات إنجليزية أو اختصارات لاتينية للمريض في الملخص العربي (ممنوع كتابة: Absent أو Nil أو Ref أو Pus cells أو RBCs أو Oxalate أو Hemoglobin أو Hb أو HbA1c أو mg/dL).
+               - التزم بهذا الأسلوب المبسط والمطمئن:
+                 * إذا كانت خلايا الصديد مرتفعة: اكتب "وجود نسبة بسيطة من خلايا الصديد في البول، وتحتاج للمتابعة مع الطبيب لوصف العلاج المناسب".
+                 * إذا وجدت أملاح أوكسالات: اكتب "وجود نسبة أملاح (أوكسالات) في البول، ويُنصح بشرب كميات كافية من الماء ومراجعة الطبيب".
+                 * إذا كانت النتيجة سلبية أو غائبة: اكتب "سلبية / طبيعية ولا يوجد بها أي مشكلة".
+                 * إذا كان الهيموجلوبين منخفضاً: اكتب "نسبة الهيموجلوبين (الأنيميا) أقل من المعدل الطبيعي وتحتاج لمتابعة الطبيب".
+            3. قسّم الملخص دائماً إلى جزأين واضحين داخل JSON:
+               - الجزء الأول (generalStatusAr / generalStatusEn): الحالة العامة والقيم الطبيعية — اذكر بوضوح القيم الطبيعية والسلبية بأسلوب مطمئن.
+               - الجزء الثاني (followUpPointsAr / followUpPointsEn): نقاط تحتاج لمتابعة أو انتباه الطبيب — في نقاط مرقمة إلزامياً:
                  1. ...
                  2. ...
                  3. ...
                  مع ربطها بالأمراض المزمنة وحساسية الأدوية المسجلة.
-            3. ممنوع منعاً باتاً إعطاء تشخيص مرضي قاطع أو وصف أي دواء أو جرعة علاجية للمريض؛ اكتفِ بالشرح التبسيطي والتوجيه لمراجعة الطبيب المعالج.
-            4. إذا كانت جميع القيم طبيعية ولا توجد أمراض مزمنة حرجة، اذكر ذلك بوضوح في الجزء الأول واكتب في الجزء الثاني نقطة مرقمة: "1. جميع المؤشرات المقروءة ضمن النطاق الطبيعي المعتاد، ويُنصح بعرض أصل التقرير على الطبيب في المتابعة الدورية."
-            5. لا تخترع أي رقم غير موجود في النص أو المرفق.
+            4. ممنوع إعطاء تشخيص مرضي قاطع أو وصف أي دواء أو جرعة علاجية؛ اكتفِ بالشرح التبسيطي المريح والتوجيه لمراجعة الطبيب المختص.
+            5. إذا كانت جميع القيم طبيعية ولا توجد أمراض مزمنة حرجة، اذكر ذلك بوضوح في الجزء الأول واكتب في الجزء الثاني: "1. جميع المؤشرات المقروءة ضمن النطاق الطبيعي المعتاد، ويُنصح بعرض أصل التقرير على الطبيب في المتابعة الدورية."
+            6. لا تخترع أي رقم غير موجود في النص أو المرفق.
 
             البيانات الحيوية للمريض: $vitals
             الأمراض المزمنة: ${chronicLabels.ifBlank { "لا توجد أمراض مزمنة مسجلة" }}

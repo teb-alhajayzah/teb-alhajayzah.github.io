@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.LocalHospital
@@ -45,7 +46,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -67,6 +70,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,6 +90,7 @@ import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.FamilyMemberEntity
+import com.example.data.local.MedicalLabEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.PatientTab
 import com.example.ui.TebUiState
@@ -138,6 +143,48 @@ fun PatientHomeScreen(
     }
 
     val latestDelay = state.notifications.firstOrNull()
+    var homeSearchQuery by rememberSaveable { mutableStateOf("") }
+    val normalizedHomeQuery = homeSearchQuery.trim().lowercase()
+
+    val quickMatchedSpecialties = remember(normalizedHomeQuery) {
+        if (normalizedHomeQuery.isBlank()) {
+            emptyList()
+        } else {
+            SpecialtyCatalog.all.filter { spec ->
+                spec.nameAr.lowercase().contains(normalizedHomeQuery) ||
+                    spec.nameEn.lowercase().contains(normalizedHomeQuery)
+            }
+        }
+    }
+    val quickMatchedDoctors = remember(normalizedHomeQuery, state.doctors) {
+        if (normalizedHomeQuery.isBlank()) {
+            emptyList()
+        } else {
+            state.doctors.filter { doc ->
+                val allSpecs = (
+                    SpecialtyCatalog.formatDoctorSpecialties(doc.specialty, doc.additionalSpecialties, isEn = false) +
+                        " " +
+                        SpecialtyCatalog.formatDoctorSpecialties(doc.specialty, doc.additionalSpecialties, isEn = true)
+                    ).lowercase()
+                doc.doctorName.lowercase().contains(normalizedHomeQuery) ||
+                    doc.doctorNameEn.lowercase().contains(normalizedHomeQuery) ||
+                    doc.clinicName.lowercase().contains(normalizedHomeQuery) ||
+                    doc.clinicNameEn.lowercase().contains(normalizedHomeQuery) ||
+                    allSpecs.contains(normalizedHomeQuery)
+            }
+        }
+    }
+    val quickMatchedLabs = remember(normalizedHomeQuery, state.labs) {
+        if (normalizedHomeQuery.isBlank()) {
+            emptyList()
+        } else {
+            state.labs.filter { lab ->
+                lab.labName.lowercase().contains(normalizedHomeQuery) ||
+                    lab.locationLabel.lowercase().contains(normalizedHomeQuery) ||
+                    lab.phone.lowercase().contains(normalizedHomeQuery)
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -214,6 +261,139 @@ fun PatientHomeScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            // شريط البحث السريع بالصفحة الرئيسية (الأطباء والتخصصات ومعامل التحاليل)
+            item {
+                OutlinedTextField(
+                    value = homeSearchQuery,
+                    onValueChange = { homeSearchQuery = it },
+                    placeholder = {
+                        Text(
+                            text = bi(
+                                isEn,
+                                "ابحث باسم الطبيب، التخصص، أو معمل التحاليل...",
+                                "Search by doctor name, specialty, or medical lab...",
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Search, contentDescription = null, tint = TealPrimary)
+                    },
+                    trailingIcon = {
+                        if (homeSearchQuery.isNotEmpty()) {
+                            IconButton(onClick = { homeSearchQuery = "" }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = bi(isEn, "مسح البحث", "Clear search"),
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_quick_search_input"),
+                )
+            }
+
+            if (normalizedHomeQuery.isNotBlank()) {
+                if (quickMatchedSpecialties.isEmpty() && quickMatchedDoctors.isEmpty() && quickMatchedLabs.isEmpty()) {
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = bi(
+                                    isEn,
+                                    "لا توجد نتائج مطابقة للبحث \"$homeSearchQuery\"",
+                                    "No matching doctors, specialties, or labs for \"$homeSearchQuery\"",
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                            )
+                        }
+                    }
+                } else {
+                    if (quickMatchedSpecialties.isNotEmpty()) {
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = bi(isEn, "تخصصات مطابقة (${quickMatchedSpecialties.size})", "Matching Specialties (${quickMatchedSpecialties.size})"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TealPrimary,
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    items(quickMatchedSpecialties, key = { it.nameAr }) { spec ->
+                                        FilterChip(
+                                            selected = false,
+                                            onClick = {
+                                                onSelectSpecialty(spec.nameAr)
+                                                onSelectTab(PatientTab.SPECIALTIES)
+                                            },
+                                            label = { Text(if (isEn) spec.nameEn else spec.nameAr) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (quickMatchedDoctors.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = bi(isEn, "الأطباء والعيادات (${quickMatchedDoctors.size})", "Doctors & Clinics (${quickMatchedDoctors.size})"),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TealPrimary,
+                            )
+                        }
+                        items(quickMatchedDoctors, key = { "qs_doc_${it.id}" }) { doctor ->
+                            val doctorSlots = state.slotsForDoctor(doctor.id)
+                            DoctorDirectoryCard(
+                                doctor = doctor,
+                                availableCount = doctorSlots.count { it.status == SlotStatus.AVAILABLE },
+                                bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
+                                isEn = isEn,
+                                currencyLabel = currencyLabel,
+                                onBookClick = { onOpenDoctorBooking(doctor.id) },
+                            )
+                        }
+                    }
+                    if (quickMatchedLabs.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = bi(isEn, "معامل التحاليل (${quickMatchedLabs.size})", "Medical Labs (${quickMatchedLabs.size})"),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFF4F46E5),
+                            )
+                        }
+                        items(quickMatchedLabs, key = { "qs_lab_${it.id}" }) { lab ->
+                            HomeLabSearchCard(
+                                lab = lab,
+                                isEn = isEn,
+                                onCallLab = {
+                                    val digits = lab.phone.filter { it.isDigit() }
+                                    if (digits.isNotBlank()) {
+                                        try {
+                                            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$digits")))
+                                        } catch (_: Exception) {
+                                            onShowMessage(lab.phone)
+                                        }
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -568,7 +748,100 @@ fun PatientHomeScreen(
                         }
                     },
                     onCheckAppUpdate = onCheckAppUpdate,
+                    onSharePlatform = {
+                        val shareText = bi(
+                            isEn,
+                            "احجز موعدك الطبي وتابع ملفك الصحي وملفات أسرتك بسهولة عبر منصة ${state.brandConfig.platformNameAr}:\nhttps://teb-alhajayzah.github.io",
+                            "Book clinic appointments and manage your family medical records easily on ${state.brandConfig.platformNameEn}:\nhttps://teb-alhajayzah.github.io",
+                        )
+                        try {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, platformTitle)
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            }
+                            context.startActivity(
+                                Intent.createChooser(
+                                    sendIntent,
+                                    bi(isEn, "مشاركة منصة طب الحجايزة", "Share Teb Al-Hajayzah"),
+                                ),
+                            )
+                        } catch (_: Exception) {
+                            try {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://wa.me/?text=${Uri.encode(shareText)}"),
+                                    ),
+                                )
+                            } catch (_: Exception) {
+                                onShowMessage(shareText)
+                            }
+                        }
+                    },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeLabSearchCard(
+    lab: MedicalLabEntity,
+    isEn: Boolean,
+    onCallLab: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.2.dp, Color(0xFF4F46E5).copy(alpha = 0.35f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("home_search_lab_${lab.id}"),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFE0E7FF)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Science, contentDescription = null, tint = Color(0xFF4F46E5))
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = lab.labName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (lab.locationLabel.isNotBlank()) {
+                    Text(
+                        text = lab.locationLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = bi(isEn, "معمل تحاليل معتمد", "Certified Medical Lab"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF4F46E5),
+                )
+            }
+            if (lab.phone.isNotBlank()) {
+                OutlinedButton(
+                    onClick = onCallLab,
+                    modifier = Modifier.height(42.dp),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Filled.Phone, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(bi(isEn, "اتصال", "Call"))
+                }
             }
         }
     }
@@ -583,6 +856,7 @@ private fun FooterContactAndRightsSection(
     onWhatsAppClick: () -> Unit,
     onCallClick: () -> Unit,
     onCheckAppUpdate: () -> Unit,
+    onSharePlatform: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -640,6 +914,27 @@ private fun FooterContactAndRightsSection(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(supportPhone)
                     }
+                }
+                OutlinedButton(
+                    onClick = onSharePlatform,
+                    border = BorderStroke(1.dp, TealPrimary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("footer_share_platform_button"),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = bi(
+                            isEn,
+                            "📤 مشاركة منصة طب الحجايزة مع الأهل",
+                            "📤 Share Teb Al-Hajayzah Platform with Family",
+                        ),
+                        color = TealPrimary,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }

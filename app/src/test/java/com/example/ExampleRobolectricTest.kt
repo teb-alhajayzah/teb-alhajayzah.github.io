@@ -737,26 +737,40 @@ class ExampleRobolectricTest {
         assertTrue(afterFallback.aiSummaryEn.contains("Diabetes"))
         assertTrue(afterFallback.aiSummaryEn.contains("urine_test.pdf"))
 
-        // 3c) Smart Local Clinical Parser ignores lab metadata headers (date/patient/lab name)
-        // and accurately compares Pus cells, RBCs, Crystals/Oxalate, Glucose & Hemoglobin against Ref Ranges.
+        // 3c) Smart Local Clinical Parser ignores dates/barcodes/reporting/request/age/gender metadata
+        // and formats Arabic patient explanations in simple reassuring Arabic WITHOUT English jargon.
         val sampleLabText = """
             Lab Name: Al-Shifa Medical Lab
             Patient Name: سعيد إبراهيم محمد
-            Report Date: 19/11/2026
-            Hemoglobin: 13.8 g/dL (12.0 - 16.0)
+            Reporting Date: 19/11/2026
+            Request Date: 18-11-2026
+            Request ID: 2026 10-20
+            Age: 35
+            Gender: Male
+            Barcode: 88772026
+            Hemoglobin: 9.8 g/dL (12.0 - 16.0)
             Glucose: 215 mg/dL (70 - 140)
             Pus cells: 15-20 /HPF (0 - 5)
             RBCs: 8-10 /HPF (0 - 3)
             Calcium Oxalate Crystals: ++ (Nil)
+            Bacteria: Absent
+            Albumin: Nil
         """.trimIndent()
         val parsedLocalAr = MedicalSummaryAnalyzer.parseClinicalLabText(listOf(sampleLabText), updatedMem, isEn = false)
-        assertTrue(parsedLocalAr.normalCount >= 1)
-        assertTrue(parsedLocalAr.normalHighlights.any { it.contains("13.8") })
-        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("Pus Cells") || it.contains("الصديد") })
-        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("RBCs") || it.contains("الحمراء") })
-        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("أوكسالات") || it.contains("أملاح") })
+        assertTrue(parsedLocalAr.normalCount >= 2)
+        assertTrue(parsedLocalAr.normalHighlights.any { it.contains("سلبية / طبيعية ولا يوجد بها أي مشكلة") })
+        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("وجود نسبة بسيطة من خلايا الصديد في البول، وتحتاج للمتابعة مع الطبيب لوصف العلاج المناسب") })
+        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("وجود نسبة أملاح (أوكسالات) في البول، ويُنصح بشرب كميات كافية من الماء ومراجعة الطبيب") })
+        assertTrue(parsedLocalAr.followUpPoints.any { it.contains("نسبة الهيموجلوبين (الأنيميا) أقل من المعدل الطبيعي وتحتاج لمتابعة الطبيب") })
         assertTrue(parsedLocalAr.followUpPoints.any { it.contains("215") })
-        assertFalse(parsedLocalAr.followUpPoints.any { it.contains("Al-Shifa") || it.contains("19/11/2026") })
+        val allArabicOutputs = (parsedLocalAr.normalHighlights + parsedLocalAr.followUpPoints).joinToString(" | ")
+        val forbiddenEnglishOrMetaTokens = listOf(
+            "Al-Shifa", "Reporting", "Request", "19/11/2026", "2026", "Gender", "Age", "Barcode",
+            "Absent", "Pus cells", "RBCs", "Oxalate", "Hemoglobin", "Nil", "Ref",
+        )
+        forbiddenEnglishOrMetaTokens.forEach { forbidden ->
+            assertFalse("Arabic output must not contain '$forbidden': $allArabicOutputs", allArabicOutputs.contains(forbidden, ignoreCase = true))
+        }
 
         // 4) Delete patient PDF upload -> deletes record and physical file
         val delPdfRes = repository.deleteMedicalRecordOrAttachment(uploadRec.id)
