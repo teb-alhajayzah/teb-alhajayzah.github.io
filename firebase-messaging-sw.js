@@ -7,7 +7,15 @@ importScripts('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-com
 
 const TEB_FCM_DB = 'teb_alhajayzah_fcm_db';
 const TEB_FCM_STORE = 'config_store';
-const TEB_FCM_KEY = 'teb_alhajayzah/config/firebase';
+const TEB_FCM_KEY = 'teb_alhajayzah/settings/firebase';
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs',
+  authDomain: 'gen-lang-client-0015800098.firebaseapp.com',
+  projectId: 'gen-lang-client-0015800098',
+  storageBucket: 'gen-lang-client-0015800098.firebasestorage.app',
+  messagingSenderId: '588431549120',
+  appId: '1:588431549120:web:c10278b3df39d11a668325'
+};
 let initializedMessaging = null;
 let cachedFirebaseConfig = null;
 
@@ -73,7 +81,8 @@ async function loadDynamicConfig() {
       return cfg;
     }
   } catch (e) { /* ignore */ }
-  return null;
+  cachedFirebaseConfig = DEFAULT_FIREBASE_CONFIG;
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 function initFirebaseMessagingWithConfig(cfg) {

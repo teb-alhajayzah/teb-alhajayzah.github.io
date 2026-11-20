@@ -900,17 +900,44 @@ class ExampleRobolectricTest {
     fun cloudNamespaceSettingsAndAppointmentTwoHourCancelRescheduleRulesWork() = runBlocking {
         repository.ensureSeeded()
 
-        // 1. Verify namespace isolation paths and locked v1.0.0 metadata
+        // 1. Verify namespace isolation paths, embedded cloud defaults, and locked v1.0.0 metadata
         assertEquals("1.0.0", BuildConfig.VERSION_NAME)
         assertEquals(1, BuildConfig.VERSION_CODE)
         assertEquals("teb_alhajayzah", com.example.config.CloudNamespacePaths.ROOT)
-        assertEquals("teb_alhajayzah/users", com.example.config.CloudNamespacePaths.USERS)
-        assertEquals("teb_alhajayzah/clinics", com.example.config.CloudNamespacePaths.CLINICS)
-        assertEquals("teb_alhajayzah/appointments", com.example.config.CloudNamespacePaths.APPOINTMENTS)
-        assertEquals("teb_alhajayzah/messages", com.example.config.CloudNamespacePaths.MESSAGES)
-        assertEquals("teb_alhajayzah/notifications", com.example.config.CloudNamespacePaths.NOTIFICATIONS)
+        assertEquals("teb_alhajayzah/settings", com.example.config.CloudNamespacePaths.SETTINGS)
+        assertEquals("teb_alhajayzah/data", com.example.config.CloudNamespacePaths.DATA_ROOT)
+        assertEquals("teb_alhajayzah/data/accounts", com.example.config.CloudNamespacePaths.USERS)
+        assertEquals("teb_alhajayzah/data/doctors", com.example.config.CloudNamespacePaths.CLINICS)
+        assertEquals("teb_alhajayzah/data/slots", com.example.config.CloudNamespacePaths.APPOINTMENTS)
+        assertEquals("teb_alhajayzah/data/messages", com.example.config.CloudNamespacePaths.MESSAGES)
+        assertEquals("teb_alhajayzah/data/notifications", com.example.config.CloudNamespacePaths.NOTIFICATIONS)
 
-        // 2. Verify Firebase Web Config & Cloudflare Worker URL persist & reset cleanly
+        val initialBrand = repository.brandConfigFlow.first()
+        assertTrue(initialBrand.isCloudConfigured)
+        assertEquals("https://masarik-otp.masarik-tourism.workers.dev", initialBrand.workerUrl)
+        assertEquals("AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs", initialBrand.firebaseApiKey)
+        assertEquals("gen-lang-client-0015800098.firebaseapp.com", initialBrand.firebaseAuthDomain)
+        assertEquals("gen-lang-client-0015800098", initialBrand.firebaseProjectId)
+        assertEquals("gen-lang-client-0015800098.firebasestorage.app", initialBrand.firebaseStorageBucket)
+        assertEquals("588431549120", initialBrand.firebaseMessagingSenderId)
+        assertEquals("1:588431549120:web:c10278b3df39d11a668325", initialBrand.firebaseAppId)
+        assertEquals(
+            "BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw",
+            initialBrand.firebaseVapidKey,
+        )
+
+        // Verify Firestore REST serialization round-trip preserves settings & array fields cleanly
+        val settingsDoc = org.json.JSONObject().put(
+            "fields",
+            com.example.data.remote.FirestoreCloudSyncService.toFirestoreFields(
+                com.example.data.remote.FirestoreCloudSyncService.settingsToJson(initialBrand)
+            ),
+        )
+        val decodedSettings = com.example.data.remote.FirestoreCloudSyncService.fromFirestoreDocument(settingsDoc)
+        assertEquals("gen-lang-client-0015800098", decodedSettings.getString("firebaseProjectId"))
+        assertEquals("https://masarik-otp.masarik-tourism.workers.dev", decodedSettings.getString("workerUrl"))
+
+        // 2. Verify Firebase Web Config & Cloudflare Worker URL override & reset back to embedded defaults
         repository.updateFullPlatformConfig(
             platformNameAr = "طب الحجايزة",
             villageNameAr = "قرية الحجايزة والقرى المجاورة",
@@ -938,8 +965,11 @@ class ExampleRobolectricTest {
 
         repository.resetFullPlatformConfig()
         val resetBrand = repository.brandConfigFlow.first()
-        assertFalse(resetBrand.isCloudConfigured)
-        assertEquals("", resetBrand.workerUrl)
+        assertTrue(resetBrand.isCloudConfigured)
+        assertEquals(AppConfig.defaultBrand.workerUrl, resetBrand.workerUrl)
+        assertEquals(AppConfig.defaultBrand.firebaseApiKey, resetBrand.firebaseApiKey)
+        assertEquals(AppConfig.defaultBrand.firebaseProjectId, resetBrand.firebaseProjectId)
+        assertEquals(AppConfig.defaultBrand.firebaseVapidKey, resetBrand.firebaseVapidKey)
 
         // 3. Patient 2-hour rule: deny within 2 hours, allow when >= 120 mins remain + notify clinic
         val doc = repository.doctorsFlow.first().first()

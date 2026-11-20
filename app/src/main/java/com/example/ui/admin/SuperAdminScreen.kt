@@ -731,15 +731,15 @@ fun SuperAdminDashboardScreen(
                                         Text(
                                             text = bi(
                                                 isEn,
-                                                "🔒 مسارات عزل البيانات المخصصة (Namespace Isolation):",
-                                                "🔒 مسارات عزل البيانات السحابية المخصصة لطب الحجايزة:",
+                                                "🟢 Auto-Synced Cloud Paths (teb_alhajayzah/settings & teb_alhajayzah/data/*):",
+                                                "🟢 متصل تلقائياً بالسحابة تحت مسار العزل (teb_alhajayzah/settings):",
                                             ),
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = SlotAvailableText,
                                         )
                                         Text(
-                                            text = "teb_alhajayzah/users • teb_alhajayzah/clinics • teb_alhajayzah/appointments • teb_alhajayzah/messages • teb_alhajayzah/notifications",
+                                            text = "teb_alhajayzah/settings • teb_alhajayzah/data/doctors • accounts • slots • records • messages • notifications",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = SlotAvailableText,
                                         )

@@ -16,6 +16,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js"></script>
   <style>
     :root {
       --teal: #0D7377;
@@ -1539,25 +1542,31 @@
         adminOwnerName: 'المهندس محمد يوسف',
         adminPin: '202600',
         globalChatEnabled: true,
-        firebaseApiKey: '',
-        firebaseAuthDomain: '',
-        firebaseProjectId: '',
-        firebaseStorageBucket: '',
-        firebaseMessagingSenderId: '',
-        firebaseAppId: '',
-        firebaseVapidKey: '',
-        workerUrl: ''
+        firebaseApiKey: 'AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs',
+        firebaseAuthDomain: 'gen-lang-client-0015800098.firebaseapp.com',
+        firebaseProjectId: 'gen-lang-client-0015800098',
+        firebaseStorageBucket: 'gen-lang-client-0015800098.firebasestorage.app',
+        firebaseMessagingSenderId: '588431549120',
+        firebaseAppId: '1:588431549120:web:c10278b3df39d11a668325',
+        firebaseVapidKey: 'BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw',
+        workerUrl: 'https://masarik-otp.masarik-tourism.workers.dev'
       };
 
       const CLOUD_NAMESPACE = 'teb_alhajayzah';
       const CLOUD_PATHS = {
-        users: CLOUD_NAMESPACE + '/users',
-        clinics: CLOUD_NAMESPACE + '/clinics',
-        appointments: CLOUD_NAMESPACE + '/appointments',
-        messages: CLOUD_NAMESPACE + '/messages',
-        notifications: CLOUD_NAMESPACE + '/notifications',
-        records: CLOUD_NAMESPACE + '/records',
-        config: CLOUD_NAMESPACE + '/config'
+        settings: CLOUD_NAMESPACE + '/settings',
+        dataRoot: CLOUD_NAMESPACE + '/data',
+        users: CLOUD_NAMESPACE + '/data/accounts',
+        familyMembers: CLOUD_NAMESPACE + '/data/family_members',
+        clinics: CLOUD_NAMESPACE + '/data/doctors',
+        labs: CLOUD_NAMESPACE + '/data/labs',
+        appointments: CLOUD_NAMESPACE + '/data/slots',
+        records: CLOUD_NAMESPACE + '/data/records',
+        notifications: CLOUD_NAMESPACE + '/data/notifications',
+        messages: CLOUD_NAMESPACE + '/data/messages',
+        blockedPhones: CLOUD_NAMESPACE + '/data/blocked_phones',
+        activationCodes: CLOUD_NAMESPACE + '/data/activation_codes',
+        config: CLOUD_NAMESPACE + '/settings'
       };
       const PATIENT_MODIFY_CUTOFF_MINUTES = 120;
 
@@ -2353,6 +2362,15 @@
               const parsed = JSON.parse(raw);
               if (parsed && Array.isArray(parsed.doctors) && Array.isArray(parsed.slots)) {
                 parsed.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
+                [
+                  'firebaseApiKey', 'firebaseAuthDomain', 'firebaseProjectId',
+                  'firebaseStorageBucket', 'firebaseMessagingSenderId',
+                  'firebaseAppId', 'firebaseVapidKey', 'workerUrl'
+                ].forEach((ck) => {
+                  if (!String(parsed.config[ck] || '').trim()) {
+                    parsed.config[ck] = DEFAULT_CONFIG[ck];
+                  }
+                });
                 parsed.config.appVersionLabel = 'v1.0.0';
                 parsed.config.globalChatEnabled = parsed.config.globalChatEnabled !== false;
                 delete parsed.config.smsGateServerUrl;
@@ -2402,7 +2420,7 @@
                 if (!parsed.doctorFavorites || typeof parsed.doctorFavorites !== 'object') parsed.doctorFavorites = {};
                 parsed.adminSecurity = Object.assign({ failedAttempts: 0, lockoutUntilMillis: 0 }, parsed.adminSecurity || {});
                 if (seedBaselineRealDoctorsOnce(parsed) || didAssignLegacyOtp) {
-                  saveState(parsed);
+                  saveState(parsed, { skipCloudSync: true });
                 }
                 return parsed;
               }
@@ -2410,7 +2428,7 @@
           }
         } catch (e) { /* fallback to clean state */ }
         const clean = createCleanProductionState();
-        saveState(clean);
+        saveState(clean, { skipCloudSync: true });
         return clean;
       }
 
@@ -2511,19 +2529,69 @@
         );
       }
 
-      function saveState(nextState) {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
-          return true;
-        } catch (e) {
-          showToast(bi('تنبيه لطيف: مساحة التخزين المحلية ممتلئة — جاري فتح خيار التنظيف الذكي', 'Storage warning: Local storage is full'));
-          setTimeout(function () {
-            if (typeof openModal === 'function') {
-              openStorageQuotaRecoveryModal(nextState);
-            }
-          }, 60);
-          return false;
+      const CLOUD_SYNC_COLLECTIONS = [
+        { stateKey: 'doctors', fsCollection: 'doctors', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'labs', fsCollection: 'labs', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'accounts', fsCollection: 'accounts', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'familyMembers', fsCollection: 'family_members', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'slots', fsCollection: 'slots', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'records', fsCollection: 'records', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'notifications', fsCollection: 'notifications', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'messages', fsCollection: 'messages', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'blockedPhones', fsCollection: 'blocked_phones', idFn: (x) => String((x && x.phone) || '').replace(/\D/g, '') },
+        { stateKey: 'activationCodes', fsCollection: 'activation_codes', idFn: (x) => String((x && x.code) || '') }
+      ];
+
+      const tebCloudRuntime = {
+        activeConfigSig: '',
+        firebaseApp: null,
+        firestore: null,
+        unsubscribers: [],
+        hydratedCols: {},
+        lastCloudMap: {}, // { [fsCollection]: { [docId]: jsonStr } }
+        lastSettingsJson: '',
+        pushTimer: null,
+        isConnected: false,
+        fcmToken: ''
+      };
+
+      function safeCloudDocId(rawId) {
+        return String(rawId || Date.now()).replace(/[^\w\-]/g, '_').slice(0, 180) || ('doc_' + Date.now());
+      }
+
+      function stripUndefinedDeep(val) {
+        if (val === undefined) return null;
+        if (val === null || typeof val !== 'object') return val;
+        if (Array.isArray(val)) return val.map((v) => stripUndefinedDeep(v));
+        const out = {};
+        Object.keys(val).forEach((k) => {
+          if (val[k] !== undefined) out[k] = stripUndefinedDeep(val[k]);
+        });
+        return out;
+      }
+
+      function prepareDocForFirestore(item, fsCollection) {
+        const clean = stripUndefinedDeep(item) || {};
+        if (fsCollection === 'records' && typeof clean.attachmentDataUrl === 'string' && clean.attachmentDataUrl.length > 720000) {
+          clean.attachmentDataUrl = '';
+          clean.cloudAttachmentOversized = true;
         }
+        clean._cloudNamespace = CLOUD_NAMESPACE;
+        return clean;
+      }
+
+      function getCloudConfigSig(cfg) {
+        const c = cfg || {};
+        return [
+          c.firebaseApiKey || '',
+          c.firebaseAuthDomain || '',
+          c.firebaseProjectId || '',
+          c.firebaseStorageBucket || '',
+          c.firebaseMessagingSenderId || '',
+          c.firebaseAppId || '',
+          c.firebaseVapidKey || '',
+          c.workerUrl || ''
+        ].join('|');
       }
 
       function isFirebaseCloudConfigured(cfg) {
@@ -2534,6 +2602,32 @@
           String(c.firebaseMessagingSenderId || '').trim() &&
           String(c.firebaseAppId || '').trim()
         );
+      }
+
+      function getOrCreateFirestore(cfg) {
+        try {
+          if (typeof firebase === 'undefined' || !firebase || typeof firebase.firestore !== 'function') return null;
+          const c = cfg || (db && db.config) || {};
+          if (!isFirebaseCloudConfigured(c)) return null;
+          const fbConfig = {
+            apiKey: String(c.firebaseApiKey || '').trim(),
+            authDomain: String(c.firebaseAuthDomain || '').trim() || (String(c.firebaseProjectId || '').trim() + '.firebaseapp.com'),
+            projectId: String(c.firebaseProjectId || '').trim(),
+            storageBucket: String(c.firebaseStorageBucket || '').trim() || (String(c.firebaseProjectId || '').trim() + '.firebasestorage.app'),
+            messagingSenderId: String(c.firebaseMessagingSenderId || '').trim(),
+            appId: String(c.firebaseAppId || '').trim()
+          };
+          const appName = 'teb_alhajayzah_app_' + fbConfig.projectId + '_' + fbConfig.apiKey.slice(-6);
+          let app = (firebase.apps || []).find((a) => a.name === appName);
+          if (!app) {
+            app = firebase.initializeApp(fbConfig, appName);
+          }
+          tebCloudRuntime.firebaseApp = app;
+          tebCloudRuntime.firestore = firebase.firestore(app);
+          return tebCloudRuntime.firestore;
+        } catch (e) {
+          return null;
+        }
       }
 
       function toFirestoreFields(obj) {
@@ -2553,14 +2647,28 @@
       async function syncDocToFirestoreNamespace(subCollection, docId, payloadObj) {
         try {
           const cfg = (db && db.config) || {};
-          if (!isFirebaseCloudConfigured(cfg) || typeof fetch !== 'function') return;
+          if (!isFirebaseCloudConfigured(cfg)) return;
+          const fsDb = getOrCreateFirestore(cfg);
+          const safeId = safeCloudDocId(docId);
+          if (fsDb) {
+            if (subCollection === 'config' || subCollection === 'settings') {
+              await fsDb.doc(CLOUD_PATHS.settings).set(prepareDocForFirestore(payloadObj, 'settings'), { merge: true });
+            } else {
+              await fsDb.collection(CLOUD_PATHS.dataRoot + '/' + subCollection).doc(safeId).set(
+                prepareDocForFirestore(payloadObj, subCollection),
+                { merge: true }
+              );
+            }
+            return;
+          }
+          if (typeof fetch !== 'function') return;
           const projectId = String(cfg.firebaseProjectId || '').trim();
           const apiKey = String(cfg.firebaseApiKey || '').trim();
-          const safeId = encodeURIComponent(String(docId || Date.now()).replace(/[^\w\-]/g, '_'));
-          const safeCol = encodeURIComponent(String(subCollection || 'items').replace(/[^\w\-]/g, '_'));
+          const docPath = (subCollection === 'config' || subCollection === 'settings')
+            ? CLOUD_PATHS.settings
+            : (CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(String(subCollection || 'items')) + '/' + encodeURIComponent(safeId));
           const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-            '/databases/(default)/documents/' + CLOUD_NAMESPACE + '/root/' + safeCol + '/' + safeId +
-            '?key=' + encodeURIComponent(apiKey);
+            '/databases/(default)/documents/' + docPath + '?key=' + encodeURIComponent(apiKey);
           await fetch(url, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -2569,10 +2677,263 @@
         } catch (e) { /* offline-safe background sync */ }
       }
 
+      async function pushSettingsToCloudNow(configObj) {
+        const payload = Object.assign({}, DEFAULT_CONFIG, configObj || {}, {
+          appVersionLabel: 'v1.0.0',
+          updatedAtMillis: Date.now()
+        });
+        tebCloudRuntime.lastSettingsJson = JSON.stringify(payload);
+        try {
+          const fsDb = getOrCreateFirestore(payload);
+          if (fsDb) {
+            await fsDb.doc(CLOUD_PATHS.settings).set(prepareDocForFirestore(payload, 'settings'), { merge: true });
+            return true;
+          }
+        } catch (e) { /* fallback to REST */ }
+        await syncDocToFirestoreNamespace('settings', 'settings', payload);
+        return true;
+      }
+
+      async function pushCollectionChangesToFirestore(fsDb, colDef, itemsArr) {
+        if (!fsDb) return;
+        const fsCol = colDef.fsCollection;
+        const colRef = fsDb.collection(CLOUD_PATHS.dataRoot + '/' + fsCol);
+        const prevMap = tebCloudRuntime.lastCloudMap[fsCol] || {};
+        const nextMap = {};
+        const ops = [];
+
+        (Array.isArray(itemsArr) ? itemsArr : []).forEach((item) => {
+          const rawId = colDef.idFn(item);
+          if (!rawId) return;
+          const docId = safeCloudDocId(rawId);
+          const clean = prepareDocForFirestore(item, fsCol);
+          const jsonStr = JSON.stringify(clean);
+          nextMap[docId] = jsonStr;
+          if (prevMap[docId] !== jsonStr) {
+            ops.push({ type: 'set', docId: docId, data: clean });
+          }
+        });
+
+        Object.keys(prevMap).forEach((oldId) => {
+          if (!Object.prototype.hasOwnProperty.call(nextMap, oldId)) {
+            ops.push({ type: 'delete', docId: oldId });
+          }
+        });
+
+        tebCloudRuntime.lastCloudMap[fsCol] = nextMap;
+        if (ops.length === 0) return;
+
+        for (let i = 0; i < ops.length; i += 350) {
+          const chunk = ops.slice(i, i + 350);
+          const batch = fsDb.batch();
+          chunk.forEach((op) => {
+            const ref = colRef.doc(op.docId);
+            if (op.type === 'delete') batch.delete(ref);
+            else batch.set(ref, op.data, { merge: true });
+          });
+          await batch.commit();
+        }
+      }
+
+      function queueCloudSyncFromLocal(nextState) {
+        if (tebCloudRuntime.pushTimer) clearTimeout(tebCloudRuntime.pushTimer);
+        tebCloudRuntime.pushTimer = setTimeout(async function () {
+          try {
+            const st = nextState || db;
+            if (!st || !isFirebaseCloudConfigured(st.config)) return;
+            const fsDb = getOrCreateFirestore(st.config);
+            if (!fsDb) return;
+
+            const cfgJson = JSON.stringify(st.config || {});
+            if (cfgJson !== tebCloudRuntime.lastSettingsJson) {
+              await pushSettingsToCloudNow(st.config);
+            }
+
+            for (let i = 0; i < CLOUD_SYNC_COLLECTIONS.length; i++) {
+              const colDef = CLOUD_SYNC_COLLECTIONS[i];
+              await pushCollectionChangesToFirestore(fsDb, colDef, st[colDef.stateKey]);
+            }
+          } catch (e) { /* offline-safe background cloud push */ }
+        }, 120);
+      }
+
+      function stopRealtimeCloudSync() {
+        (tebCloudRuntime.unsubscribers || []).forEach((unsub) => {
+          try { if (typeof unsub === 'function') unsub(); } catch (e) {}
+        });
+        tebCloudRuntime.unsubscribers = [];
+        tebCloudRuntime.hydratedCols = {};
+        tebCloudRuntime.isConnected = false;
+      }
+
+      function startRealtimeCloudSync() {
+        const cfg = (db && db.config) || DEFAULT_CONFIG;
+        if (!isFirebaseCloudConfigured(cfg)) return;
+        const fsDb = getOrCreateFirestore(cfg);
+        if (!fsDb) return;
+
+        const sig = getCloudConfigSig(cfg);
+        if (tebCloudRuntime.isConnected && tebCloudRuntime.activeConfigSig === sig) return;
+
+        stopRealtimeCloudSync();
+        tebCloudRuntime.activeConfigSig = sig;
+        tebCloudRuntime.isConnected = true;
+
+        try {
+          // 1. Real-time sync for teb_alhajayzah/settings across all devices
+          const unsubSettings = fsDb.doc(CLOUD_PATHS.settings).onSnapshot(function (docSnap) {
+            if (!docSnap || !docSnap.exists) {
+              pushSettingsToCloudNow(db.config).catch(function () {});
+              return;
+            }
+            if (docSnap.metadata && docSnap.metadata.hasPendingWrites) return;
+            const remote = docSnap.data() || {};
+            const merged = Object.assign({}, DEFAULT_CONFIG, db.config || {}, remote);
+            delete merged._cloudNamespace;
+            delete merged.updatedAtMillis;
+            [
+              'firebaseApiKey', 'firebaseAuthDomain', 'firebaseProjectId',
+              'firebaseStorageBucket', 'firebaseMessagingSenderId',
+              'firebaseAppId', 'firebaseVapidKey', 'workerUrl'
+            ].forEach((ck) => {
+              if (!String(merged[ck] || '').trim()) merged[ck] = DEFAULT_CONFIG[ck];
+            });
+            merged.appVersionLabel = 'v1.0.0';
+            merged.globalChatEnabled = merged.globalChatEnabled !== false;
+
+            const prevSig = JSON.stringify(db.config || {});
+            const nextSig = JSON.stringify(merged);
+            if (prevSig !== nextSig) {
+              db.config = merged;
+              tebCloudRuntime.lastSettingsJson = nextSig;
+              saveState(db, { skipCloudSync: true });
+              initFirebaseCloudBridge();
+              renderApp();
+              if (getCloudConfigSig(merged) !== sig) {
+                setTimeout(startRealtimeCloudSync, 50);
+              }
+            }
+          }, function () {});
+          tebCloudRuntime.unsubscribers.push(unsubSettings);
+
+          // 2. Real-time sync for all platform collections under teb_alhajayzah/data/*
+          CLOUD_SYNC_COLLECTIONS.forEach(function (colDef) {
+            const fsCol = colDef.fsCollection;
+            const colPath = CLOUD_PATHS.dataRoot + '/' + fsCol;
+            const unsubCol = fsDb.collection(colPath).onSnapshot(function (snap) {
+              if (!snap) return;
+              if (snap.metadata && snap.metadata.hasPendingWrites) return;
+
+              if (snap.empty && !tebCloudRuntime.hydratedCols[fsCol]) {
+                tebCloudRuntime.hydratedCols[fsCol] = true;
+                const localArr = Array.isArray(db[colDef.stateKey]) ? db[colDef.stateKey] : [];
+                if (localArr.length > 0) {
+                  pushCollectionChangesToFirestore(fsDb, colDef, localArr).catch(function () {});
+                }
+                return;
+              }
+
+              tebCloudRuntime.hydratedCols[fsCol] = true;
+              const prevMap = tebCloudRuntime.lastCloudMap[fsCol] || {};
+              const nextMap = {};
+              const remoteItemsById = {};
+              const remoteList = [];
+
+              snap.docs.forEach(function (d) {
+                const raw = d.data() || {};
+                const clean = Object.assign({}, raw);
+                delete clean._cloudNamespace;
+                if (colDef.stateKey === 'records' && clean.cloudAttachmentOversized && !clean.attachmentDataUrl) {
+                  const localRec = (db.records || []).find((r) => r.id === clean.id);
+                  if (localRec && localRec.attachmentDataUrl) {
+                    clean.attachmentDataUrl = localRec.attachmentDataUrl;
+                  }
+                }
+                const docId = safeCloudDocId(colDef.idFn(clean) || d.id);
+                nextMap[docId] = JSON.stringify(prepareDocForFirestore(clean, fsCol));
+                remoteItemsById[docId] = clean;
+                remoteList.push(clean);
+              });
+
+              const existingLocal = Array.isArray(db[colDef.stateKey]) ? db[colDef.stateKey] : [];
+              const mergedList = remoteList.slice();
+              const extraLocalToPush = [];
+
+              existingLocal.forEach(function (localItem) {
+                const lid = safeCloudDocId(colDef.idFn(localItem));
+                const inRemote = Object.prototype.hasOwnProperty.call(remoteItemsById, lid);
+                const wasPreviouslyInCloud = Object.prototype.hasOwnProperty.call(prevMap, lid);
+                if (!inRemote && !wasPreviouslyInCloud) {
+                  // Offline-created item or extra local item not deleted from cloud — preserve & queue push
+                  if (colDef.stateKey === 'doctors' || colDef.stateKey === 'slots' || colDef.stateKey === 'activationCodes') {
+                    // For baseline seeded entities when cloud already holds authoritative data, let cloud lead
+                    if (Object.keys(remoteItemsById).length === 0) {
+                      mergedList.push(localItem);
+                      extraLocalToPush.push(localItem);
+                    }
+                  } else {
+                    mergedList.push(localItem);
+                    extraLocalToPush.push(localItem);
+                  }
+                }
+              });
+
+              if (colDef.stateKey === 'slots') {
+                mergedList.sort((a, b) => (a.startMinutes || 0) - (b.startMinutes || 0));
+              } else if (colDef.stateKey === 'records' || colDef.stateKey === 'notifications') {
+                mergedList.sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+              } else if (colDef.stateKey === 'messages') {
+                mergedList.sort((a, b) => (a.createdAtMillis || 0) - (b.createdAtMillis || 0));
+              }
+
+              tebCloudRuntime.lastCloudMap[fsCol] = nextMap;
+              const prevArrJson = JSON.stringify(existingLocal);
+              const nextArrJson = JSON.stringify(mergedList);
+              if (prevArrJson !== nextArrJson) {
+                db[colDef.stateKey] = mergedList;
+                if (colDef.stateKey === 'accounts' && db.account && db.account.id) {
+                  const syncedAcc = mergedList.find((a) => a.id === db.account.id);
+                  if (syncedAcc) db.account = syncedAcc;
+                }
+                if (colDef.stateKey === 'familyMembers') {
+                  db.familyMembers = db.familyMembers.map(normalizeFamilyMemberObj);
+                }
+                saveState(db, { skipCloudSync: true });
+                baselineDbSyncSig = computeDbSyncSignature(db);
+                renderApp();
+              }
+
+              if (extraLocalToPush.length > 0) {
+                pushCollectionChangesToFirestore(fsDb, colDef, mergedList).catch(function () {});
+              }
+            }, function () {});
+            tebCloudRuntime.unsubscribers.push(unsubCol);
+          });
+        } catch (e) { /* offline-safe listener init */ }
+      }
+
+      function saveState(nextState, opts) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+          if (!opts || !opts.skipCloudSync) {
+            queueCloudSyncFromLocal(nextState);
+          }
+          return true;
+        } catch (e) {
+          showToast(bi('تنبيه لطيف: مساحة التخزين المحلية ممتلئة — جاري فتح خيار التنظيف الذكي', 'Storage warning: Local storage is full'));
+          setTimeout(function () {
+            if (typeof openModal === 'function') {
+              openStorageQuotaRecoveryModal(nextState);
+            }
+          }, 60);
+          return false;
+        }
+      }
+
       async function dispatchWorkerPush(eventType, title, body, targetAudience, targetId, collectionPath) {
         try {
           const cfg = (db && db.config) || {};
-          const wUrl = String(cfg.workerUrl || '').trim();
+          const wUrl = String(cfg.workerUrl || DEFAULT_CONFIG.workerUrl || '').trim();
           if (!wUrl || typeof fetch !== 'function') return;
           await fetch(wUrl, {
             method: 'POST',
@@ -2585,7 +2946,7 @@
               body: String(body || ''),
               targetAudience: String(targetAudience || 'ALL'),
               targetId: String(targetId || ''),
-              projectId: String(cfg.firebaseProjectId || ''),
+              projectId: String(cfg.firebaseProjectId || DEFAULT_CONFIG.firebaseProjectId || ''),
               createdAtMillis: Date.now()
             })
           });
@@ -2594,25 +2955,46 @@
 
       function initFirebaseCloudBridge() {
         try {
-          const cfg = (db && db.config) || {};
+          const cfg = (db && db.config) || DEFAULT_CONFIG;
           if (!isFirebaseCloudConfigured(cfg)) return;
           const webCfg = {
-            apiKey: String(cfg.firebaseApiKey || '').trim(),
-            authDomain: String(cfg.firebaseAuthDomain || '').trim(),
-            projectId: String(cfg.firebaseProjectId || '').trim(),
-            storageBucket: String(cfg.firebaseStorageBucket || '').trim(),
-            messagingSenderId: String(cfg.firebaseMessagingSenderId || '').trim(),
-            appId: String(cfg.firebaseAppId || '').trim(),
-            vapidKey: String(cfg.firebaseVapidKey || '').trim()
+            apiKey: String(cfg.firebaseApiKey || DEFAULT_CONFIG.firebaseApiKey).trim(),
+            authDomain: String(cfg.firebaseAuthDomain || DEFAULT_CONFIG.firebaseAuthDomain).trim(),
+            projectId: String(cfg.firebaseProjectId || DEFAULT_CONFIG.firebaseProjectId).trim(),
+            storageBucket: String(cfg.firebaseStorageBucket || DEFAULT_CONFIG.firebaseStorageBucket).trim(),
+            messagingSenderId: String(cfg.firebaseMessagingSenderId || DEFAULT_CONFIG.firebaseMessagingSenderId).trim(),
+            appId: String(cfg.firebaseAppId || DEFAULT_CONFIG.firebaseAppId).trim(),
+            vapidKey: String(cfg.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey).trim()
           };
+          getOrCreateFirestore(cfg);
           if ('serviceWorker' in navigator && /^https?:$/i.test(window.location.protocol)) {
             navigator.serviceWorker.register('./firebase-messaging-sw.js').then((reg) => {
               const targetWorker = reg.active || reg.waiting || reg.installing;
               if (targetWorker && targetWorker.postMessage) {
                 targetWorker.postMessage({ type: 'TEB_INIT_FIREBASE', config: webCfg });
               }
+              if (typeof firebase !== 'undefined' && firebase.messaging && tebCloudRuntime.firebaseApp) {
+                try {
+                  const msgSdk = firebase.messaging(tebCloudRuntime.firebaseApp);
+                  if (webCfg.vapidKey && Notification.permission === 'granted') {
+                    msgSdk.getToken({ vapidKey: webCfg.vapidKey, serviceWorkerRegistration: reg })
+                      .then((token) => { if (token) tebCloudRuntime.fcmToken = token; })
+                      .catch(() => {});
+                  }
+                  if (!tebCloudRuntime._boundOnMsg && msgSdk.onMessage) {
+                    tebCloudRuntime._boundOnMsg = true;
+                    msgSdk.onMessage((payload) => {
+                      const notif = (payload && payload.notification) || {};
+                      if (notif.title || notif.body) {
+                        showToast((notif.title ? notif.title + ': ' : '') + (notif.body || ''));
+                      }
+                    });
+                  }
+                } catch (err) {}
+              }
             }).catch(() => {});
           }
+          startRealtimeCloudSync();
           if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission().catch(() => {});
           }
@@ -6071,12 +6453,12 @@
               '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط API الأدوية المصرية (اختياري)', 'Medications API URL (optional)')) + '<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
               '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 ' + esc(bi('الرقم السري للدخول السري (Admin PIN - 4 أرقام فأكثر)', 'Secret Admin PIN (4+ digits)')) + renderPasswordFieldHtml('admSetPin', cfg.adminPin || '202600', 'Admin PIN') + '</label>' +
               '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;" />' +
-              '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                '<div style="font-weight:800;color:#1D4ED8;">☁️ ' + esc(bi('إعدادات الربط السحابي والإشعارات (Firebase FCM & Cloudflare Worker)', 'Cloud Sync & Push Settings (FCM & Cloudflare Worker)')) + '</div>' +
-                '<div style="font-size:0.8rem;color:#1E3A8A;line-height:1.5;">' +
-                  esc(bi('مسارات البيانات المعزولة تلقائياً لمنع التداخل:', 'Isolated cloud collection namespace paths:')) +
-                  '<div dir="ltr" style="font-family:monospace;font-size:0.74rem;margin-top:4px;color:#0F766E;">' +
-                    esc(CLOUD_PATHS.users) + ' • ' + esc(CLOUD_PATHS.clinics) + ' • ' + esc(CLOUD_PATHS.appointments) + ' • ' + esc(CLOUD_PATHS.messages) + ' • ' + esc(CLOUD_PATHS.notifications) +
+              '<div style="background:#ECFDF5;border:1px solid #34D399;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;">' +
+                '<div style="font-weight:800;color:#065F46;">☁️ ' + esc(bi('إعدادات الربط السحابي والمزامنة الحية (Firebase FCM & Cloudflare Worker)', 'Live Cloud Sync & Push Settings (FCM & Worker)')) + '</div>' +
+                '<div style="font-size:0.8rem;color:#047857;line-height:1.5;">' +
+                  '🟢 ' + esc(bi('المزامنة اللحظية متعددة الأجهزة نشطة تلقائياً تحت المسار المعزول:', 'Real-time multi-device sync auto-connected under:')) +
+                  '<div dir="ltr" style="font-family:monospace;font-size:0.74rem;margin-top:4px;color:#064E3B;">' +
+                    esc(CLOUD_PATHS.settings) + ' • ' + esc(CLOUD_PATHS.clinics) + ' • ' + esc(CLOUD_PATHS.users) + ' • ' + esc(CLOUD_PATHS.appointments) + ' • ' + esc(CLOUD_PATHS.records) + ' • ' + esc(CLOUD_PATHS.messages) +
                   '</div>' +
                 '</div>' +
                 '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('رابط الخادم الوسيط (Cloudflare Worker URL)', 'Cloudflare Worker URL')) + '<input class="input" id="admSetWorkerUrl" value="' + esc(cfg.workerUrl || '') + '" placeholder="https://teb-worker.your-subdomain.workers.dev" dir="ltr" /></label>' +
@@ -8929,20 +9311,25 @@
             db.config.homeAnnouncementAr = document.getElementById('admSetAnnouncement').value.trim();
             db.config.apkDownloadUrl = document.getElementById('admSetApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
             db.config.medicationsApiUrl = document.getElementById('admSetMedsApi').value.trim();
-            db.config.workerUrl = (document.getElementById('admSetWorkerUrl') || {}).value ? document.getElementById('admSetWorkerUrl').value.trim() : '';
-            db.config.firebaseApiKey = (document.getElementById('admSetFbApiKey') || {}).value ? document.getElementById('admSetFbApiKey').value.trim() : '';
-            db.config.firebaseAuthDomain = (document.getElementById('admSetFbAuthDomain') || {}).value ? document.getElementById('admSetFbAuthDomain').value.trim() : '';
-            db.config.firebaseProjectId = (document.getElementById('admSetFbProjectId') || {}).value ? document.getElementById('admSetFbProjectId').value.trim() : '';
-            db.config.firebaseStorageBucket = (document.getElementById('admSetFbStorageBucket') || {}).value ? document.getElementById('admSetFbStorageBucket').value.trim() : '';
-            db.config.firebaseMessagingSenderId = (document.getElementById('admSetFbMessagingSenderId') || {}).value ? document.getElementById('admSetFbMessagingSenderId').value.trim() : '';
-            db.config.firebaseAppId = (document.getElementById('admSetFbAppId') || {}).value ? document.getElementById('admSetFbAppId').value.trim() : '';
-            db.config.firebaseVapidKey = (document.getElementById('admSetFbVapidKey') || {}).value ? document.getElementById('admSetFbVapidKey').value.trim() : '';
+            const valOf = (id, fb) => {
+              const el = document.getElementById(id);
+              const v = el ? String(el.value || '').trim() : '';
+              return v || fb;
+            };
+            db.config.workerUrl = valOf('admSetWorkerUrl', DEFAULT_CONFIG.workerUrl);
+            db.config.firebaseApiKey = valOf('admSetFbApiKey', DEFAULT_CONFIG.firebaseApiKey);
+            db.config.firebaseAuthDomain = valOf('admSetFbAuthDomain', DEFAULT_CONFIG.firebaseAuthDomain);
+            db.config.firebaseProjectId = valOf('admSetFbProjectId', DEFAULT_CONFIG.firebaseProjectId);
+            db.config.firebaseStorageBucket = valOf('admSetFbStorageBucket', DEFAULT_CONFIG.firebaseStorageBucket);
+            db.config.firebaseMessagingSenderId = valOf('admSetFbMessagingSenderId', DEFAULT_CONFIG.firebaseMessagingSenderId);
+            db.config.firebaseAppId = valOf('admSetFbAppId', DEFAULT_CONFIG.firebaseAppId);
+            db.config.firebaseVapidKey = valOf('admSetFbVapidKey', DEFAULT_CONFIG.firebaseVapidKey);
             if (newPin.length >= 4) db.config.adminPin = newPin;
             saveState(db);
+            await pushSettingsToCloudNow(db.config);
             initFirebaseCloudBridge();
-            syncDocToFirestoreNamespace('config', 'platform', db.config);
             await refreshMedicationsFromApi();
-            showToast(bi('تم حفظ إعدادات المنصة والربط السحابي والـ PIN بنجاح', 'Platform & cloud settings saved'));
+            showToast(bi('تم حفظ ومزامنة الإعدادات سحابياً على كافة الأجهزة تحت مسار teb_alhajayzah/settings', 'Settings saved & synced across all devices'));
             renderApp();
           };
         }
@@ -8952,9 +9339,10 @@
           resetAdmCfgBtn.onclick = async function () {
             db.config = Object.assign({}, DEFAULT_CONFIG);
             saveState(db);
+            await pushSettingsToCloudNow(db.config);
             initFirebaseCloudBridge();
             await refreshMedicationsFromApi();
-            showToast(bi('تمت استعادة الإعدادات الافتراضية للمنصة', 'Restored default settings'));
+            showToast(bi('تمت استعادة الإعدادات الافتراضية ومزامنتها سحابياً', 'Restored default settings & synced to cloud'));
             renderApp();
           };
         }
@@ -9587,9 +9975,10 @@
         });
       }
 
-      // Initialize App with brief spinner while loading medications catalog
+      // Initialize App & Real-Time Multi-Device Cloud Sync immediately on startup
       setGlobalLoading(true, bi('جاري تجهيز منصة طب الحجايزة...', 'Loading Teb Al-Hajayzah...'));
       renderApp();
+      startRealtimeCloudSync();
       refreshMedicationsFromApi().finally(function () {
         setGlobalLoading(false);
         renderApp();

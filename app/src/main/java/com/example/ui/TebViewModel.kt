@@ -277,14 +277,16 @@ class TebViewModel(
         viewModelScope.launch {
             repository.ensureSeeded()
             _isSeeded.value = true
+            repository.syncWithCloudFirestoreOnce()
         }
         refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
         viewModelScope.launch {
             val (sig, _) = repository.checkLiveWebHasUpdate(AppConfig.defaultBrand.liveWebUrl, null)
             _lastLiveWebSignature = sig
             while (isActive) {
-                delay(25_000L)
+                delay(20_000L)
                 val cfg = uiState.value.brandConfig
+                repository.syncWithCloudFirestoreOnce()
                 if (cfg.medicationsApiUrl.isNotBlank()) {
                     val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
                     _medications.value = result.medications
@@ -532,6 +534,7 @@ class TebViewModel(
     fun checkLiveWebNow() {
         viewModelScope.launch {
             val cfg = uiState.value.brandConfig
+            repository.syncWithCloudFirestoreOnce()
             val (newSig, changed) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
             _lastLiveWebSignature = newSig
             if (changed) {
@@ -546,6 +549,7 @@ class TebViewModel(
             _isRefreshing.value = true
             _hasNewDataBanner.value = false
             try {
+                repository.syncWithCloudFirestoreOnce()
                 val cfg = uiState.value.brandConfig
                 val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
                 _medications.value = result.medications
@@ -570,6 +574,7 @@ class TebViewModel(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
+                repository.syncWithCloudFirestoreOnce()
                 val cfg = uiState.value.brandConfig
                 val isEn = uiState.value.isEn
                 val verResult = repository.checkAppVersionStatus(

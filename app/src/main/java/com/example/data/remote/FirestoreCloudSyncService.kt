@@ -1,0 +1,715 @@
+package com.example.data.remote
+
+import android.os.Build
+import com.example.config.AppConfig
+import com.example.config.CloudNamespacePaths
+import com.example.config.PlatformBrandConfig
+import com.example.data.local.ActivationOtpCodeEntity
+import com.example.data.local.AppointmentSlotEntity
+import com.example.data.local.BlockedPhoneEntity
+import com.example.data.local.BookingSource
+import com.example.data.local.ClinicDoctorEntity
+import com.example.data.local.ClinicType
+import com.example.data.local.DelayNotificationEntity
+import com.example.data.local.DirectMessageEntity
+import com.example.data.local.FamilyMemberEntity
+import com.example.data.local.MedicalLabEntity
+import com.example.data.local.MedicalRecordEntity
+import com.example.data.local.MedicalRecordType
+import com.example.data.local.NotificationAudience
+import com.example.data.local.PatientAccountEntity
+import com.example.data.local.SlotStatus
+import com.example.util.ChronicConditionsCatalog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+
+/**
+ * خدمة المزامنة السحابية عبر Firestore REST API تحت مسار العزل الموحد (teb_alhajayzah/)
+ * تضمن تطابق البيانات والإعدادات لحظياً بين نسخة الويب (Chrome/WebView) وتطبيق الأندرويد.
+ */
+object FirestoreCloudSyncService {
+
+    private const val CONNECT_TIMEOUT_MS = 5000
+    private const val READ_TIMEOUT_MS = 6000
+
+    fun isCloudNetworkAllowed(): Boolean =
+        !"robolectric".equals(Build.FINGERPRINT, ignoreCase = true)
+
+    fun safeCloudDocId(rawId: String): String =
+        rawId.replace(Regex("[^\\w\\-]"), "_")
+            .take(180)
+            .ifBlank { "doc_${System.currentTimeMillis()}" }
+
+    private fun enc(value: String): String =
+        URLEncoder.encode(value, "UTF-8")
+
+    private fun baseDocumentsUrl(projectId: String): String =
+        "https://firestore.googleapis.com/v1/projects/${enc(projectId.trim())}/databases/(default)/documents"
+
+    fun settingsUrl(projectId: String, apiKey: String): String =
+        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.SETTINGS}?key=${enc(apiKey.trim())}"
+
+    fun collectionUrl(projectId: String, apiKey: String, subCollection: String, pageToken: String? = null): String {
+        val base = "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.DATA_ROOT}/${enc(subCollection)}?pageSize=500&key=${enc(apiKey.trim())}"
+        return if (!pageToken.isNullOrBlank()) "$base&pageToken=${enc(pageToken)}" else base
+    }
+
+    fun documentUrl(projectId: String, apiKey: String, subCollection: String, docId: String): String =
+        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.DATA_ROOT}/${enc(subCollection)}/${enc(safeCloudDocId(docId))}?key=${enc(apiKey.trim())}"
+
+    fun toFirestoreFields(obj: JSONObject): JSONObject {
+        val fields = JSONObject()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val k = keys.next()
+            val v = obj.opt(k)
+            val encoded = encodeFirestoreValue(v)
+            if (encoded != null) {
+                fields.put(k, encoded)
+            }
+        }
+        fields.put("_cloudNamespace", JSONObject().put("stringValue", CloudNamespacePaths.ROOT))
+        fields.put("cloudNamespace", JSONObject().put("stringValue", CloudNamespacePaths.ROOT))
+        fields.put("updatedAtMillis", JSONObject().put("integerValue", System.currentTimeMillis().toString()))
+        return fields
+    }
+
+    private fun encodeFirestoreValue(value: Any?): JSONObject? {
+        return when (value) {
+            null, JSONObject.NULL -> null
+            is Boolean -> JSONObject().put("booleanValue", value)
+            is Int -> JSONObject().put("integerValue", value.toString())
+            is Long -> JSONObject().put("integerValue", value.toString())
+            is Float -> JSONObject().put("doubleValue", value.toDouble())
+            is Double -> JSONObject().put("doubleValue", value)
+            is String -> JSONObject().put("stringValue", value)
+            is JSONArray -> {
+                val arr = JSONArray()
+                for (i in 0 until value.length()) {
+                    encodeFirestoreValue(value.opt(i))?.let { arr.put(it) }
+                }
+                JSONObject().put("arrayValue", JSONObject().put("values", arr))
+            }
+            is JSONObject -> {
+                val sub = JSONObject()
+                val ks = value.keys()
+                while (ks.hasNext()) {
+                    val k = ks.next()
+                    encodeFirestoreValue(value.opt(k))?.let { sub.put(k, it) }
+                }
+                JSONObject().put("mapValue", JSONObject().put("fields", sub))
+            }
+            else -> JSONObject().put("stringValue", value.toString())
+        }
+    }
+
+    fun fromFirestoreDocument(docJson: JSONObject): JSONObject {
+        val fields = docJson.optJSONObject("fields") ?: return JSONObject()
+        val out = fromFirestoreFields(fields)
+        val docName = docJson.optString("name", "")
+        if (docName.isNotBlank()) {
+            val shortId = docName.substringAfterLast('/')
+            if (shortId.isNotBlank() && !out.has("id")) {
+                out.put("_docId", shortId)
+            }
+        }
+        return out
+    }
+
+    private fun fromFirestoreFields(fields: JSONObject): JSONObject {
+        val out = JSONObject()
+        val keys = fields.keys()
+        while (keys.hasNext()) {
+            val k = keys.next()
+            val wrapper = fields.optJSONObject(k) ?: continue
+            val decoded = decodeFirestoreValue(wrapper)
+            if (decoded != null) {
+                out.put(k, decoded)
+            }
+        }
+        return out
+    }
+
+    private fun decodeFirestoreValue(wrapper: JSONObject): Any? {
+        return when {
+            wrapper.has("stringValue") -> wrapper.optString("stringValue", "")
+            wrapper.has("booleanValue") -> wrapper.optBoolean("booleanValue", false)
+            wrapper.has("integerValue") -> {
+                val raw = wrapper.opt("integerValue")
+                when (raw) {
+                    is Number -> raw.toLong()
+                    is String -> raw.toLongOrNull() ?: 0L
+                    else -> 0L
+                }
+            }
+            wrapper.has("doubleValue") -> wrapper.optDouble("doubleValue", 0.0)
+            wrapper.has("arrayValue") -> {
+                val values = wrapper.optJSONObject("arrayValue")?.optJSONArray("values")
+                val arr = JSONArray()
+                if (values != null) {
+                    for (i in 0 until values.length()) {
+                        val itemObj = values.optJSONObject(i) ?: continue
+                        decodeFirestoreValue(itemObj)?.let { arr.put(it) }
+                    }
+                }
+                arr
+            }
+            wrapper.has("mapValue") -> {
+                val sub = wrapper.optJSONObject("mapValue")?.optJSONObject("fields")
+                if (sub != null) fromFirestoreFields(sub) else JSONObject()
+            }
+            else -> null
+        }
+    }
+
+    suspend fun fetchSettings(brand: PlatformBrandConfig): JSONObject? = withContext(Dispatchers.IO) {
+        if (!isCloudNetworkAllowed() || !brand.isCloudConfigured) return@withContext null
+        runCatching {
+            val conn = (URL(settingsUrl(brand.firebaseProjectId, brand.firebaseApiKey)).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                useCaches = false
+            }
+            val code = conn.responseCode
+            val body = if (code in 200..299) conn.inputStream.bufferedReader().use { it.readText() } else ""
+            conn.disconnect()
+            if (code !in 200..299 || body.isBlank()) return@runCatching null
+            fromFirestoreDocument(JSONObject(body))
+        }.getOrNull()
+    }
+
+    suspend fun pushSettings(brand: PlatformBrandConfig): Boolean = withContext(Dispatchers.IO) {
+        if (!isCloudNetworkAllowed() || !brand.isCloudConfigured) return@withContext false
+        runCatching {
+            val conn = (URL(settingsUrl(brand.firebaseProjectId, brand.firebaseApiKey)).openConnection() as HttpURLConnection).apply {
+                requestMethod = "PATCH"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            }
+            val payload = JSONObject().put("fields", toFirestoreFields(settingsToJson(brand)))
+            conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..299
+        }.getOrDefault(false)
+    }
+
+    suspend fun listCollection(brand: PlatformBrandConfig, subCollection: String): List<JSONObject>? =
+        withContext(Dispatchers.IO) {
+            if (!isCloudNetworkAllowed() || !brand.isCloudConfigured) return@withContext null
+            runCatching {
+                val results = mutableListOf<JSONObject>()
+                var pageToken: String? = null
+                var safetyPages = 0
+                do {
+                    safetyPages++
+                    val url = collectionUrl(brand.firebaseProjectId, brand.firebaseApiKey, subCollection, pageToken)
+                    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = CONNECT_TIMEOUT_MS
+                        readTimeout = READ_TIMEOUT_MS
+                        useCaches = false
+                    }
+                    val code = conn.responseCode
+                    val body = if (code in 200..299) conn.inputStream.bufferedReader().use { it.readText() } else ""
+                    conn.disconnect()
+                    if (code == 404) return@runCatching emptyList<JSONObject>()
+                    if (code !in 200..299) return@runCatching null
+                    if (body.isBlank()) break
+                    val json = JSONObject(body)
+                    val docs = json.optJSONArray("documents")
+                    if (docs != null) {
+                        for (i in 0 until docs.length()) {
+                            val d = docs.optJSONObject(i) ?: continue
+                            results += fromFirestoreDocument(d)
+                        }
+                    }
+                    pageToken = json.optString("nextPageToken", "").takeIf { it.isNotBlank() }
+                } while (pageToken != null && safetyPages < 10)
+                results
+            }.getOrNull()
+        }
+
+    suspend fun upsertDocument(
+        brand: PlatformBrandConfig,
+        subCollection: String,
+        docId: String,
+        payloadJson: JSONObject,
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!isCloudNetworkAllowed() || !brand.isCloudConfigured || docId.isBlank()) return@withContext false
+        runCatching {
+            val url = documentUrl(brand.firebaseProjectId, brand.firebaseApiKey, subCollection, docId)
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "PATCH"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            }
+            val body = JSONObject().put("fields", toFirestoreFields(payloadJson))
+            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..299
+        }.getOrDefault(false)
+    }
+
+    suspend fun deleteDocument(
+        brand: PlatformBrandConfig,
+        subCollection: String,
+        docId: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!isCloudNetworkAllowed() || !brand.isCloudConfigured || docId.isBlank()) return@withContext false
+        runCatching {
+            val url = documentUrl(brand.firebaseProjectId, brand.firebaseApiKey, subCollection, docId)
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "DELETE"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+            }
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..299 || code == 404
+        }.getOrDefault(false)
+    }
+
+    // =========================================================================
+    // محولات الكيانات المتوافقة 100% مع نسخة الويب (index.html)
+    // =========================================================================
+
+    fun settingsToJson(brand: PlatformBrandConfig): JSONObject = JSONObject().apply {
+        put("platformNameAr", brand.platformNameAr)
+        put("platformNameEn", brand.platformNameEn)
+        put("villageNameAr", brand.villageNameAr)
+        put("villageNameEn", brand.villageNameEn)
+        put("hospitalNameAr", brand.hospitalNameAr)
+        put("hospitalNameEn", brand.hospitalNameEn)
+        put("taglineAr", brand.taglineAr)
+        put("taglineEn", brand.taglineEn)
+        put("homeAnnouncementAr", brand.homeAnnouncementAr)
+        put("supportPhone", brand.supportPhone)
+        put("otpWhatsappPhone", brand.otpWhatsappPhone)
+        put("apkDownloadUrl", brand.apkDownloadUrl)
+        put("medicationsApiUrl", brand.medicationsApiUrl)
+        put("adminPin", brand.adminPin)
+        put("adminUsername", brand.adminUsername)
+        put("adminPassword", brand.adminPassword)
+        put("globalChatEnabled", brand.globalChatEnabled)
+        put("appVersionLabel", "v1.0.0")
+        put("firebaseApiKey", brand.firebaseApiKey.ifBlank { AppConfig.defaultBrand.firebaseApiKey })
+        put("firebaseAuthDomain", brand.firebaseAuthDomain.ifBlank { AppConfig.defaultBrand.firebaseAuthDomain })
+        put("firebaseProjectId", brand.firebaseProjectId.ifBlank { AppConfig.defaultBrand.firebaseProjectId })
+        put("firebaseStorageBucket", brand.firebaseStorageBucket.ifBlank { AppConfig.defaultBrand.firebaseStorageBucket })
+        put("firebaseMessagingSenderId", brand.firebaseMessagingSenderId.ifBlank { AppConfig.defaultBrand.firebaseMessagingSenderId })
+        put("firebaseAppId", brand.firebaseAppId.ifBlank { AppConfig.defaultBrand.firebaseAppId })
+        put("firebaseVapidKey", brand.firebaseVapidKey.ifBlank { AppConfig.defaultBrand.firebaseVapidKey })
+        put("workerUrl", brand.workerUrl.ifBlank { AppConfig.defaultBrand.workerUrl })
+    }
+
+    fun settingsFromJson(remote: JSONObject, current: PlatformBrandConfig): PlatformBrandConfig {
+        val def = AppConfig.defaultBrand
+        fun str(key: String, fallback: String): String =
+            remote.optString(key, "").trim().ifEmpty { fallback }
+        return current.copy(
+            platformNameAr = str("platformNameAr", current.platformNameAr),
+            villageNameAr = str("villageNameAr", current.villageNameAr),
+            hospitalNameAr = str("hospitalNameAr", current.hospitalNameAr),
+            supportPhone = str("supportPhone", current.supportPhone),
+            homeAnnouncementAr = if (remote.has("homeAnnouncementAr")) remote.optString("homeAnnouncementAr", "") else current.homeAnnouncementAr,
+            apkDownloadUrl = str("apkDownloadUrl", current.apkDownloadUrl),
+            medicationsApiUrl = if (remote.has("medicationsApiUrl")) remote.optString("medicationsApiUrl", "") else current.medicationsApiUrl,
+            adminPin = str("adminPin", current.adminPin),
+            adminUsername = str("adminUsername", current.adminUsername),
+            adminPassword = str("adminPassword", current.adminPassword),
+            globalChatEnabled = if (remote.has("globalChatEnabled")) remote.optBoolean("globalChatEnabled", current.globalChatEnabled) else current.globalChatEnabled,
+            appVersionLabel = "v1.0.0",
+            firebaseApiKey = str("firebaseApiKey", def.firebaseApiKey),
+            firebaseAuthDomain = str("firebaseAuthDomain", def.firebaseAuthDomain),
+            firebaseProjectId = str("firebaseProjectId", def.firebaseProjectId),
+            firebaseStorageBucket = str("firebaseStorageBucket", def.firebaseStorageBucket),
+            firebaseMessagingSenderId = str("firebaseMessagingSenderId", def.firebaseMessagingSenderId),
+            firebaseAppId = str("firebaseAppId", def.firebaseAppId),
+            firebaseVapidKey = str("firebaseVapidKey", def.firebaseVapidKey),
+            workerUrl = str("workerUrl", def.workerUrl),
+        )
+    }
+
+    fun doctorToJson(d: ClinicDoctorEntity): JSONObject = JSONObject().apply {
+        put("id", d.id)
+        put("doctorName", d.doctorName)
+        put("doctorNameEn", d.doctorNameEn)
+        put("specialty", d.specialty)
+        put("additionalSpecialties", JSONArray(d.additionalSpecialties.split("|").map { it.trim() }.filter { it.isNotEmpty() }))
+        put("clinicName", d.clinicName)
+        put("clinicNameEn", d.clinicNameEn)
+        put("clinicType", d.clinicType)
+        put("locationLabel", d.locationLabel)
+        put("locationLabelEn", d.locationLabelEn)
+        put("feeEgp", d.feeEgp)
+        put("workStartMinutes", d.workStartMinutes)
+        put("workEndMinutes", d.workEndMinutes)
+        put("slotDurationMinutes", d.slotDurationMinutes)
+        put("currentDelayMinutes", d.currentDelayMinutes)
+        put("rating", d.rating.toDouble())
+        put("experienceYears", d.experienceYears)
+        put("bio", d.bio)
+        put("mapsUrl", d.mapsUrl)
+        put("username", d.username)
+        put("password", d.password)
+        put("chatEnabled", d.chatEnabled)
+    }
+
+    fun doctorFromJson(j: JSONObject): ClinicDoctorEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val name = j.optString("doctorName", "").trim()
+        if (id.isEmpty() || name.isEmpty()) return null
+        val addSpecRaw = j.opt("additionalSpecialties")
+        val addSpec = when (addSpecRaw) {
+            is JSONArray -> (0 until addSpecRaw.length()).mapNotNull { addSpecRaw.optString(it).trim().takeIf { s -> s.isNotEmpty() } }.joinToString("|")
+            is String -> addSpecRaw.trim()
+            else -> ""
+        }
+        return ClinicDoctorEntity(
+            id = id,
+            doctorName = name,
+            specialty = j.optString("specialty", "طب عام").trim(),
+            clinicName = j.optString("clinicName", "عيادة $name").trim(),
+            clinicType = j.optString("clinicType", ClinicType.PRIVATE).ifBlank { ClinicType.PRIVATE },
+            locationLabel = j.optString("locationLabel", "قرية الحجايزة"),
+            feeEgp = j.optInt("feeEgp", 150),
+            workStartMinutes = j.optInt("workStartMinutes", 17 * 60),
+            workEndMinutes = j.optInt("workEndMinutes", 21 * 60),
+            slotDurationMinutes = j.optInt("slotDurationMinutes", 20).coerceIn(5, 120),
+            currentDelayMinutes = j.optInt("currentDelayMinutes", 0),
+            rating = j.optDouble("rating", 4.9).toFloat(),
+            experienceYears = j.optInt("experienceYears", 10),
+            bio = j.optString("bio", ""),
+            mapsUrl = j.optString("mapsUrl", ""),
+            username = j.optString("username", id),
+            password = j.optString("password", "1234"),
+            doctorNameEn = j.optString("doctorNameEn", ""),
+            clinicNameEn = j.optString("clinicNameEn", ""),
+            locationLabelEn = j.optString("locationLabelEn", ""),
+            additionalSpecialties = addSpec,
+            chatEnabled = if (j.has("chatEnabled")) j.optBoolean("chatEnabled", true) else true,
+        )
+    }
+
+    fun labToJson(l: MedicalLabEntity): JSONObject = JSONObject().apply {
+        put("id", l.id)
+        put("labName", l.labName)
+        put("phone", l.phone)
+        put("locationLabel", l.locationLabel)
+        put("username", l.username)
+        put("password", l.password)
+        put("createdAtMillis", l.createdAtMillis)
+    }
+
+    fun labFromJson(j: JSONObject): MedicalLabEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val name = j.optString("labName", "").trim()
+        if (id.isEmpty() || name.isEmpty()) return null
+        return MedicalLabEntity(
+            id = id,
+            labName = name,
+            phone = j.optString("phone", ""),
+            locationLabel = j.optString("locationLabel", "قرية الحجايزة"),
+            username = j.optString("username", id),
+            password = j.optString("password", "1234"),
+            createdAtMillis = j.optLong("createdAtMillis", System.currentTimeMillis()),
+        )
+    }
+
+    fun accountToJson(a: PatientAccountEntity): JSONObject = JSONObject().apply {
+        put("id", a.id)
+        put("fullName", a.fullName)
+        put("phone", a.phone)
+        put("nationalId", a.nationalId)
+        put("password", a.password)
+        put("isPhoneVerified", a.isPhoneVerified)
+        put("verifiedBy", a.verifiedBy)
+        put("verifiedAtMillis", a.verifiedAtMillis)
+        put("otpCode", a.otpCode)
+        put("otpCreatedAtMillis", a.otpCreatedAtMillis)
+        put("otpExpiresAtMillis", a.otpExpiresAtMillis)
+        put("otpUsed", a.otpUsed)
+    }
+
+    fun accountFromJson(j: JSONObject): PatientAccountEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val phone = j.optString("phone", "").trim()
+        if (id.isEmpty() || phone.isEmpty()) return null
+        return PatientAccountEntity(
+            id = id,
+            fullName = j.optString("fullName", "مريض"),
+            phone = phone,
+            nationalId = j.optString("nationalId", ""),
+            password = j.optString("password", "1234"),
+            isPhoneVerified = if (j.has("isPhoneVerified")) j.optBoolean("isPhoneVerified", false) else false,
+            verifiedBy = j.optString("verifiedBy", ""),
+            verifiedAtMillis = j.optLong("verifiedAtMillis", 0L),
+            otpCode = j.optString("otpCode", ""),
+            otpCreatedAtMillis = j.optLong("otpCreatedAtMillis", 0L),
+            otpExpiresAtMillis = j.optLong("otpExpiresAtMillis", 0L),
+            otpUsed = if (j.has("otpUsed")) j.optBoolean("otpUsed", false) else false,
+        )
+    }
+
+    fun familyMemberToJson(m: FamilyMemberEntity): JSONObject = JSONObject().apply {
+        put("id", m.id)
+        put("accountId", m.accountId)
+        put("fullName", m.fullName)
+        put("relation", m.relation)
+        put("age", m.age)
+        put("phone", m.phone)
+        put("weightKg", m.weightKg)
+        put("heightCm", m.heightCm)
+        put("bloodType", m.bloodType)
+        put("chronicConditions", JSONArray(ChronicConditionsCatalog.parseKeys(m.chronicConditions)))
+        put("drugAllergies", m.drugAllergies)
+        put("otherChronicNotes", m.otherChronicNotes)
+        put("aiSummaryAr", m.aiSummaryAr)
+        put("aiSummaryEn", m.aiSummaryEn)
+        put("aiSummaryUpdatedAtMillis", m.aiSummaryUpdatedAtMillis)
+    }
+
+    fun familyMemberFromJson(j: JSONObject): FamilyMemberEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val accId = j.optString("accountId", "").trim()
+        val name = j.optString("fullName", "").trim()
+        if (id.isEmpty() || accId.isEmpty() || name.isEmpty()) return null
+        val chronicsRaw = j.opt("chronicConditions")
+        val chronicStr = when (chronicsRaw) {
+            is JSONArray -> ChronicConditionsCatalog.encodeKeys(
+                (0 until chronicsRaw.length()).mapNotNull { chronicsRaw.optString(it).trim().takeIf { s -> s.isNotEmpty() } }
+            )
+            is String -> chronicsRaw.trim()
+            else -> ""
+        }
+        return FamilyMemberEntity(
+            id = id,
+            accountId = accId,
+            fullName = name,
+            relation = j.optString("relation", "فرد أسرة"),
+            age = j.optInt("age", 30),
+            phone = j.optString("phone", ""),
+            weightKg = j.optDouble("weightKg", 0.0),
+            heightCm = j.optDouble("heightCm", 0.0),
+            bloodType = j.optString("bloodType", ""),
+            chronicConditions = chronicStr,
+            drugAllergies = j.optString("drugAllergies", ""),
+            otherChronicNotes = j.optString("otherChronicNotes", ""),
+            aiSummaryAr = j.optString("aiSummaryAr", ""),
+            aiSummaryEn = j.optString("aiSummaryEn", ""),
+            aiSummaryUpdatedAtMillis = j.optLong("aiSummaryUpdatedAtMillis", 0L),
+            aiSummaryError = "",
+        )
+    }
+
+    fun slotToJson(s: AppointmentSlotEntity): JSONObject = JSONObject().apply {
+        put("id", s.id)
+        put("doctorId", s.doctorId)
+        put("dateLabel", s.dateLabel)
+        put("startMinutes", s.startMinutes)
+        put("delayMinutes", s.delayMinutes)
+        put("status", s.status)
+        put("patientName", s.patientName)
+        put("patientPhone", s.patientPhone)
+        put("familyMemberId", s.familyMemberId)
+        put("bookingSource", s.bookingSource)
+        put("bookedAtMillis", s.bookedAtMillis)
+    }
+
+    fun slotFromJson(j: JSONObject): AppointmentSlotEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val docId = j.optString("doctorId", "").trim()
+        if (id.isEmpty() || docId.isEmpty()) return null
+        return AppointmentSlotEntity(
+            id = id,
+            doctorId = docId,
+            dateLabel = j.optString("dateLabel", "اليوم"),
+            startMinutes = j.optInt("startMinutes", 17 * 60),
+            delayMinutes = j.optInt("delayMinutes", 0),
+            status = j.optString("status", SlotStatus.AVAILABLE).ifBlank { SlotStatus.AVAILABLE },
+            patientName = j.optString("patientName", ""),
+            patientPhone = j.optString("patientPhone", ""),
+            familyMemberId = j.optString("familyMemberId", ""),
+            bookingSource = j.optString("bookingSource", BookingSource.NONE),
+            bookedAtMillis = j.optLong("bookedAtMillis", 0L),
+        )
+    }
+
+    fun recordToJson(r: MedicalRecordEntity): JSONObject = JSONObject().apply {
+        put("id", r.id)
+        put("familyMemberId", r.familyMemberId)
+        put("patientName", r.patientName)
+        put("patientPhone", r.patientPhone)
+        put("doctorId", r.doctorId)
+        put("doctorName", r.doctorName)
+        put("specialty", r.specialty)
+        put("visitDateLabel", r.visitDateLabel)
+        put("diagnosis", r.diagnosis)
+        put("medications", r.medications)
+        put("notes", r.notes)
+        put("attachmentMimeType", r.attachmentMimeType)
+        put("attachmentName", r.attachmentName)
+        put("recordType", r.recordType)
+        put("createdAtMillis", r.createdAtMillis)
+        put("diagnosisEn", r.diagnosisEn)
+        put("medicationsEn", r.medicationsEn)
+        put("notesEn", r.notesEn)
+        put("aiReportAr", r.aiReportAr)
+        put("aiReportEn", r.aiReportEn)
+    }
+
+    fun recordFromJson(j: JSONObject, existingLocalAttachmentPath: String = ""): MedicalRecordEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val diag = j.optString("diagnosis", "").trim()
+        if (id.isEmpty()) return null
+        return MedicalRecordEntity(
+            id = id,
+            familyMemberId = j.optString("familyMemberId", ""),
+            patientName = j.optString("patientName", ""),
+            patientPhone = j.optString("patientPhone", ""),
+            doctorId = j.optString("doctorId", ""),
+            doctorName = j.optString("doctorName", ""),
+            specialty = j.optString("specialty", ""),
+            visitDateLabel = j.optString("visitDateLabel", ""),
+            diagnosis = diag.ifBlank { j.optString("attachmentName", "سجل طبي") },
+            medications = j.optString("medications", ""),
+            notes = j.optString("notes", ""),
+            attachmentPath = existingLocalAttachmentPath,
+            attachmentMimeType = j.optString("attachmentMimeType", ""),
+            attachmentName = j.optString("attachmentName", ""),
+            recordType = j.optString("recordType", MedicalRecordType.PRESCRIPTION).ifBlank { MedicalRecordType.PRESCRIPTION },
+            createdAtMillis = j.optLong("createdAtMillis", System.currentTimeMillis()),
+            diagnosisEn = j.optString("diagnosisEn", ""),
+            medicationsEn = j.optString("medicationsEn", ""),
+            notesEn = j.optString("notesEn", ""),
+            aiReportAr = j.optString("aiReportAr", ""),
+            aiReportEn = j.optString("aiReportEn", ""),
+        )
+    }
+
+    fun notificationToJson(n: DelayNotificationEntity): JSONObject = JSONObject().apply {
+        put("id", "notif_${n.id}_${n.createdAtMillis}")
+        put("doctorId", n.doctorId)
+        put("doctorName", n.doctorName)
+        put("clinicName", n.clinicName)
+        put("delayMinutes", n.delayMinutes)
+        put("message", n.message)
+        put("createdAtMillis", n.createdAtMillis)
+        put("isRead", n.isRead)
+        put("targetAudience", n.targetAudience)
+        put("targetId", n.targetId)
+        put("senderLabel", n.senderLabel)
+    }
+
+    fun notificationFromJson(j: JSONObject): DelayNotificationEntity? {
+        val message = j.optString("message", "").trim()
+        if (message.isEmpty()) return null
+        val created = j.optLong("createdAtMillis", System.currentTimeMillis())
+        return DelayNotificationEntity(
+            id = 0L,
+            doctorId = j.optString("doctorId", ""),
+            doctorName = j.optString("doctorName", ""),
+            clinicName = j.optString("clinicName", ""),
+            delayMinutes = j.optInt("delayMinutes", 0),
+            message = message,
+            createdAtMillis = created,
+            isRead = j.optBoolean("isRead", false),
+            targetAudience = j.optString("targetAudience", NotificationAudience.ALL).ifBlank { NotificationAudience.ALL },
+            targetId = j.optString("targetId", ""),
+            senderLabel = j.optString("senderLabel", ""),
+        )
+    }
+
+    fun messageToJson(m: DirectMessageEntity): JSONObject = JSONObject().apply {
+        put("id", m.id)
+        put("threadType", m.threadType)
+        put("patientAccountId", m.patientAccountId)
+        put("patientName", m.patientName)
+        put("patientPhone", m.patientPhone)
+        put("doctorId", m.doctorId)
+        put("doctorName", m.doctorName)
+        put("clinicName", m.clinicName)
+        put("senderRole", m.senderRole)
+        put("senderName", m.senderName)
+        put("body", m.body)
+        put("createdAtMillis", m.createdAtMillis)
+        put("isReadByPatient", m.isReadByPatient)
+        put("isReadByClinic", m.isReadByClinic)
+        put("isReadByAdmin", m.isReadByAdmin)
+    }
+
+    fun messageFromJson(j: JSONObject): DirectMessageEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val body = j.optString("body", "").trim()
+        if (id.isEmpty() || body.isEmpty()) return null
+        return DirectMessageEntity(
+            id = id,
+            threadType = j.optString("threadType", "PATIENT_CLINIC"),
+            patientAccountId = j.optString("patientAccountId", ""),
+            patientName = j.optString("patientName", ""),
+            patientPhone = j.optString("patientPhone", ""),
+            doctorId = j.optString("doctorId", ""),
+            doctorName = j.optString("doctorName", ""),
+            clinicName = j.optString("clinicName", ""),
+            senderRole = j.optString("senderRole", "PATIENT"),
+            senderName = j.optString("senderName", ""),
+            body = body,
+            createdAtMillis = j.optLong("createdAtMillis", System.currentTimeMillis()),
+            isReadByPatient = j.optBoolean("isReadByPatient", false),
+            isReadByClinic = j.optBoolean("isReadByClinic", false),
+            isReadByAdmin = j.optBoolean("isReadByAdmin", false),
+        )
+    }
+
+    fun blockedPhoneToJson(b: BlockedPhoneEntity): JSONObject = JSONObject().apply {
+        put("phone", b.phone)
+        put("reason", b.reason)
+        put("blockedAtMillis", b.blockedAtMillis)
+    }
+
+    fun blockedPhoneFromJson(j: JSONObject): BlockedPhoneEntity? {
+        val phone = j.optString("phone", j.optString("_docId", "")).trim()
+        if (phone.isEmpty()) return null
+        return BlockedPhoneEntity(
+            phone = phone,
+            reason = j.optString("reason", "حظر إداري بسبب حجز وهمي / مخالفة"),
+            blockedAtMillis = j.optLong("blockedAtMillis", System.currentTimeMillis()),
+        )
+    }
+
+    fun activationCodeToJson(c: ActivationOtpCodeEntity): JSONObject = JSONObject().apply {
+        put("code", c.code)
+        put("isUsed", c.isUsed)
+        put("createdAtMillis", c.createdAtMillis)
+        put("usedByName", c.usedByName)
+        put("usedByPhone", c.usedByPhone)
+        put("usedAtMillis", c.usedAtMillis)
+        put("generatedBy", c.generatedBy)
+    }
+
+    fun activationCodeFromJson(j: JSONObject): ActivationOtpCodeEntity? {
+        val code = j.optString("code", j.optString("_docId", "")).trim()
+        if (code.isEmpty()) return null
+        return ActivationOtpCodeEntity(
+            code = code,
+            isUsed = j.optBoolean("isUsed", false),
+            createdAtMillis = j.optLong("createdAtMillis", System.currentTimeMillis()),
+            usedByName = j.optString("usedByName", ""),
+            usedByPhone = j.optString("usedByPhone", ""),
+            usedAtMillis = j.optLong("usedAtMillis", 0L),
+            generatedBy = j.optString("generatedBy", "ADMIN"),
+        )
+    }
+}

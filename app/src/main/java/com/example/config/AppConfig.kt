@@ -35,15 +35,15 @@ data class PlatformBrandConfig(
     val adminPassword: String = "teb2026",
     val adminPin: String = "202600",
     val globalChatEnabled: Boolean = true,
-    // إعدادات الربط السحابي (Firebase Web Config + Cloudflare Worker URL) معزولة تحت مسار teb_alhajayzah
-    val firebaseApiKey: String = "",
-    val firebaseAuthDomain: String = "",
-    val firebaseProjectId: String = "",
-    val firebaseStorageBucket: String = "",
-    val firebaseMessagingSenderId: String = "",
-    val firebaseAppId: String = "",
-    val firebaseVapidKey: String = "",
-    val workerUrl: String = "",
+    // إعدادات الربط السحابي الافتراضية (Firebase Web Config + Cloudflare Worker URL) معزولة تحت مسار teb_alhajayzah
+    val firebaseApiKey: String = "AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs",
+    val firebaseAuthDomain: String = "gen-lang-client-0015800098.firebaseapp.com",
+    val firebaseProjectId: String = "gen-lang-client-0015800098",
+    val firebaseStorageBucket: String = "gen-lang-client-0015800098.firebasestorage.app",
+    val firebaseMessagingSenderId: String = "588431549120",
+    val firebaseAppId: String = "1:588431549120:web:c10278b3df39d11a668325",
+    val firebaseVapidKey: String = "BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw",
+    val workerUrl: String = "https://masarik-otp.masarik-tourism.workers.dev",
     @param:DrawableRes val logoRes: Int = R.drawable.app_icon_fg,
     @param:DrawableRes val heroBannerRes: Int = R.drawable.img_hospital_banner,
     @param:DrawableRes val medicalRecordIllustRes: Int = R.drawable.img_medical_record,
@@ -58,13 +58,19 @@ data class PlatformBrandConfig(
  */
 object CloudNamespacePaths {
     const val ROOT = "teb_alhajayzah"
-    const val USERS = "$ROOT/users"
-    const val CLINICS = "$ROOT/clinics"
-    const val APPOINTMENTS = "$ROOT/appointments"
-    const val MESSAGES = "$ROOT/messages"
-    const val NOTIFICATIONS = "$ROOT/notifications"
-    const val RECORDS = "$ROOT/records"
-    const val CONFIG = "$ROOT/config"
+    const val SETTINGS = "$ROOT/settings"
+    const val DATA_ROOT = "$ROOT/data"
+    const val USERS = "$DATA_ROOT/accounts"
+    const val FAMILY_MEMBERS = "$DATA_ROOT/family_members"
+    const val CLINICS = "$DATA_ROOT/doctors"
+    const val LABS = "$DATA_ROOT/labs"
+    const val APPOINTMENTS = "$DATA_ROOT/slots"
+    const val RECORDS = "$DATA_ROOT/records"
+    const val MESSAGES = "$DATA_ROOT/messages"
+    const val NOTIFICATIONS = "$DATA_ROOT/notifications"
+    const val BLOCKED_PHONES = "$DATA_ROOT/blocked_phones"
+    const val ACTIVATION_CODES = "$DATA_ROOT/activation_codes"
+    const val CONFIG = SETTINGS
 }
 
 object AppConfig {
