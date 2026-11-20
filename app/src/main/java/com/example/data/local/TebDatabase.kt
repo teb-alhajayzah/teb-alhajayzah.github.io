@@ -19,8 +19,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         BlockedPhoneEntity::class,
         ActivationOtpCodeEntity::class,
         MedicalLabEntity::class,
+        DirectMessageEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -154,6 +155,37 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `chatEnabled` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `delay_notifications` ADD COLUMN `targetAudience` TEXT NOT NULL DEFAULT 'ALL'")
+                db.execSQL("ALTER TABLE `delay_notifications` ADD COLUMN `targetId` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `delay_notifications` ADD COLUMN `senderLabel` TEXT NOT NULL DEFAULT ''")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `direct_messages` (
+                        `id` TEXT NOT NULL,
+                        `threadType` TEXT NOT NULL,
+                        `patientAccountId` TEXT NOT NULL DEFAULT '',
+                        `patientName` TEXT NOT NULL DEFAULT '',
+                        `patientPhone` TEXT NOT NULL DEFAULT '',
+                        `doctorId` TEXT NOT NULL DEFAULT '',
+                        `doctorName` TEXT NOT NULL DEFAULT '',
+                        `clinicName` TEXT NOT NULL DEFAULT '',
+                        `senderRole` TEXT NOT NULL,
+                        `senderName` TEXT NOT NULL,
+                        `body` TEXT NOT NULL,
+                        `createdAtMillis` INTEGER NOT NULL DEFAULT 0,
+                        `isReadByPatient` INTEGER NOT NULL DEFAULT 0,
+                        `isReadByClinic` INTEGER NOT NULL DEFAULT 0,
+                        `isReadByAdmin` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -175,6 +207,7 @@ abstract class TebDatabase : RoomDatabase() {
                             MIGRATION_7_8,
                             MIGRATION_8_9,
                             MIGRATION_9_10,
+                            MIGRATION_10_11,
                         )
                         .build()
                 }.also { INSTANCE = it }

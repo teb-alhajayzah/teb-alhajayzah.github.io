@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventBusy
@@ -120,10 +122,13 @@ fun PatientHomeScreen(
     onOpenAddFamilyDialog: () -> Unit,
     onOpenDoctorBooking: (String) -> Unit,
     onCancelSlot: (String) -> Unit,
+    onRescheduleSlot: (fromSlotId: String, toSlotId: String) -> Unit = { _, _ -> },
     onOpenOtpAccountDialog: () -> Unit,
+    onChatWithClinic: (String) -> Unit = {},
     onCheckAppUpdate: () -> Unit = {},
     onShowMessage: (String) -> Unit,
 ) {
+    var slotToReschedule by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     val context = LocalContext.current
     val isEn = state.isEn
     val activeMember = state.activeMember
@@ -367,6 +372,8 @@ fun PatientHomeScreen(
                                 bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
                                 isEn = isEn,
                                 currencyLabel = currencyLabel,
+                                canChatWithClinic = state.canPatientChatWith(doctor),
+                                onChatWithClinic = { onChatWithClinic(doctor.id) },
                                 onBookClick = { onOpenDoctorBooking(doctor.id) },
                             )
                         }
@@ -656,6 +663,7 @@ fun PatientHomeScreen(
                             doctor = doctor,
                             isEn = isEn,
                             onOpenClinic = { onOpenDoctorBooking(doctor.id) },
+                            onReschedule = { slotToReschedule = slot },
                             onCancel = { onCancelSlot(slot.id) },
                         )
                     }
@@ -714,6 +722,8 @@ fun PatientHomeScreen(
                         bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
                         isEn = isEn,
                         currencyLabel = currencyLabel,
+                        canChatWithClinic = state.canPatientChatWith(doctor),
+                        onChatWithClinic = { onChatWithClinic(doctor.id) },
                         onBookClick = { onOpenDoctorBooking(doctor.id) },
                     )
                 }
@@ -782,6 +792,23 @@ fun PatientHomeScreen(
                 )
             }
         }
+    }
+
+    val homeRescheduleSlot = slotToReschedule
+    if (homeRescheduleSlot != null) {
+        val doctorOpenSlots = state.slotsForDoctor(homeRescheduleSlot.doctorId)
+            .filter { it.status == SlotStatus.AVAILABLE }
+        RescheduleSlotPickerDialog(
+            currentSlot = homeRescheduleSlot,
+            availableSlots = doctorOpenSlots,
+            isPatient = true,
+            isEn = isEn,
+            onPickNewSlot = { targetSlotId ->
+                onRescheduleSlot(homeRescheduleSlot.id, targetSlotId)
+                slotToReschedule = null
+            },
+            onDismiss = { slotToReschedule = null },
+        )
     }
 }
 
@@ -1093,6 +1120,7 @@ private fun MyBookingCard(
     doctor: ClinicDoctorEntity,
     isEn: Boolean = false,
     onOpenClinic: () -> Unit,
+    onReschedule: () -> Unit = {},
     onCancel: () -> Unit,
 ) {
     Surface(
@@ -1155,25 +1183,36 @@ private fun MyBookingCard(
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = bi(isEn, "المريض: ${slot.patientName}", "Patient: ${slot.patientName}"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onCancel) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = onCancel,
+                        modifier = Modifier.testTag("patient_cancel_slot_${slot.id}"),
+                    ) {
                         Text(bi(isEn, "إلغاء", "Cancel"), color = SlotBookedBorder)
+                    }
+                    OutlinedButton(
+                        onClick = onReschedule,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("patient_reschedule_slot_${slot.id}"),
+                    ) {
+                        Text(bi(isEn, "تعديل الموعد", "Reschedule"), style = MaterialTheme.typography.labelMedium)
                     }
                     Button(
                         onClick = onOpenClinic,
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.weight(1f),
                     ) {
-                        Text(bi(isEn, "تفاصيل العيادة", "Clinic Details"))
+                        Text(bi(isEn, "العيادة", "Clinic"))
                     }
                 }
             }
@@ -1189,6 +1228,7 @@ fun ClinicsDirectoryScreen(
     showSpecialtyChips: Boolean,
     onSearchChange: (String) -> Unit,
     onSelectSpecialty: (String?) -> Unit,
+    onChatWithClinic: (String) -> Unit = {},
     onOpenDoctorBooking: (String) -> Unit,
 ) {
     val isEn = state.isEn
@@ -1306,6 +1346,8 @@ fun ClinicsDirectoryScreen(
                         bookedCount = doctorSlots.count { it.status == SlotStatus.BOOKED },
                         isEn = isEn,
                         currencyLabel = currencyLabel,
+                        canChatWithClinic = state.canPatientChatWith(doctor),
+                        onChatWithClinic = { onChatWithClinic(doctor.id) },
                         onBookClick = { onOpenDoctorBooking(doctor.id) },
                     )
                 }
@@ -1321,6 +1363,8 @@ fun DoctorDirectoryCard(
     bookedCount: Int,
     isEn: Boolean = false,
     currencyLabel: String = if (isEn) "EGP" else "ج.م",
+    canChatWithClinic: Boolean = false,
+    onChatWithClinic: (() -> Unit)? = null,
     onBookClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1548,6 +1592,26 @@ fun DoctorDirectoryCard(
                     Text(bi(isEn, "عرض المواعيد", "View Slots"))
                 }
             }
+
+            if (canChatWithClinic && onChatWithClinic != null) {
+                OutlinedButton(
+                    onClick = onChatWithClinic,
+                    border = BorderStroke(1.2.dp, TealPrimary),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("doctor_card_chat_${doctor.id}"),
+                ) {
+                    Icon(Icons.Filled.Chat, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = bi(isEn, "💬 مراسلة العيادة", "💬 Message Clinic"),
+                        color = TealPrimary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
         }
     }
 }
@@ -1561,17 +1625,21 @@ fun DoctorBookingScreen(
     activeMember: FamilyMemberEntity?,
     isAccountVerified: Boolean = false,
     isBookingSubmitting: Boolean = false,
+    canChatWithClinic: Boolean = false,
     isEn: Boolean = false,
     onSelectFamilyMember: (String) -> Unit,
     onRequireAccountForBooking: () -> Unit = {},
+    onChatWithClinic: (() -> Unit)? = null,
     onBookSlot: (slotId: String, member: FamilyMemberEntity) -> Unit,
     onCancelSlot: (slotId: String) -> Unit,
+    onRescheduleSlot: (fromSlotId: String, toSlotId: String) -> Unit = { _, _ -> },
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
 
     val context = LocalContext.current
     var slotPendingConfirm by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
+    var slotPendingReschedule by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     val familyIds = remember(familyMembers) { familyMembers.map { it.id }.toSet() }
     val familyNames = remember(familyMembers) { familyMembers.map { it.fullName }.toSet() }
     val currencyLabel = if (isEn) "EGP" else "ج.م"
@@ -1684,6 +1752,25 @@ fun DoctorBookingScreen(
                                 Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(bi(isEn, "موقع العيادة على خرائط جوجل", "View Clinic on Google Maps"))
+                            }
+                        }
+                        if (canChatWithClinic && onChatWithClinic != null) {
+                            OutlinedButton(
+                                onClick = onChatWithClinic,
+                                border = BorderStroke(1.2.dp, TealPrimary),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("booking_chat_clinic_button"),
+                            ) {
+                                Icon(Icons.Filled.Chat, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = bi(isEn, "💬 مراسلة العيادة", "💬 Message Clinic"),
+                                    color = TealPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                )
                             }
                         }
                         if (doctor.currentDelayMinutes > 0) {
@@ -1867,16 +1954,28 @@ fun DoctorBookingScreen(
                                     color = textColor,
                                 )
                                 if (isMine) {
-                                    Text(
-                                        text = bi(isEn, "إلغاء الحجز", "Cancel"),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = SlotBookedBorder,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .clickable { onCancelSlot(slot.id) }
-                                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = bi(isEn, "إلغاء", "Cancel"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = SlotBookedBorder,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .clickable { onCancelSlot(slot.id) }
+                                                .padding(horizontal = 5.dp, vertical = 2.dp),
+                                        )
+                                        Text(
+                                            text = bi(isEn, "تعديل", "Move"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TealPrimary,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .clickable { slotPendingReschedule = slot }
+                                                .padding(horizontal = 5.dp, vertical = 2.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1941,6 +2040,97 @@ fun DoctorBookingScreen(
             },
         )
     }
+
+    val movingSlot = slotPendingReschedule
+    if (movingSlot != null) {
+        val openAlternatives = slots.filter { it.status == SlotStatus.AVAILABLE }.sortedBy { it.startMinutes }
+        RescheduleSlotPickerDialog(
+            currentSlot = movingSlot,
+            availableSlots = openAlternatives,
+            isPatient = true,
+            isEn = isEn,
+            onPickNewSlot = { targetId ->
+                onRescheduleSlot(movingSlot.id, targetId)
+                slotPendingReschedule = null
+            },
+            onDismiss = { slotPendingReschedule = null },
+        )
+    }
+}
+
+@Composable
+fun RescheduleSlotPickerDialog(
+    currentSlot: AppointmentSlotEntity,
+    availableSlots: List<AppointmentSlotEntity>,
+    isPatient: Boolean,
+    isEn: Boolean,
+    onPickNewSlot: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(bi(isEn, "تعديل موعد الكشف", "Reschedule Appointment")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = bi(
+                        isEn,
+                        "الموعد الحالي: ${TimeUtils.formatMinutesAr(currentSlot.effectiveMinutes, false)} (${currentSlot.patientName})",
+                        "Current slot: ${TimeUtils.formatMinutesAr(currentSlot.effectiveMinutes, true)} (${currentSlot.patientName})",
+                    ),
+                    fontWeight = FontWeight.Bold,
+                )
+                if (isPatient) {
+                    Text(
+                        text = bi(
+                            isEn,
+                            "ملاحظة: يسمح بإلغاء أو تعديل الموعد للمريض قبل الكشف بساعتين على الأقل.",
+                            "Note: Patients may cancel or reschedule at least 2 hours before the appointment.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (availableSlots.isEmpty()) {
+                    Text(
+                        text = bi(isEn, "لا توجد مواعيد أخرى متاحة حالياً في نفس العيادة.", "No other open slots available right now in this clinic."),
+                        color = SlotBookedBorder,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 260.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(availableSlots, key = { it.id }) { target ->
+                            OutlinedButton(
+                                onClick = { onPickNewSlot(target.id) },
+                                modifier = Modifier.fillMaxWidth().height(44.dp),
+                            ) {
+                                Text(
+                                    text = bi(
+                                        isEn,
+                                        "نقل إلى الساعة ${TimeUtils.formatMinutesAr(target.effectiveMinutes, false)}",
+                                        "Move to ${TimeUtils.formatMinutesAr(target.effectiveMinutes, true)}",
+                                    ),
+                                    color = SlotAvailableText,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(bi(isEn, "إغلاق", "Close"))
+            }
+        },
+    )
 }
 
 @Composable

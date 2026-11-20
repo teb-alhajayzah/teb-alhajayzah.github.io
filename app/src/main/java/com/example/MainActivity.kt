@@ -54,7 +54,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.ChatThreadType
+import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
+import com.example.data.local.MessageSenderRole
 import com.example.data.local.TebDatabase
 import com.example.data.repository.TebRepository
 import com.example.ui.AppLanguage
@@ -70,6 +73,8 @@ import com.example.ui.admin.SuperAdminDashboardScreen
 import com.example.ui.components.AccountAndFamilyDialog
 import com.example.ui.components.AdminPinLockDialog
 import com.example.ui.components.AttachmentPreviewTarget
+import com.example.ui.components.DirectChatDialog
+import com.example.ui.components.DirectChatTarget
 import com.example.ui.components.FullImagePreviewDialog
 import com.example.ui.components.NotificationsDialog
 import com.example.ui.components.TebTopHeader
@@ -146,10 +151,53 @@ fun TebAlHajayzahAppRoot(
     var showNotificationsDialog by remember { mutableStateOf(false) }
     var showAdminPinDialog by remember { mutableStateOf(false) }
     var previewAttachment by remember { mutableStateOf<AttachmentPreviewTarget?>(null) }
+    var activeChatTarget by remember { mutableStateOf<DirectChatTarget?>(null) }
 
     val showMessage: (String) -> Unit = { msg ->
         coroutineScope.launch {
             snackbarHostState.showSnackbar(msg)
+        }
+    }
+
+    val openPatientClinicChat: (String) -> Unit = { doctorId ->
+        val doctor = state.doctors.firstOrNull { it.id == doctorId }
+        val account = state.activeAccount
+        if (doctor != null) {
+            if (!state.canPatientChatWith(doctor)) {
+                showMessage(bi(isEn, "المحادثة مع هذه العيادة متوقفة حالياً", "Messaging is currently disabled for this clinic"))
+            } else if (account == null) {
+                showAccountDialog = true
+                showMessage(bi(isEn, "يرجى تسجيل الدخول أو إنشاء حساب لمراسلة العيادة", "Please sign in first to message the clinic"))
+            } else {
+                activeChatTarget = DirectChatTarget(
+                    threadType = ChatThreadType.PATIENT_CLINIC,
+                    viewerRole = MessageSenderRole.PATIENT,
+                    title = if (isEn && doctor.clinicNameEn.isNotBlank()) doctor.clinicNameEn else doctor.clinicName,
+                    subtitle = if (isEn && doctor.doctorNameEn.isNotBlank()) doctor.doctorNameEn else doctor.doctorName,
+                    patientAccountId = account.id,
+                    patientName = account.fullName,
+                    patientPhone = account.phone,
+                    doctorId = doctor.id,
+                )
+            }
+        }
+    }
+
+    val openPatientSupportChat: () -> Unit = {
+        val account = state.activeAccount
+        if (account == null) {
+            showAccountDialog = true
+            showMessage(bi(isEn, "يرجى تسجيل الدخول أولاً لمراسلة الإدارة", "Please sign in first to contact Admin"))
+        } else {
+            activeChatTarget = DirectChatTarget(
+                threadType = ChatThreadType.PATIENT_ADMIN,
+                viewerRole = MessageSenderRole.PATIENT,
+                title = bi(isEn, "الإدارة والدعم الفني", "Platform Admin & Support"),
+                subtitle = bi(isEn, "تواصل مباشر مع إدارة منصة طب الحجايزة", "Direct support with Teb Al-Hajayzah Admin"),
+                patientAccountId = account.id,
+                patientName = account.fullName,
+                patientPhone = account.phone,
+            )
         }
     }
 
@@ -196,7 +244,6 @@ fun TebAlHajayzahAppRoot(
                     onRefresh = viewModel::smartRefreshData,
                     onSwitchRole = viewModel::switchRoleMode,
                     onOpenNotifications = {
-                        viewModel.markNotificationsRead()
                         showNotificationsDialog = true
                     },
                     onOpenAccount = { showAccountDialog = true },
@@ -270,13 +317,16 @@ fun TebAlHajayzahAppRoot(
                                         activeMember = state.activeMember,
                                         isAccountVerified = state.isAccountVerified,
                                         isBookingSubmitting = state.isBookingSubmitting,
+                                        canChatWithClinic = state.canPatientChatWith(bookingDoctor),
                                         isEn = isEn,
                                         onSelectFamilyMember = viewModel::selectActiveFamilyMember,
                                         onRequireAccountForBooking = {
                                             viewModel.openAccountDialogForVerification()
                                         },
+                                        onChatWithClinic = { openPatientClinicChat(bookingDoctor.id) },
                                         onBookSlot = viewModel::bookAppointmentAsPatient,
-                                        onCancelSlot = viewModel::cancelAppointment,
+                                        onCancelSlot = viewModel::cancelBookingByPatient,
+                                        onRescheduleSlot = viewModel::rescheduleBookingByPatient,
                                         onBack = viewModel::closeDoctorBooking,
                                     )
                                 } else {
@@ -294,10 +344,12 @@ fun TebAlHajayzahAppRoot(
                                                 onSelectFamilyMember = viewModel::selectActiveFamilyMember,
                                                 onOpenAddFamilyDialog = { showAccountDialog = true },
                                                 onOpenDoctorBooking = viewModel::openDoctorBooking,
-                                                onCancelSlot = viewModel::cancelAppointment,
+                                                onCancelSlot = viewModel::cancelBookingByPatient,
+                                                onRescheduleSlot = viewModel::rescheduleBookingByPatient,
                                                 onOpenOtpAccountDialog = {
                                                     showAccountDialog = true
                                                 },
+                                                onChatWithClinic = openPatientClinicChat,
                                                 onCheckAppUpdate = {
                                                     viewModel.checkAppUpdateAndSync { apkUrl ->
                                                         runCatching {
@@ -323,6 +375,7 @@ fun TebAlHajayzahAppRoot(
                                                 showSpecialtyChips = false,
                                                 onSearchChange = viewModel::updateSearchQuery,
                                                 onSelectSpecialty = viewModel::selectSpecialtyFilter,
+                                                onChatWithClinic = openPatientClinicChat,
                                                 onOpenDoctorBooking = viewModel::openDoctorBooking,
                                             )
                                         }
@@ -335,6 +388,7 @@ fun TebAlHajayzahAppRoot(
                                                 showSpecialtyChips = false,
                                                 onSearchChange = viewModel::updateSearchQuery,
                                                 onSelectSpecialty = viewModel::selectSpecialtyFilter,
+                                                onChatWithClinic = openPatientClinicChat,
                                                 onOpenDoctorBooking = viewModel::openDoctorBooking,
                                             )
                                         }
@@ -347,6 +401,7 @@ fun TebAlHajayzahAppRoot(
                                                 showSpecialtyChips = true,
                                                 onSearchChange = viewModel::updateSearchQuery,
                                                 onSelectSpecialty = viewModel::selectSpecialtyFilter,
+                                                onChatWithClinic = openPatientClinicChat,
                                                 onOpenDoctorBooking = viewModel::openDoctorBooking,
                                             )
                                         }
@@ -442,7 +497,8 @@ fun TebAlHajayzahAppRoot(
                                                         state = state,
                                                         onLogoutDoctor = viewModel::logoutDoctor,
                                                         onBookManualPhoneSlot = viewModel::bookManualPhoneSlot,
-                                                        onCancelSlot = viewModel::cancelAppointment,
+                                                        onCancelSlot = viewModel::cancelBookingByClinic,
+                                                        onRescheduleSlot = viewModel::rescheduleBookingByClinic,
                                                         onDelayDoctor = viewModel::delayDoctorAppointments,
                                                         onGenerateSchedule = viewModel::generateSchedule,
                                                         onCompleteVisit = { slotId, diag, meds, notes, path, diagEn, medsEn, notesEn, repAr, repEn ->
@@ -461,11 +517,15 @@ fun TebAlHajayzahAppRoot(
                                                         },
                                                         onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
                                                         onSearchPatientsForActivation = viewModel::searchPatientsForClinicActivation,
-                                                        onActivatePatientByClinic = viewModel::activatePatientByClinic,
-                                                        onRefreshAiSummary = viewModel::refreshAiSummaryForMember,
-                                                        onPreviewAttachment = { previewAttachment = it },
-                                                        onShowMessage = showMessage,
-                                                    )
+                                                         onActivatePatientByClinic = viewModel::activatePatientByClinic,
+                                                         onRefreshAiSummary = viewModel::refreshAiSummaryForMember,
+                                                         onOpenChatThread = { target -> activeChatTarget = target },
+                                                         onSendPatientAlert = { accId, patName, msg, onSent ->
+                                                             viewModel.sendClinicToPatientAlert(accId, patName, msg, onSent)
+                                                         },
+                                                         onPreviewAttachment = { previewAttachment = it },
+                                                         onShowMessage = showMessage,
+                                                     )
                                                 }
                                             }
 
@@ -572,6 +632,15 @@ fun TebAlHajayzahAppRoot(
                                         onRegenerateUserOtp = viewModel::regenerateAccountOtpForAdmin,
                                         onUpdateUser = viewModel::updatePatientAccountByAdmin,
                                         onDeleteUser = viewModel::deletePatientAccountByAdmin,
+                                        onToggleGlobalChat = viewModel::setGlobalChatEnabled,
+                                        onToggleClinicChat = viewModel::setClinicChatEnabled,
+                                        onSendAdminGlobalBroadcast = { msg, onSent ->
+                                            viewModel.sendAdminGlobalBroadcast(msg, onSent)
+                                        },
+                                        onSendAdminClinicAlert = { docId, msg, onSent ->
+                                            viewModel.sendAdminClinicAlert(docId, msg, onSent)
+                                        },
+                                        onOpenChatThread = { target -> activeChatTarget = target },
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
@@ -592,6 +661,7 @@ fun TebAlHajayzahAppRoot(
             activeMemberId = state.activeMemberId,
             otpWhatsappPhone = state.brandConfig.otpWhatsappPhone,
             appVersionLabel = state.brandConfig.appVersionLabel,
+            unreadSupportCount = state.unreadPatientSupportMessagesFromAdmin(),
             isEn = isEn,
             onSelectMember = viewModel::selectActiveFamilyMember,
             onAddFamilyMember = { name, relation, age, phone ->
@@ -604,6 +674,7 @@ fun TebAlHajayzahAppRoot(
             onLogoutPatient = viewModel::logoutPatient,
             onVerifyOtp = viewModel::verifyActiveAccountOtp,
             onRegenerateOtp = viewModel::regenerateActiveAccountOtp,
+            onOpenSupportChat = openPatientSupportChat,
             onTriggerHiddenAdmin = {
                 if (state.isAdminLoggedIn) {
                     viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN)
@@ -633,9 +704,70 @@ fun TebAlHajayzahAppRoot(
 
     if (showNotificationsDialog) {
         NotificationsDialog(
-            notifications = state.notifications,
+            notifications = state.visibleNotificationsForCurrentRole(),
+            directMessages = state.directMessages,
+            roleMode = state.roleMode,
+            activeAccount = state.activeAccount,
+            loggedInDoctor = state.loggedInDoctor,
             isEn = isEn,
+            onMarkAllRead = viewModel::markCurrentRoleNotificationsRead,
+            onOpenChatThread = { target -> activeChatTarget = target },
             onDismiss = { showNotificationsDialog = false },
+        )
+    }
+
+    val chatTarget = activeChatTarget
+    if (chatTarget != null) {
+        DirectChatDialog(
+            target = chatTarget,
+            messages = state.directMessages,
+            isEn = isEn,
+            onMarkThreadRead = {
+                viewModel.markDirectThreadRead(
+                    threadType = chatTarget.threadType,
+                    viewerRole = chatTarget.viewerRole,
+                    patientAccountId = chatTarget.patientAccountId,
+                    doctorId = chatTarget.doctorId,
+                )
+            },
+            onSendMessage = { body, onDone ->
+                when (chatTarget.threadType) {
+                    ChatThreadType.PATIENT_CLINIC -> {
+                        if (chatTarget.viewerRole == MessageSenderRole.PATIENT) {
+                            viewModel.sendPatientToClinicMessage(chatTarget.doctorId, body, onDone)
+                        } else {
+                            viewModel.sendClinicReplyToPatient(
+                                patientAccountId = chatTarget.patientAccountId,
+                                patientName = chatTarget.patientName,
+                                patientPhone = chatTarget.patientPhone,
+                                body = body,
+                                onSent = onDone,
+                            )
+                        }
+                    }
+                    ChatThreadType.PATIENT_ADMIN -> {
+                        if (chatTarget.viewerRole == MessageSenderRole.PATIENT) {
+                            viewModel.sendPatientToAdminMessage(body, onDone)
+                        } else {
+                            viewModel.sendAdminReplyToPatient(
+                                patientAccountId = chatTarget.patientAccountId,
+                                patientName = chatTarget.patientName,
+                                patientPhone = chatTarget.patientPhone,
+                                body = body,
+                                onSent = onDone,
+                            )
+                        }
+                    }
+                    ChatThreadType.CLINIC_ADMIN -> {
+                        if (chatTarget.viewerRole == MessageSenderRole.CLINIC) {
+                            viewModel.sendClinicToAdminMessage(body, onDone)
+                        } else {
+                            viewModel.sendAdminReplyToClinic(chatTarget.doctorId, body, onDone)
+                        }
+                    }
+                }
+            },
+            onDismiss = { activeChatTarget = null },
         )
     }
 

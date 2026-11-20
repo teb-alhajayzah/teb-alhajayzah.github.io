@@ -9,13 +9,17 @@ import com.example.data.local.ActivationOtpCodeEntity
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.BlockedPhoneEntity
 import com.example.data.local.BookingSource
+import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.DelayNotificationEntity
+import com.example.data.local.DirectMessageEntity
 import com.example.data.local.DoctorFavoriteMedEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
 import com.example.data.local.MedicalRecordEntity
+import com.example.data.local.MessageSenderRole
+import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
 import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
@@ -80,6 +84,7 @@ data class TebUiState(
     val allSlots: List<AppointmentSlotEntity> = emptyList(),
     val medicalRecords: List<MedicalRecordEntity> = emptyList(),
     val notifications: List<DelayNotificationEntity> = emptyList(),
+    val directMessages: List<DirectMessageEntity> = emptyList(),
     val blockedPhones: List<BlockedPhoneEntity> = emptyList(),
     val loggedInDoctorId: String? = null,
     val loggedInLabId: String? = null,
@@ -128,8 +133,90 @@ data class TebUiState(
     val loggedInLab: MedicalLabEntity?
         get() = labs.firstOrNull { it.id == loggedInLabId }
 
+    fun canPatientChatWith(doctor: ClinicDoctorEntity): Boolean =
+        brandConfig.globalChatEnabled && doctor.chatEnabled
+
+    fun visibleNotificationsForCurrentRole(): List<DelayNotificationEntity> {
+        val accId = activeAccount?.id.orEmpty()
+        val accPhone = activeAccount?.phone.orEmpty()
+        val famIds = familyMembers.map { it.id }.toSet()
+        return notifications.filter { alert ->
+            when (roleMode) {
+                AppRoleMode.DOCTOR_ADMIN -> {
+                    alert.targetAudience == NotificationAudience.ALL ||
+                        (alert.targetAudience == NotificationAudience.CLINIC &&
+                            (alert.targetId.isBlank() || alert.targetId == loggedInDoctorId))
+                }
+                AppRoleMode.SUPER_ADMIN -> {
+                    alert.targetAudience == NotificationAudience.ADMIN ||
+                        alert.targetAudience == NotificationAudience.ALL
+                }
+                AppRoleMode.PATIENT -> {
+                    alert.targetAudience == NotificationAudience.ALL ||
+                        (alert.targetAudience == NotificationAudience.PATIENT && (
+                            alert.targetId.isBlank() ||
+                                (accId.isNotBlank() && alert.targetId == accId) ||
+                                (accPhone.isNotBlank() && alert.targetId == accPhone) ||
+                                alert.targetId in famIds
+                            ))
+                }
+            }
+        }
+    }
+
+    fun unreadIncomingMessagesCountForCurrentRole(): Int {
+        return when (roleMode) {
+            AppRoleMode.PATIENT -> {
+                val accId = activeAccount?.id.orEmpty()
+                if (accId.isBlank()) 0 else directMessages.count {
+                    it.patientAccountId == accId &&
+                        (it.threadType == ChatThreadType.PATIENT_CLINIC || it.threadType == ChatThreadType.PATIENT_ADMIN) &&
+                        !it.isReadByPatient
+                }
+            }
+            AppRoleMode.DOCTOR_ADMIN -> {
+                val docId = loggedInDoctorId.orEmpty()
+                if (docId.isBlank()) 0 else directMessages.count {
+                    it.doctorId == docId &&
+                        (it.threadType == ChatThreadType.PATIENT_CLINIC || it.threadType == ChatThreadType.CLINIC_ADMIN) &&
+                        !it.isReadByClinic
+                }
+            }
+            AppRoleMode.SUPER_ADMIN -> {
+                directMessages.count {
+                    (it.threadType == ChatThreadType.PATIENT_ADMIN || it.threadType == ChatThreadType.CLINIC_ADMIN) &&
+                        !it.isReadByAdmin
+                }
+            }
+        }
+    }
+
+    fun unreadPatientSupportMessagesFromAdmin(): Int {
+        val accId = activeAccount?.id.orEmpty()
+        if (accId.isBlank()) return 0
+        return directMessages.count {
+            it.threadType == ChatThreadType.PATIENT_ADMIN &&
+                it.patientAccountId == accId &&
+                !it.isReadByPatient
+        }
+    }
+
+    fun unreadMessagesCountForDoctor(doctorId: String): Int =
+        directMessages.count {
+            it.doctorId == doctorId &&
+                (it.threadType == ChatThreadType.PATIENT_CLINIC || it.threadType == ChatThreadType.CLINIC_ADMIN) &&
+                !it.isReadByClinic
+        }
+
+    fun unreadSupportInboxCountForAdmin(): Int =
+        directMessages.count {
+            (it.threadType == ChatThreadType.PATIENT_ADMIN || it.threadType == ChatThreadType.CLINIC_ADMIN) &&
+                !it.isReadByAdmin
+        }
+
     val unreadAlertsCount: Int
-        get() = notifications.count { !it.isRead }
+        get() = visibleNotificationsForCurrentRole().count { !it.isRead } +
+            unreadIncomingMessagesCountForCurrentRole()
 
     val isAccountVerified: Boolean
         get() = activeAccount?.isPhoneVerified == true
@@ -248,6 +335,7 @@ class TebViewModel(
         val records: List<MedicalRecordEntity>,
         val notifications: List<DelayNotificationEntity>,
         val blockedPhones: List<BlockedPhoneEntity>,
+        val directMessages: List<DirectMessageEntity>,
     )
 
     private data class MedicationBundle(
@@ -322,6 +410,7 @@ class TebViewModel(
         repository.allMedicalRecordsFlow,
         repository.notificationsFlow,
         repository.blockedPhonesFlow,
+        repository.directMessagesFlow,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         ClinicDataBundle(
@@ -331,6 +420,7 @@ class TebViewModel(
             records = values[3] as List<MedicalRecordEntity>,
             notifications = values[4] as List<DelayNotificationEntity>,
             blockedPhones = values[5] as List<BlockedPhoneEntity>,
+            directMessages = values[6] as List<DirectMessageEntity>,
         )
     }
 
@@ -403,6 +493,7 @@ class TebViewModel(
             allSlots = clinic.slots,
             medicalRecords = clinic.records,
             notifications = clinic.notifications,
+            directMessages = clinic.directMessages,
             blockedPhones = clinic.blockedPhones,
             loggedInDoctorId = acc.loggedInDoctorId,
             loggedInLabId = acc.loggedInLabId,
@@ -600,6 +691,14 @@ class TebViewModel(
         apkUrl: String,
         medsApiUrl: String,
         adminPin: String,
+        firebaseApiKey: String = "",
+        firebaseAuthDomain: String = "",
+        firebaseProjectId: String = "",
+        firebaseStorageBucket: String = "",
+        firebaseMessagingSenderId: String = "",
+        firebaseAppId: String = "",
+        firebaseVapidKey: String = "",
+        workerUrl: String = "",
     ) {
         viewModelScope.launch {
             repository.updateFullPlatformConfig(
@@ -611,9 +710,17 @@ class TebViewModel(
                 apkUrl = apkUrl,
                 medsApiUrl = medsApiUrl,
                 adminPin = adminPin,
+                firebaseApiKey = firebaseApiKey,
+                firebaseAuthDomain = firebaseAuthDomain,
+                firebaseProjectId = firebaseProjectId,
+                firebaseStorageBucket = firebaseStorageBucket,
+                firebaseMessagingSenderId = firebaseMessagingSenderId,
+                firebaseAppId = firebaseAppId,
+                firebaseVapidKey = firebaseVapidKey,
+                workerUrl = workerUrl,
             )
             refreshEgyptianMedications(medsApiUrl)
-            _snackbarMessages.tryEmit("تم تحديث إعدادات المنصة والرقم السري بنجاح")
+            _snackbarMessages.tryEmit("تم تحديث إعدادات المنصة والربط السحابي بنجاح")
         }
     }
 
@@ -1081,9 +1188,74 @@ class TebViewModel(
     }
 
     fun cancelAppointment(slotId: String) {
+        cancelBookingByClinic(slotId)
+    }
+
+    fun cancelBookingByPatient(slotId: String) {
         viewModelScope.launch {
-            repository.cancelSlot(slotId)
-            _snackbarMessages.tryEmit("تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر")
+            val res = repository.cancelSlotByPatient(slotId)
+            res.onSuccess {
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم إلغاء الموعد وإخطار العيادة وإتاحته للمرضى مجدداً",
+                        "✓ Appointment cancelled and clinic notified",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر إلغاء الموعد")
+            }
+        }
+    }
+
+    fun rescheduleBookingByPatient(fromSlotId: String, toSlotId: String) {
+        viewModelScope.launch {
+            val res = repository.rescheduleSlotByPatient(fromSlotId, toSlotId)
+            res.onSuccess {
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم تعديل موعدك وإخطار العيادة بالتحديث تلقائياً",
+                        "✓ Appointment rescheduled and clinic notified",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر تعديل الموعد")
+            }
+        }
+    }
+
+    fun cancelBookingByClinic(slotId: String) {
+        viewModelScope.launch {
+            val res = repository.cancelSlotByClinic(slotId)
+            res.onSuccess {
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم إلغاء الحجز وإرسال إشعار للمريض وإتاحة الموعد باللون الأخضر",
+                        "✓ Booking cancelled, patient notified, slot open",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر إلغاء الحجز")
+            }
+        }
+    }
+
+    fun rescheduleBookingByClinic(fromSlotId: String, toSlotId: String) {
+        viewModelScope.launch {
+            val res = repository.rescheduleSlotByClinic(fromSlotId, toSlotId)
+            res.onSuccess {
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم تعديل موعد الحجز وإشعار المريض بالموعد الجديد",
+                        "✓ Booking rescheduled and patient notified",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "تعذر تعديل الموعد")
+            }
         }
     }
 
@@ -1344,8 +1516,207 @@ class TebViewModel(
     }
 
     fun markNotificationsRead() {
+        markCurrentRoleNotificationsRead()
+    }
+
+    fun markCurrentRoleNotificationsRead() {
         viewModelScope.launch {
-            repository.markNotificationsRead()
+            val s = uiState.value
+            repository.markRoleNotificationsRead(
+                roleName = s.roleMode.name,
+                activeAccountId = s.activeAccount?.id.orEmpty(),
+                activeAccountPhone = s.activeAccount?.phone.orEmpty(),
+                familyMemberIds = s.familyMembers.map { it.id }.toSet(),
+                loggedInDoctorId = s.loggedInDoctorId,
+            )
+        }
+    }
+
+    fun setGlobalChatEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setGlobalChatEnabled(enabled)
+            _snackbarMessages.tryEmit(
+                if (enabled) {
+                    bi(uiState.value.isEn, "✓ تم تفعيل المحادثات مع جميع العيادات", "✓ Global clinic messaging enabled")
+                } else {
+                    bi(uiState.value.isEn, "✓ تم إيقاف المحادثات مع جميع العيادات على مستوى المنصة", "✓ Global clinic messaging disabled")
+                }
+            )
+        }
+    }
+
+    fun setClinicChatEnabled(doctorId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setClinicChatEnabled(doctorId, enabled)
+            _snackbarMessages.tryEmit(
+                if (enabled) {
+                    bi(uiState.value.isEn, "✓ تم تفعيل استقبال رسائل المرضى لهذه العيادة", "✓ Clinic chat enabled")
+                } else {
+                    bi(uiState.value.isEn, "✓ تم إيقاف استقبال رسائل المرضى لهذه العيادة", "✓ Clinic chat disabled")
+                }
+            )
+        }
+    }
+
+    fun sendPatientToClinicMessage(doctorId: String, body: String, onSent: () -> Unit = {}) {
+        viewModelScope.launch {
+            val acc = uiState.value.activeAccount
+            if (acc == null) {
+                _openAccountForOtpEvents.tryEmit(Unit)
+                _snackbarMessages.tryEmit(bi(uiState.value.isEn, "يرجى تسجيل الدخول أولاً لمراسلة العيادة", "Please sign in first to message the clinic"))
+                return@launch
+            }
+            repository.sendPatientToClinicMessage(acc, doctorId, body)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال رسالتك إلى العيادة", "✓ Message sent to clinic"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرسالة")
+                }
+        }
+    }
+
+    fun sendPatientToAdminMessage(body: String, onSent: () -> Unit = {}) {
+        viewModelScope.launch {
+            val acc = uiState.value.activeAccount
+            if (acc == null) {
+                _openAccountForOtpEvents.tryEmit(Unit)
+                _snackbarMessages.tryEmit(bi(uiState.value.isEn, "يرجى تسجيل الدخول أولاً لمراسلة الإدارة", "Please sign in first to message support"))
+                return@launch
+            }
+            repository.sendPatientToAdminMessage(acc, body)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال رسالتك إلى الإدارة والدعم الفني", "✓ Message sent to Admin support"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرسالة")
+                }
+        }
+    }
+
+    fun sendClinicReplyToPatient(
+        patientAccountId: String,
+        patientName: String,
+        patientPhone: String,
+        body: String,
+        onSent: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val doc = uiState.value.loggedInDoctor ?: return@launch
+            repository.sendClinicReplyToPatient(doc, patientAccountId, patientName, patientPhone, body)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال الرد للمريض", "✓ Reply sent to patient"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرد")
+                }
+        }
+    }
+
+    fun sendClinicToPatientAlert(
+        patientAccountId: String,
+        patientName: String,
+        message: String,
+        onSent: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val doc = uiState.value.loggedInDoctor ?: return@launch
+            repository.sendClinicToPatientAlert(doc, patientAccountId, patientName, message)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال تنبيه مباشر للمريض $patientName", "✓ Direct alert sent to $patientName"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال التنبيه")
+                }
+        }
+    }
+
+    fun sendClinicToAdminMessage(body: String, onSent: () -> Unit = {}) {
+        viewModelScope.launch {
+            val doc = uiState.value.loggedInDoctor ?: return@launch
+            repository.sendClinicToAdminMessage(doc, body)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال رسالتك إلى الإدارة العليا", "✓ Message sent to Super Admin"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرسالة")
+                }
+        }
+    }
+
+    fun sendAdminReplyToPatient(
+        patientAccountId: String,
+        patientName: String,
+        patientPhone: String,
+        body: String,
+        onSent: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            repository.sendAdminReplyToPatient(patientAccountId, patientName, patientPhone, body)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال رد الإدارة للمريض", "✓ Admin reply sent to patient"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرد")
+                }
+        }
+    }
+
+    fun sendAdminReplyToClinic(doctorId: String, body: String, onSent: () -> Unit = {}) {
+        viewModelScope.launch {
+            val doc = uiState.value.doctors.firstOrNull { it.id == doctorId } ?: return@launch
+            repository.sendAdminReplyToClinic(doc, body)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال رد الإدارة للعيادة", "✓ Admin reply sent to clinic"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرد")
+                }
+        }
+    }
+
+    fun sendAdminClinicAlert(doctorId: String?, message: String, onSent: () -> Unit = {}) {
+        viewModelScope.launch {
+            val doc = if (doctorId.isNullOrBlank()) null else uiState.value.doctors.firstOrNull { it.id == doctorId }
+            repository.sendAdminClinicAlert(doc, message)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال التنبيه الإداري للعيادات", "✓ Clinic alert sent"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال التنبيه")
+                }
+        }
+    }
+
+    fun sendAdminGlobalBroadcast(message: String, onSent: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.sendAdminGlobalBroadcast(message)
+                .onSuccess {
+                    onSent()
+                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "📢 تم إرسال الإشعار العام لجميع مستخدمي المنصة", "📢 Platform broadcast sent"))
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الإشعار العام")
+                }
+        }
+    }
+
+    fun markDirectThreadRead(
+        threadType: String,
+        viewerRole: String,
+        patientAccountId: String = "",
+        doctorId: String = "",
+    ) {
+        viewModelScope.launch {
+            repository.markDirectThreadRead(threadType, viewerRole, patientAccountId, doctorId)
         }
     }
 

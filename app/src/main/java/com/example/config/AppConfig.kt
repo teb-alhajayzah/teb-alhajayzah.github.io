@@ -34,10 +34,38 @@ data class PlatformBrandConfig(
     val adminUsername: String = "admin",
     val adminPassword: String = "teb2026",
     val adminPin: String = "202600",
+    val globalChatEnabled: Boolean = true,
+    // إعدادات الربط السحابي (Firebase Web Config + Cloudflare Worker URL) معزولة تحت مسار teb_alhajayzah
+    val firebaseApiKey: String = "",
+    val firebaseAuthDomain: String = "",
+    val firebaseProjectId: String = "",
+    val firebaseStorageBucket: String = "",
+    val firebaseMessagingSenderId: String = "",
+    val firebaseAppId: String = "",
+    val firebaseVapidKey: String = "",
+    val workerUrl: String = "",
     @param:DrawableRes val logoRes: Int = R.drawable.app_icon_fg,
     @param:DrawableRes val heroBannerRes: Int = R.drawable.img_hospital_banner,
     @param:DrawableRes val medicalRecordIllustRes: Int = R.drawable.img_medical_record,
-)
+) {
+    val isCloudConfigured: Boolean
+        get() = firebaseApiKey.isNotBlank() && firebaseProjectId.isNotBlank()
+}
+
+/**
+ * مسارات عزل البيانات السحابية في Firebase Firestore & FCM
+ * تضمن عدم تداخل أي بيانات مع مشاريع أخرى مستضافة على نفس الحساب السحابي.
+ */
+object CloudNamespacePaths {
+    const val ROOT = "teb_alhajayzah"
+    const val USERS = "$ROOT/users"
+    const val CLINICS = "$ROOT/clinics"
+    const val APPOINTMENTS = "$ROOT/appointments"
+    const val MESSAGES = "$ROOT/messages"
+    const val NOTIFICATIONS = "$ROOT/notifications"
+    const val RECORDS = "$ROOT/records"
+    const val CONFIG = "$ROOT/config"
+}
 
 object AppConfig {
     val defaultBrand = PlatformBrandConfig()

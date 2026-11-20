@@ -817,5 +817,202 @@ class ExampleRobolectricTest {
         assertTrue(repository.compareAppVersions("2.0.0", "1.9.9") > 0)
         assertTrue(repository.compareAppVersions("1.0.0", "1.0.1") < 0)
     }
+
+    @Test
+    fun messagingSystemAdminChatSwitchesBroadcastsAndRoleNotificationsWork() = runBlocking {
+        repository.ensureSeeded()
+        val doctors = repository.doctorsFlow.first()
+        val doc1 = doctors.first()
+        val acc = repository.registerPatientAccount(
+            fullName = "أحمد محمود علي",
+            phone = "01055443322",
+            nationalId = "",
+            password = "pass_msg",
+        ).getOrThrow()
+
+        // 1) Patient -> Clinic works by default
+        assertTrue(repository.brandConfigFlow.first().globalChatEnabled)
+        assertTrue(doc1.chatEnabled)
+        val p2c = repository.sendPatientToClinicMessage(acc, doc1.id, "هل العيادة فاتحة اليوم؟")
+        assertTrue(p2c.isSuccess)
+        assertFalse(p2c.getOrThrow().isReadByClinic)
+
+        // Clinic replies to patient + sends direct patient alert
+        val c2p = repository.sendClinicReplyToPatient(doc1, acc.id, acc.fullName, acc.phone, "نعم، مفتوحة من 5 مساءً")
+        assertTrue(c2p.isSuccess)
+        assertFalse(c2p.getOrThrow().isReadByPatient)
+        val cAlert = repository.sendClinicToPatientAlert(doc1, acc.id, acc.fullName, "يرجى إحضار أشعة الصدر معك")
+        assertTrue(cAlert.isSuccess)
+        assertEquals(com.example.data.local.NotificationAudience.PATIENT, cAlert.getOrThrow().targetAudience)
+
+        // 2) Master Global Chat Switch blocks patient -> clinic chat
+        repository.setGlobalChatEnabled(false)
+        assertFalse(repository.brandConfigFlow.first().globalChatEnabled)
+        val blockedByGlobal = repository.sendPatientToClinicMessage(acc, doc1.id, "رسالة أثناء الإيقاف العام")
+        assertTrue(blockedByGlobal.isFailure)
+
+        // Re-enable global, disable per-clinic chat switch -> blocks only that clinic
+        repository.setGlobalChatEnabled(true)
+        repository.setClinicChatEnabled(doc1.id, false)
+        val blockedByClinic = repository.sendPatientToClinicMessage(acc, doc1.id, "رسالة أثناء إيقاف العيادة")
+        assertTrue(blockedByClinic.isFailure)
+        repository.setClinicChatEnabled(doc1.id, true)
+
+        // 3) Patient <-> Admin & Clinic <-> Admin Support Inbox + Broadcasts
+        val p2a = repository.sendPatientToAdminMessage(acc, "عندي استفسار للدعم الفني").getOrThrow()
+        assertFalse(p2a.isReadByAdmin)
+        val c2a = repository.sendClinicToAdminMessage(doc1, "طلب تحديث بيانات العيادة").getOrThrow()
+        assertFalse(c2a.isReadByAdmin)
+
+        repository.sendAdminReplyToPatient(acc.id, acc.fullName, acc.phone, "تم استلام طلبك").getOrThrow()
+        repository.sendAdminReplyToClinic(doc1, "تم تنفيذ تحديث العيادة").getOrThrow()
+        val clinicAlert = repository.sendAdminClinicAlert(doc1, "تحديث نظام التذكير بالعيادة").getOrThrow()
+        assertEquals(com.example.data.local.NotificationAudience.CLINIC, clinicAlert.targetAudience)
+        val broadcast = repository.sendAdminGlobalBroadcast("تحديث هام: ساعات العمل في العيد").getOrThrow()
+        assertEquals(com.example.data.local.NotificationAudience.ALL, broadcast.targetAudience)
+
+        val allNotifs = repository.notificationsFlow.first()
+        val patientVisible = allNotifs.filter {
+            repository.isNotificationVisibleForRole(it, "PATIENT", acc.id, acc.phone, emptySet(), null)
+        }
+        val clinicVisible = allNotifs.filter {
+            repository.isNotificationVisibleForRole(it, "DOCTOR_ADMIN", "", "", emptySet(), doc1.id)
+        }
+        assertTrue(patientVisible.any { it.id == cAlert.getOrThrow().id })
+        assertTrue(patientVisible.any { it.id == broadcast.id })
+        assertFalse(patientVisible.any { it.id == clinicAlert.id })
+        assertTrue(clinicVisible.any { it.id == clinicAlert.id })
+        assertTrue(clinicVisible.any { it.id == broadcast.id })
+        assertFalse(clinicVisible.any { it.id == cAlert.getOrThrow().id })
+
+        // Mark patient thread read clears unread flag only for patient
+        repository.markDirectThreadRead(
+            threadType = com.example.data.local.ChatThreadType.PATIENT_CLINIC,
+            viewerRole = com.example.data.local.MessageSenderRole.PATIENT,
+            patientAccountId = acc.id,
+            doctorId = doc1.id,
+        )
+        val msgs = repository.directMessagesFlow.first()
+        assertTrue(msgs.filter { it.threadType == com.example.data.local.ChatThreadType.PATIENT_CLINIC && it.patientAccountId == acc.id }.all { it.isReadByPatient })
+    }
+
+    @Test
+    fun cloudNamespaceSettingsAndAppointmentTwoHourCancelRescheduleRulesWork() = runBlocking {
+        repository.ensureSeeded()
+
+        // 1. Verify namespace isolation paths and locked v1.0.0 metadata
+        assertEquals("1.0.0", BuildConfig.VERSION_NAME)
+        assertEquals(1, BuildConfig.VERSION_CODE)
+        assertEquals("teb_alhajayzah", com.example.config.CloudNamespacePaths.ROOT)
+        assertEquals("teb_alhajayzah/users", com.example.config.CloudNamespacePaths.USERS)
+        assertEquals("teb_alhajayzah/clinics", com.example.config.CloudNamespacePaths.CLINICS)
+        assertEquals("teb_alhajayzah/appointments", com.example.config.CloudNamespacePaths.APPOINTMENTS)
+        assertEquals("teb_alhajayzah/messages", com.example.config.CloudNamespacePaths.MESSAGES)
+        assertEquals("teb_alhajayzah/notifications", com.example.config.CloudNamespacePaths.NOTIFICATIONS)
+
+        // 2. Verify Firebase Web Config & Cloudflare Worker URL persist & reset cleanly
+        repository.updateFullPlatformConfig(
+            platformNameAr = "طب الحجايزة",
+            villageNameAr = "قرية الحجايزة والقرى المجاورة",
+            hospitalNameAr = "مستشفى الحجايزة التخصصي",
+            supportPhone = "01125002428",
+            homeAnnouncementAr = "",
+            apkUrl = AppConfig.defaultBrand.apkDownloadUrl,
+            medsApiUrl = "",
+            adminPin = "202600",
+            firebaseApiKey = "AIzaTestKey123",
+            firebaseAuthDomain = "teb-test.firebaseapp.com",
+            firebaseProjectId = "teb-test-id",
+            firebaseStorageBucket = "teb-test.appspot.com",
+            firebaseMessagingSenderId = "1234567890",
+            firebaseAppId = "1:1234567890:web:abcdef",
+            firebaseVapidKey = "BTestVapidKey",
+            workerUrl = "https://teb-worker.example.workers.dev",
+        )
+        val savedBrand = repository.brandConfigFlow.first()
+        assertTrue(savedBrand.isCloudConfigured)
+        assertEquals("AIzaTestKey123", savedBrand.firebaseApiKey)
+        assertEquals("teb-test-id", savedBrand.firebaseProjectId)
+        assertEquals("BTestVapidKey", savedBrand.firebaseVapidKey)
+        assertEquals("https://teb-worker.example.workers.dev", savedBrand.workerUrl)
+
+        repository.resetFullPlatformConfig()
+        val resetBrand = repository.brandConfigFlow.first()
+        assertFalse(resetBrand.isCloudConfigured)
+        assertEquals("", resetBrand.workerUrl)
+
+        // 3. Patient 2-hour rule: deny within 2 hours, allow when >= 120 mins remain + notify clinic
+        val doc = repository.doctorsFlow.first().first()
+        val docSlots = repository.observeSlotsForDoctor(doc.id).first()
+            .sortedBy { it.startMinutes }
+        val slotA = docSlots[0]
+        val slotB = docSlots[1]
+        val slotC = docSlots[2]
+
+        assertTrue(repository.bookSlot(slotA.id, "أحمد علي", "01012345678", "mem_1", BookingSource.APP).isSuccess)
+
+        // With 90 mins left (< 120), patient cannot cancel or reschedule
+        val tooLateCancel = repository.cancelSlotByPatient(
+            slotId = slotA.id,
+            nowMinutesOfDay = slotA.effectiveMinutes - 90,
+            enforceTwoHourRule = true,
+        )
+        assertTrue(tooLateCancel.isFailure)
+
+        val tooLateReschedule = repository.rescheduleSlotByPatient(
+            fromSlotId = slotA.id,
+            toSlotId = slotB.id,
+            nowMinutesOfDay = slotA.effectiveMinutes - 60,
+            enforceTwoHourRule = true,
+        )
+        assertTrue(tooLateReschedule.isFailure)
+
+        // With 150 mins left (>= 120), patient reschedules slotA -> slotB & notifies CLINIC
+        val okReschedule = repository.rescheduleSlotByPatient(
+            fromSlotId = slotA.id,
+            toSlotId = slotB.id,
+            nowMinutesOfDay = slotA.effectiveMinutes - 150,
+            enforceTwoHourRule = true,
+        )
+        assertTrue(okReschedule.isSuccess)
+        val updatedSlots1 = repository.observeSlotsForDoctor(doc.id).first().associateBy { it.id }
+        assertEquals(SlotStatus.AVAILABLE, updatedSlots1[slotA.id]?.status)
+        assertEquals(SlotStatus.BOOKED, updatedSlots1[slotB.id]?.status)
+        assertEquals("أحمد علي", updatedSlots1[slotB.id]?.patientName)
+        assertTrue(
+            repository.notificationsFlow.first().any {
+                it.targetAudience == com.example.data.local.NotificationAudience.CLINIC &&
+                    it.targetId == doc.id &&
+                    it.message.contains("أحمد علي")
+            }
+        )
+
+        // 4. Clinic Secretary can reschedule (slotB -> slotC) & cancel without 2-hour rule, notifying PATIENT
+        assertTrue(repository.rescheduleSlotByClinic(slotB.id, slotC.id).isSuccess)
+        val updatedSlots2 = repository.observeSlotsForDoctor(doc.id).first().associateBy { it.id }
+        assertEquals(SlotStatus.AVAILABLE, updatedSlots2[slotB.id]?.status)
+        assertEquals(SlotStatus.BOOKED, updatedSlots2[slotC.id]?.status)
+
+        assertTrue(repository.cancelSlotByClinic(slotC.id).isSuccess)
+        val updatedSlots3 = repository.observeSlotsForDoctor(doc.id).first().associateBy { it.id }
+        assertEquals(SlotStatus.AVAILABLE, updatedSlots3[slotC.id]?.status)
+        assertTrue(
+            repository.notificationsFlow.first().any {
+                it.targetAudience == com.example.data.local.NotificationAudience.PATIENT &&
+                    it.targetId == "mem_1"
+            }
+        )
+
+        // Patient can also cancel >= 2 hours early cleanly
+        assertTrue(repository.bookSlot(slotA.id, "سعيد حسن", "01022334455", "mem_2", BookingSource.APP).isSuccess)
+        val okPatientCancel = repository.cancelSlotByPatient(
+            slotId = slotA.id,
+            nowMinutesOfDay = slotA.effectiveMinutes - 130,
+            enforceTwoHourRule = true,
+        )
+        assertTrue(okPatientCancel.isSuccess)
+        assertEquals(SlotStatus.AVAILABLE, repository.observeSlotsForDoctor(doc.id).first().first { it.id == slotA.id }.status)
+    }
 }
+
 

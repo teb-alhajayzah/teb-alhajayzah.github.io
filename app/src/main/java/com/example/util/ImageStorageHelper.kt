@@ -29,8 +29,9 @@ data class PersistedAttachment(
 
 object ImageStorageHelper {
 
-    private const val MAX_IMAGE_DIMENSION = 1600
-    private const val JPEG_QUALITY = 82
+    private const val MAX_IMAGE_DIMENSION = 1200
+    private const val JPEG_QUALITY = 72
+    private const val TARGET_MAX_IMAGE_BYTES = 260 * 1024L
 
     fun createTempCameraUri(context: Context): Pair<Uri, File> {
         val cacheDir = File(context.cacheDir, "camera").apply { mkdirs() }
@@ -112,7 +113,7 @@ object ImageStorageHelper {
 
     suspend fun renderPdfPagesToBitmaps(
         filePath: String,
-        maxWidthPx: Int = 1400,
+        maxWidthPx: Int = 2200,
     ): Result<List<Bitmap>> = withContext(Dispatchers.IO) {
         try {
             val file = File(filePath)
@@ -129,13 +130,14 @@ object ImageStorageHelper {
                     val rendered = ArrayList<Bitmap>(pageCount)
                     for (i in 0 until pageCount) {
                         renderer.openPage(i).use { page ->
-                            val targetWidth = maxWidthPx.coerceAtLeast(page.width.coerceAtLeast(600))
+                            val targetWidth = maxOf(maxWidthPx, page.width * 3).coerceIn(1000, 2600)
                             val scale = targetWidth.toFloat() / page.width.coerceAtLeast(1).toFloat()
                             val targetHeight = (page.height * scale).toInt().coerceAtLeast(1)
                             val bmp = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
                             val canvas = Canvas(bmp)
                             canvas.drawColor(Color.WHITE)
-                            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            val destRect = android.graphics.Rect(0, 0, targetWidth, targetHeight)
+                            page.render(bmp, destRect, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                             rendered += bmp
                         }
                     }
@@ -373,14 +375,48 @@ object ImageStorageHelper {
             } else {
                 bitmap
             }
-            destFile.outputStream().use { out ->
-                finalBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
-            }
+            var quality = JPEG_QUALITY
+            do {
+                destFile.outputStream().use { out ->
+                    finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                }
+                quality -= 8
+            } while (destFile.length() > TARGET_MAX_IMAGE_BYTES && quality >= 52)
             if (finalBitmap !== bitmap) finalBitmap.recycle()
             bitmap.recycle()
             true
         } catch (_: Exception) {
             false
+        }
+    }
+
+    fun getMedicalStorageUsageMb(context: Context): Double {
+        return try {
+            val destDir = File(context.filesDir, "medical_images")
+            if (!destDir.exists()) return 0.0
+            val totalBytes = destDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            totalBytes.toDouble() / (1024.0 * 1024.0)
+        } catch (_: Exception) {
+            0.0
+        }
+    }
+
+    fun cleanupOldestAttachments(context: Context, keepLatestCount: Int = 15): Int {
+        return try {
+            val destDir = File(context.filesDir, "medical_images")
+            if (!destDir.exists()) return 0
+            val files = destDir.listFiles()
+                ?.filter { it.isFile }
+                ?.sortedByDescending { it.lastModified() }
+                .orEmpty()
+            if (files.size <= keepLatestCount) return 0
+            var removed = 0
+            files.drop(keepLatestCount).forEach { f ->
+                if (f.delete()) removed++
+            }
+            removed
+        } catch (_: Exception) {
+            0
         }
     }
 }

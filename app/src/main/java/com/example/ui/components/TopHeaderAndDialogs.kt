@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,12 +25,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Chat
@@ -37,6 +40,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
@@ -44,8 +49,11 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
@@ -71,6 +79,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -80,9 +89,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -96,8 +108,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.config.PlatformBrandConfig
+import com.example.data.local.ChatThreadType
+import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.DelayNotificationEntity
+import com.example.data.local.DirectMessageEntity
 import com.example.data.local.FamilyMemberEntity
+import com.example.data.local.MessageSenderRole
 import com.example.data.local.PatientAccountEntity
 import com.example.ui.AppLanguage
 import com.example.ui.AppRoleMode
@@ -118,6 +134,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun TebTopHeader(
@@ -451,6 +470,7 @@ fun AccountAndFamilyDialog(
     activeMemberId: String,
     otpWhatsappPhone: String = "01141271027",
     appVersionLabel: String,
+    unreadSupportCount: Int = 0,
     isEn: Boolean = false,
     onSelectMember: (String) -> Unit,
     onAddFamilyMember: (name: String, relation: String, age: Int, phone: String) -> Unit,
@@ -459,6 +479,7 @@ fun AccountAndFamilyDialog(
     onLogoutPatient: () -> Unit = {},
     onVerifyOtp: (code: String) -> Unit,
     onRegenerateOtp: () -> Unit = {},
+    onOpenSupportChat: () -> Unit = {},
     onTriggerHiddenAdmin: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -756,6 +777,39 @@ fun AccountAndFamilyDialog(
                                         }
                                     }
                                 }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    onDismiss()
+                                    onOpenSupportChat()
+                                },
+                                border = BorderStroke(1.2.dp, TealPrimary),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("account_support_admin_chat_button"),
+                            ) {
+                                Icon(Icons.Filled.SupportAgent, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (unreadSupportCount > 0) {
+                                        bi(
+                                            isEn,
+                                            "💬 مراسلة الإدارة / الدعم الفني ($unreadSupportCount جديد)",
+                                            "💬 Message Admin / Support ($unreadSupportCount new)",
+                                        )
+                                    } else {
+                                        bi(
+                                            isEn,
+                                            "💬 مراسلة الإدارة / الدعم الفني",
+                                            "💬 Message Admin / Support",
+                                        )
+                                    },
+                                    color = TealPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                )
                             }
                         }
                     }
@@ -1152,12 +1206,152 @@ fun AdminPinLockDialog(
     )
 }
 
+data class DirectChatTarget(
+    val threadType: String,
+    val viewerRole: String,
+    val title: String,
+    val subtitle: String = "",
+    val patientAccountId: String = "",
+    val patientName: String = "",
+    val patientPhone: String = "",
+    val doctorId: String = "",
+)
+
 @Composable
 fun NotificationsDialog(
     notifications: List<DelayNotificationEntity>,
+    directMessages: List<DirectMessageEntity> = emptyList(),
+    roleMode: AppRoleMode = AppRoleMode.PATIENT,
+    activeAccount: PatientAccountEntity? = null,
+    loggedInDoctor: ClinicDoctorEntity? = null,
     isEn: Boolean = false,
+    onMarkAllRead: () -> Unit = {},
+    onOpenChatThread: (DirectChatTarget) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
+    val activeThreads = remember(directMessages, roleMode, activeAccount?.id, loggedInDoctor?.id) {
+        when (roleMode) {
+            AppRoleMode.PATIENT -> {
+                val accId = activeAccount?.id.orEmpty()
+                if (accId.isBlank()) {
+                    emptyList()
+                } else {
+                    directMessages
+                        .filter { it.patientAccountId == accId && (it.threadType == ChatThreadType.PATIENT_CLINIC || it.threadType == ChatThreadType.PATIENT_ADMIN) }
+                        .groupBy { "${it.threadType}:${it.doctorId}" }
+                        .values
+                        .mapNotNull { msgs ->
+                            val latest = msgs.maxByOrNull { it.createdAtMillis } ?: return@mapNotNull null
+                            val unread = msgs.count { !it.isReadByPatient }
+                            Triple(
+                                latest,
+                                unread,
+                                if (latest.threadType == ChatThreadType.PATIENT_ADMIN) {
+                                    DirectChatTarget(
+                                        threadType = ChatThreadType.PATIENT_ADMIN,
+                                        viewerRole = MessageSenderRole.PATIENT,
+                                        title = bi(isEn, "الإدارة والدعم الفني", "Platform Admin & Support"),
+                                        subtitle = bi(isEn, "محادثة مباشرة مع الإدارة", "Direct support thread"),
+                                        patientAccountId = accId,
+                                        patientName = activeAccount?.fullName.orEmpty(),
+                                        patientPhone = activeAccount?.phone.orEmpty(),
+                                    )
+                                } else {
+                                    DirectChatTarget(
+                                        threadType = ChatThreadType.PATIENT_CLINIC,
+                                        viewerRole = MessageSenderRole.PATIENT,
+                                        title = latest.clinicName.ifBlank { latest.doctorName },
+                                        subtitle = latest.doctorName,
+                                        patientAccountId = accId,
+                                        patientName = activeAccount?.fullName.orEmpty(),
+                                        patientPhone = activeAccount?.phone.orEmpty(),
+                                        doctorId = latest.doctorId,
+                                    )
+                                }
+                            )
+                        }
+                        .sortedByDescending { it.first.createdAtMillis }
+                }
+            }
+
+            AppRoleMode.DOCTOR_ADMIN -> {
+                val doc = loggedInDoctor
+                if (doc == null) {
+                    emptyList()
+                } else {
+                    directMessages
+                        .filter { it.doctorId == doc.id && (it.threadType == ChatThreadType.PATIENT_CLINIC || it.threadType == ChatThreadType.CLINIC_ADMIN) }
+                        .groupBy { "${it.threadType}:${it.patientAccountId}" }
+                        .values
+                        .mapNotNull { msgs ->
+                            val latest = msgs.maxByOrNull { it.createdAtMillis } ?: return@mapNotNull null
+                            val unread = msgs.count { !it.isReadByClinic }
+                            Triple(
+                                latest,
+                                unread,
+                                if (latest.threadType == ChatThreadType.CLINIC_ADMIN) {
+                                    DirectChatTarget(
+                                        threadType = ChatThreadType.CLINIC_ADMIN,
+                                        viewerRole = MessageSenderRole.CLINIC,
+                                        title = bi(isEn, "الإدارة العليا للمنصة", "Super Admin Support"),
+                                        subtitle = doc.clinicName,
+                                        doctorId = doc.id,
+                                    )
+                                } else {
+                                    DirectChatTarget(
+                                        threadType = ChatThreadType.PATIENT_CLINIC,
+                                        viewerRole = MessageSenderRole.CLINIC,
+                                        title = latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") },
+                                        subtitle = latest.patientPhone,
+                                        patientAccountId = latest.patientAccountId,
+                                        patientName = latest.patientName,
+                                        patientPhone = latest.patientPhone,
+                                        doctorId = doc.id,
+                                    )
+                                }
+                            )
+                        }
+                        .sortedByDescending { it.first.createdAtMillis }
+                }
+            }
+
+            AppRoleMode.SUPER_ADMIN -> {
+                directMessages
+                    .filter { it.threadType == ChatThreadType.PATIENT_ADMIN || it.threadType == ChatThreadType.CLINIC_ADMIN }
+                    .groupBy { "${it.threadType}:${it.patientAccountId}:${it.doctorId}" }
+                    .values
+                    .mapNotNull { msgs ->
+                        val latest = msgs.maxByOrNull { it.createdAtMillis } ?: return@mapNotNull null
+                        val unread = msgs.count { !it.isReadByAdmin }
+                        Triple(
+                            latest,
+                            unread,
+                            if (latest.threadType == ChatThreadType.PATIENT_ADMIN) {
+                                DirectChatTarget(
+                                    threadType = ChatThreadType.PATIENT_ADMIN,
+                                    viewerRole = MessageSenderRole.ADMIN,
+                                    title = "${latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") }} (${bi(isEn, "دعم فني", "Support")})",
+                                    subtitle = latest.patientPhone,
+                                    patientAccountId = latest.patientAccountId,
+                                    patientName = latest.patientName,
+                                    patientPhone = latest.patientPhone,
+                                )
+                            } else {
+                                DirectChatTarget(
+                                    threadType = ChatThreadType.CLINIC_ADMIN,
+                                    viewerRole = MessageSenderRole.ADMIN,
+                                    title = latest.clinicName.ifBlank { latest.doctorName },
+                                    subtitle = latest.doctorName,
+                                    doctorId = latest.doctorId,
+                                )
+                            }
+                        )
+                    }
+                    .sortedByDescending { it.first.createdAtMillis }
+            }
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -1165,7 +1359,7 @@ fun NotificationsDialog(
         Surface(
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth(0.92f),
+            modifier = Modifier.fillMaxWidth(0.94f),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -1174,20 +1368,20 @@ fun NotificationsDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        bi(isEn, "تنبيهات تأخير المواعيد", "Appointment Delay Alerts"),
+                        bi(isEn, "الإشعارات والرسائل", "Notifications & Messages"),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                if (notifications.isEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                if (notifications.isEmpty() && activeThreads.isEmpty()) {
                     Text(
                         text = bi(
                             isEn,
-                            "لا توجد تنبيهات تأخير حالياً. جميع العيادات تعمل في مواعيدها المحددة.",
-                            "No delay alerts right now. All clinics are running on schedule.",
+                            "لا توجد إشعارات أو رسائل حالياً.",
+                            "No notifications or messages right now.",
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1197,42 +1391,326 @@ fun NotificationsDialog(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(vertical = 4.dp),
-                        modifier = Modifier.height(300.dp),
+                        modifier = Modifier.height(360.dp),
                     ) {
-                        items(notifications, key = { it.id }) { alert ->
-                            Surface(
-                                color = DelayWarningBg,
-                                shape = RoundedCornerShape(14.dp),
-                                border = BorderStroke(1.dp, DelayWarningBorder),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.Top,
+                        if (activeThreads.isNotEmpty()) {
+                            item(key = "notif_threads_header") {
+                                Text(
+                                    text = bi(isEn, "المحادثات المباشرة (${activeThreads.size})", "Direct Messages (${activeThreads.size})"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = TealPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            items(activeThreads, key = { "thread_${it.first.id}" }) { (latest, unread, target) ->
+                                Surface(
+                                    color = if (unread > 0) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, if (unread > 0) TealPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+                                    modifier = Modifier.fillMaxWidth(),
                                 ) {
-                                    Icon(
-                                        Icons.Filled.Warning,
-                                        contentDescription = null,
-                                        tint = DelayWarningBorder,
-                                        modifier = Modifier.size(22.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = alert.message,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = DelayWarningText,
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Text(
+                                                    text = target.title,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                                if (unread > 0) {
+                                                    Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                                        Text(unread.toString())
+                                                    }
+                                                }
+                                            }
+                                            Text(
+                                                text = "${latest.senderName}: ${latest.body}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Button(
+                                            onClick = {
+                                                onDismiss()
+                                                onOpenChatThread(target)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            modifier = Modifier.height(38.dp),
+                                        ) {
+                                            Text(bi(isEn, "رد / فتح", "Reply"), style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (notifications.isNotEmpty()) {
+                            item(key = "notif_alerts_header") {
+                                Text(
+                                    text = bi(isEn, "التنبيهات والإشعارات (${notifications.size})", "Alerts & Broadcasts (${notifications.size})"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = DelayWarningText,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                            items(notifications, key = { it.id }) { alert ->
+                                Surface(
+                                    color = if (!alert.isRead) DelayWarningBg else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, if (!alert.isRead) DelayWarningBorder else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.Top,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Warning,
+                                            contentDescription = null,
+                                            tint = if (!alert.isRead) DelayWarningBorder else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            if (alert.senderLabel.isNotBlank()) {
+                                                Text(
+                                                    text = alert.senderLabel,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = TealPrimary,
+                                                )
+                                            }
+                                            Text(
+                                                text = alert.message,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (!alert.isRead) DelayWarningText else MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onDismiss,
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(bi(isEn, "حسناً", "OK"))
+                    if (notifications.isNotEmpty() || activeThreads.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = onMarkAllRead,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("notifications_mark_all_read"),
+                        ) {
+                            Text(bi(isEn, "تحديد الكل كمقروء", "Mark All Read"), maxLines = 1)
+                        }
+                    }
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(bi(isEn, "إغلاق", "Close"))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DirectChatDialog(
+    target: DirectChatTarget,
+    messages: List<DirectMessageEntity>,
+    isEn: Boolean = false,
+    onMarkThreadRead: () -> Unit,
+    onSendMessage: (body: String, onDone: () -> Unit) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draftBody by remember { mutableStateOf("") }
+    val threadMessages = remember(messages, target) {
+        messages.filter { msg ->
+            msg.threadType == target.threadType && when (target.threadType) {
+                ChatThreadType.PATIENT_CLINIC ->
+                    msg.patientAccountId == target.patientAccountId && msg.doctorId == target.doctorId
+                ChatThreadType.PATIENT_ADMIN ->
+                    msg.patientAccountId == target.patientAccountId
+                ChatThreadType.CLINIC_ADMIN ->
+                    msg.doctorId == target.doctorId
+                else -> false
+            }
+        }.sortedBy { it.createdAtMillis }
+    }
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(threadMessages.size, target) {
+        onMarkThreadRead()
+        if (threadMessages.isNotEmpty()) {
+            listState.animateScrollToItem(threadMessages.lastIndex)
+        }
+    }
+
+    val timeFmt = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(0.94f),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Filled.Chat, contentDescription = null, tint = TealPrimary)
+                        Column {
+                            Text(
+                                text = target.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (target.subtitle.isNotBlank()) {
+                                Text(
+                                    text = target.subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
+                    }
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(310.dp),
+                ) {
+                    if (threadMessages.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = bi(
+                                    isEn,
+                                    "ابدأ المحادثة بكتابة رسالتك بالأسفل وسيتم إشعار الطرف الآخر فوراً.",
+                                    "Start the conversation below and the recipient will be notified immediately.",
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            contentPadding = PaddingValues(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            items(threadMessages, key = { it.id }) { msg ->
+                                val isMine = msg.senderRole == target.viewerRole
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+                                ) {
+                                    Surface(
+                                        color = if (isMine) TealPrimary else Color.White,
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = if (isMine) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+                                        modifier = Modifier.fillMaxWidth(0.84f),
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                                        ) {
+                                            Text(
+                                                text = msg.senderName,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isMine) Color.White.copy(alpha = 0.9f) else TealPrimary,
+                                            )
+                                            Text(
+                                                text = msg.body,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (isMine) Color.White else Color(0xFF0F172A),
+                                            )
+                                            Text(
+                                                text = timeFmt.format(Date(msg.createdAtMillis)),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isMine) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = draftBody,
+                        onValueChange = { draftBody = it },
+                        placeholder = { Text(bi(isEn, "اكتب رسالتك هنا...", "Type your message...")) },
+                        maxLines = 3,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("direct_chat_input"),
+                    )
+                    Button(
+                        onClick = {
+                            if (draftBody.isNotBlank()) {
+                                val textToSend = draftBody
+                                onSendMessage(textToSend) { draftBody = "" }
+                            }
+                        },
+                        enabled = draftBody.isNotBlank(),
+                        modifier = Modifier
+                            .height(54.dp)
+                            .testTag("direct_chat_send_button"),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = bi(isEn, "إرسال", "Send"),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }
@@ -1257,6 +1735,10 @@ fun FullImagePreviewDialog(
     var pdfLoading by remember(target.path) { mutableStateOf(isPdf) }
     var pdfError by remember(target.path) { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var zoomScale by remember(target.path) { mutableFloatStateOf(1f) }
+    var panX by remember(target.path) { mutableFloatStateOf(0f) }
+    var panY by remember(target.path) { mutableFloatStateOf(0f) }
+    var isFullscreen by remember(target.path) { mutableStateOf(false) }
 
     LaunchedEffect(target.path, isPdf) {
         if (isPdf) {
@@ -1281,81 +1763,262 @@ fun FullImagePreviewDialog(
             color = Color(0xFF0F172A),
             modifier = Modifier.fillMaxSize(),
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .background(Color.Black.copy(alpha = 0.55f))
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = target.title.ifBlank { target.displayName },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (target.displayName.isNotBlank()) {
-                            Text(
-                                text = target.displayName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.72f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.18f)),
-                    ) {
-                        Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"), tint = Color.White)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(bi(isEn, "إغلاق", "Close"), color = Color.White)
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (isPdf) {
-                        when {
-                            pdfLoading -> {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    CircularProgressIndicator(color = TealPrimary)
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (!isFullscreen) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .background(Color.Black.copy(alpha = 0.62f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = target.title.ifBlank { target.displayName },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (target.displayName.isNotBlank()) {
                                     Text(
-                                        text = bi(isEn, "جاري تجهيز صفحات ملف PDF...", "Rendering PDF pages..."),
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        text = target.displayName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
-
-                            pdfError.isNotBlank() -> {
-                                Column(
-                                    modifier = Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        zoomScale = (zoomScale - 0.25f).coerceAtLeast(1f)
+                                        if (zoomScale <= 1.01f) {
+                                            panX = 0f
+                                            panY = 0f
+                                        }
+                                    },
+                                    modifier = Modifier.testTag("preview_zoom_out"),
                                 ) {
-                                    Icon(Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(44.dp))
+                                    Icon(Icons.Filled.ZoomOut, contentDescription = bi(isEn, "تصغير", "Zoom Out"), tint = Color.White)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        zoomScale = 1f
+                                        panX = 0f
+                                        panY = 0f
+                                    },
+                                    modifier = Modifier.testTag("preview_zoom_reset"),
+                                ) {
+                                    Text("${(zoomScale * 100).toInt()}%", color = Color.White)
+                                }
+                                IconButton(
+                                    onClick = { zoomScale = (zoomScale + 0.35f).coerceAtMost(4f) },
+                                    modifier = Modifier.testTag("preview_zoom_in"),
+                                ) {
+                                    Icon(Icons.Filled.ZoomIn, contentDescription = bi(isEn, "تكبير", "Zoom In"), tint = Color.White)
+                                }
+                                IconButton(
+                                    onClick = { isFullscreen = true },
+                                    modifier = Modifier.testTag("preview_fullscreen_toggle"),
+                                ) {
+                                    Icon(Icons.Filled.Fullscreen, contentDescription = bi(isEn, "ملء الشاشة", "Fullscreen"), tint = Color.White)
+                                }
+                                IconButton(onClick = onDismiss) {
+                                    Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"), tint = Color.White)
+                                }
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .clipToBounds()
+                            .pointerInput(target.path) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    val newScale = (zoomScale * zoom).coerceIn(1f, 4f)
+                                    zoomScale = newScale
+                                    if (newScale > 1.02f) {
+                                        panX += pan.x
+                                        panY += pan.y
+                                    } else {
+                                        panX = 0f
+                                        panY = 0f
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isPdf) {
+                            when {
+                                pdfLoading -> {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    ) {
+                                        CircularProgressIndicator(color = TealPrimary)
+                                        Text(
+                                            text = bi(isEn, "جاري تجهيز صفحات ملف PDF...", "Rendering PDF pages..."),
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                }
+
+                                pdfError.isNotBlank() -> {
+                                    Column(
+                                        modifier = Modifier.padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        Icon(Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(44.dp))
+                                        Text(
+                                            text = pdfError,
+                                            color = Color.White,
+                                            textAlign = TextAlign.Center,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Button(
+                                            onClick = {
+                                                ImageStorageHelper.openAttachmentExternally(
+                                                    context = context,
+                                                    filePath = target.path,
+                                                    mimeType = target.mimeType,
+                                                    onError = onShowMessage,
+                                                )
+                                            },
+                                        ) {
+                                            Icon(Icons.Filled.OpenInNew, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(bi(isEn, "فتح بتطبيق PDF خارجي", "Open in external PDF viewer"))
+                                        }
+                                    }
+                                }
+
+                                else -> {
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer(
+                                                scaleX = zoomScale,
+                                                scaleY = zoomScale,
+                                                translationX = panX,
+                                                translationY = panY,
+                                            ),
+                                        contentPadding = PaddingValues(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        itemsIndexed(pdfPages) { index, pageBitmap ->
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = Color.White,
+                                                shadowElevation = 4.dp,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Column {
+                                                    Image(
+                                                        bitmap = pageBitmap.asImageBitmap(),
+                                                        contentDescription = bi(isEn, "صفحة PDF ${index + 1}", "PDF page ${index + 1}"),
+                                                        contentScale = ContentScale.FillWidth,
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                    )
+                                                    Text(
+                                                        text = bi(isEn, "صفحة ${index + 1} من ${pdfPages.size}", "Page ${index + 1} of ${pdfPages.size}"),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFF475569),
+                                                        textAlign = TextAlign.Center,
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(vertical = 6.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            AsyncImage(
+                                model = File(target.path),
+                                contentDescription = target.title,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(12.dp)
+                                    .graphicsLayer(
+                                        scaleX = zoomScale,
+                                        scaleY = zoomScale,
+                                        translationX = panX,
+                                        translationY = panY,
+                                    ),
+                                contentScale = ContentScale.Fit,
+                            )
+                        }
+                    }
+
+                    if (!isFullscreen) {
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.72f),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            val saved = ImageStorageHelper.saveAttachmentToDownloads(
+                                                context = context,
+                                                filePath = target.path,
+                                                mimeType = target.mimeType,
+                                                displayName = target.displayName.ifBlank { target.title },
+                                            )
+                                            saved.onSuccess { savedFile ->
+                                                onShowMessage(
+                                                    bi(
+                                                        isEn,
+                                                        "✓ تم تنزيل الملف في مجلد التنزيلات (Downloads/TebAlHajayzah): $savedFile",
+                                                        "✓ Saved to Downloads/TebAlHajayzah: $savedFile",
+                                                    )
+                                                )
+                                            }.onFailure { err ->
+                                                onShowMessage(err.localizedMessage ?: bi(isEn, "تعذر تنزيل الملف", "Could not download file"))
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                    modifier = Modifier
+                                        .weight(1.3f)
+                                        .height(48.dp)
+                                        .testTag("preview_download_file_button"),
+                                ) {
+                                    Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = pdfError,
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        text = if (isPdf) {
+                                            bi(isEn, "تحميل ملف التحليل (PDF)", "Download Lab PDF")
+                                        } else {
+                                            bi(isEn, "تحميل الملف", "Download File")
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
-                                    Button(
+                                }
+
+                                if (isPdf) {
+                                    OutlinedButton(
                                         onClick = {
                                             ImageStorageHelper.openAttachmentExternally(
                                                 context = context,
@@ -1364,146 +2027,51 @@ fun FullImagePreviewDialog(
                                                 onError = onShowMessage,
                                             )
                                         },
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                                        modifier = Modifier.height(48.dp),
                                     ) {
-                                        Icon(Icons.Filled.OpenInNew, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(bi(isEn, "فتح بتطبيق PDF خارجي", "Open in external PDF viewer"))
+                                        Icon(Icons.Filled.OpenInNew, contentDescription = bi(isEn, "فتح خارجي", "Open External"), tint = Color.White, modifier = Modifier.size(18.dp))
                                     }
                                 }
-                            }
 
-                            else -> {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    itemsIndexed(pdfPages) { index, pageBitmap ->
-                                        Surface(
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = Color.White,
-                                            shadowElevation = 4.dp,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Column {
-                                                Image(
-                                                    bitmap = pageBitmap.asImageBitmap(),
-                                                    contentDescription = bi(isEn, "صفحة PDF ${index + 1}", "PDF page ${index + 1}"),
-                                                    contentScale = ContentScale.FillWidth,
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                )
-                                                Text(
-                                                    text = bi(isEn, "صفحة ${index + 1} من ${pdfPages.size}", "Page ${index + 1} of ${pdfPages.size}"),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = Color(0xFF475569),
-                                                    textAlign = TextAlign.Center,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(vertical = 6.dp),
-                                                )
-                                            }
-                                        }
+                                val recId = target.recordId
+                                if (!recId.isNullOrBlank() && onDeleteRecordFile != null) {
+                                    Button(
+                                        onClick = { showDeleteConfirm = true },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFFDC2626),
+                                            contentColor = Color.White,
+                                        ),
+                                        modifier = Modifier
+                                            .height(48.dp)
+                                            .testTag("preview_delete_file_button"),
+                                    ) {
+                                        Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(bi(isEn, "حذف", "Delete"), maxLines = 1)
                                     }
                                 }
                             }
                         }
-                    } else {
-                        AsyncImage(
-                            model = File(target.path),
-                            contentDescription = target.title,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            contentScale = ContentScale.Fit,
-                        )
                     }
                 }
 
-                Surface(
-                    color = Color.Black.copy(alpha = 0.72f),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                if (isFullscreen) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(14.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Button(
-                            onClick = {
-                                scope.launch {
-                                    val saved = ImageStorageHelper.saveAttachmentToDownloads(
-                                        context = context,
-                                        filePath = target.path,
-                                        mimeType = target.mimeType,
-                                        displayName = target.displayName.ifBlank { target.title },
-                                    )
-                                    saved.onSuccess { savedFile ->
-                                        onShowMessage(
-                                            bi(
-                                                isEn,
-                                                "✓ تم تنزيل الملف في مجلد التنزيلات (Downloads/TebAlHajayzah): $savedFile",
-                                                "✓ Saved to Downloads/TebAlHajayzah: $savedFile",
-                                            )
-                                        )
-                                    }.onFailure { err ->
-                                        onShowMessage(err.localizedMessage ?: bi(isEn, "تعذر تنزيل الملف", "Could not download file"))
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                            modifier = Modifier
-                                .weight(1.3f)
-                                .height(48.dp)
-                                .testTag("preview_download_file_button"),
+                            onClick = { isFullscreen = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.7f)),
+                            modifier = Modifier.testTag("preview_fullscreen_exit"),
                         ) {
-                            Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isPdf) {
-                                    bi(isEn, "تحميل ملف التحليل (PDF)", "Download Lab PDF")
-                                } else {
-                                    bi(isEn, "تحميل الملف", "Download File")
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-
-                        if (isPdf) {
-                            OutlinedButton(
-                                onClick = {
-                                    ImageStorageHelper.openAttachmentExternally(
-                                        context = context,
-                                        filePath = target.path,
-                                        mimeType = target.mimeType,
-                                        onError = onShowMessage,
-                                    )
-                                },
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
-                                modifier = Modifier.height(48.dp),
-                            ) {
-                                Icon(Icons.Filled.OpenInNew, contentDescription = bi(isEn, "فتح خارجي", "Open External"), tint = Color.White, modifier = Modifier.size(18.dp))
-                            }
-                        }
-
-                        val recId = target.recordId
-                        if (!recId.isNullOrBlank() && onDeleteRecordFile != null) {
-                            Button(
-                                onClick = { showDeleteConfirm = true },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFDC2626),
-                                    contentColor = Color.White,
-                                ),
-                                modifier = Modifier
-                                    .height(48.dp)
-                                    .testTag("preview_delete_file_button"),
-                            ) {
-                                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(bi(isEn, "حذف", "Delete"), maxLines = 1)
-                            }
+                            Icon(Icons.Filled.FullscreenExit, contentDescription = bi(isEn, "إنهاء ملء الشاشة", "Exit Fullscreen"), tint = Color.White)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(bi(isEn, "إنهاء ملء الشاشة", "Exit"), color = Color.White)
                         }
                     }
                 }

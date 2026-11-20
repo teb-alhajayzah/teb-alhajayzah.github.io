@@ -855,25 +855,183 @@
       justify-content: space-between;
     }
 
+    .pdf-zoom-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 6px 10px;
+    }
+
+    .pdf-zoom-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      direction: ltr;
+    }
+
+    .pdf-zoom-btn {
+      min-height: 36px;
+      min-width: 36px;
+      padding: 4px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--teal-text);
+      font-family: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
     .pdf-canvas-list {
       display: flex;
       flex-direction: column;
       gap: 12px;
       max-height: 64vh;
-      overflow-y: auto;
+      overflow: auto;
       background: #F1F5F9;
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 10px;
+      direction: ltr;
     }
 
     .pdf-page-canvas {
       width: 100%;
+      max-width: none;
       height: auto;
       background: #fff;
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
       display: block;
+      margin: 0 auto;
+    }
+
+    .modal-backdrop.pdf-fullscreen {
+      padding: 0;
+      background: rgba(15, 23, 42, 0.94);
+    }
+
+    .modal-backdrop.pdf-fullscreen .modal-panel {
+      max-width: 100vw;
+      width: 100vw;
+      max-height: 100vh;
+      height: 100vh;
+      border-radius: 0;
+      padding: 12px;
+    }
+
+    .modal-backdrop.pdf-fullscreen .pdf-canvas-list,
+    .modal-backdrop.pdf-fullscreen .img-preview-scroll {
+      max-height: calc(100vh - 170px);
+      flex: 1;
+    }
+
+    .img-preview-scroll {
+      max-height: 64vh;
+      overflow: auto;
+      background: #0F172A0D;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      text-align: center;
+    }
+
+    /* Messaging & Admin Switches */
+    .chat-thread-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 48vh;
+      overflow-y: auto;
+      padding: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+
+    .chat-bubble {
+      max-width: 85%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .chat-bubble.mine {
+      align-self: flex-start;
+      background: linear-gradient(135deg, #0D7377 0%, #14919B 100%);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-bubble.theirs {
+      align-self: flex-end;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-meta {
+      font-size: 0.72rem;
+      opacity: 0.82;
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .switch-toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .switch-toggle input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch-slider {
+      width: 48px;
+      height: 26px;
+      background: #CBD5E1;
+      border-radius: 999px;
+      position: relative;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .switch-slider::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+      transition: transform 0.2s;
+    }
+
+    .switch-toggle input:checked + .switch-slider {
+      background: #16A34A;
+    }
+
+    .switch-toggle input:checked + .switch-slider::after {
+      transform: translateX(22px);
     }
 
     /* Doctor & Admin Stats */
@@ -1379,8 +1537,29 @@
         apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
         medicationsApiUrl: '',
         adminOwnerName: 'المهندس محمد يوسف',
-        adminPin: '202600'
+        adminPin: '202600',
+        globalChatEnabled: true,
+        firebaseApiKey: '',
+        firebaseAuthDomain: '',
+        firebaseProjectId: '',
+        firebaseStorageBucket: '',
+        firebaseMessagingSenderId: '',
+        firebaseAppId: '',
+        firebaseVapidKey: '',
+        workerUrl: ''
       };
+
+      const CLOUD_NAMESPACE = 'teb_alhajayzah';
+      const CLOUD_PATHS = {
+        users: CLOUD_NAMESPACE + '/users',
+        clinics: CLOUD_NAMESPACE + '/clinics',
+        appointments: CLOUD_NAMESPACE + '/appointments',
+        messages: CLOUD_NAMESPACE + '/messages',
+        notifications: CLOUD_NAMESPACE + '/notifications',
+        records: CLOUD_NAMESPACE + '/records',
+        config: CLOUD_NAMESPACE + '/config'
+      };
+      const PATIENT_MODIFY_CUTOFF_MINUTES = 120;
 
       const LEGACY_STORAGE_KEYS = [
         'teb_alhajayzah_web_state_v1',
@@ -1742,7 +1921,8 @@
           workEndMinutes: 21 * 60,
           slotDurationMinutes: 20,
           currentDelayMinutes: 0,
-          rating: 4.9
+          rating: 4.9,
+          chatEnabled: true
         },
         {
           id: 'doc_shady_hajayzah',
@@ -1764,7 +1944,8 @@
           workEndMinutes: 21 * 60,
           slotDurationMinutes: 20,
           currentDelayMinutes: 0,
-          rating: 4.9
+          rating: 4.9,
+          chatEnabled: true
         }
       ];
 
@@ -1774,7 +1955,10 @@
         DEFAULT_REAL_DOCTORS.forEach((baseDoc) => {
           const exists = (state.doctors || []).some((d) => d.id === baseDoc.id || d.username === baseDoc.username);
           if (!exists) {
-            const copyDoc = Object.assign({}, baseDoc, { additionalSpecialties: baseDoc.additionalSpecialties.slice() });
+            const copyDoc = Object.assign({}, baseDoc, {
+              additionalSpecialties: baseDoc.additionalSpecialties.slice(),
+              chatEnabled: true
+            });
             state.doctors.push(copyDoc);
             state.slots = (state.slots || []).concat(buildDoctorSlots(copyDoc));
             changed = true;
@@ -2146,6 +2330,7 @@
           slots: [],
           records: [],
           notifications: [],
+          messages: [],
           activationCodes: generateUniqueCodeList(5, [], 'SYSTEM'),
           doctorFavorites: {},
           seededRealDoctorsV1: false
@@ -2169,10 +2354,14 @@
               if (parsed && Array.isArray(parsed.doctors) && Array.isArray(parsed.slots)) {
                 parsed.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
                 parsed.config.appVersionLabel = 'v1.0.0';
+                parsed.config.globalChatEnabled = parsed.config.globalChatEnabled !== false;
                 delete parsed.config.smsGateServerUrl;
                 delete parsed.config.smsGateUsername;
                 delete parsed.config.smsGatePassword;
                 delete parsed.config.smsGateProxyUrl;
+                parsed.doctors = parsed.doctors.map((d) => Object.assign({}, d, {
+                  chatEnabled: !d || d.chatEnabled !== false
+                }));
                 if (!Array.isArray(parsed.accounts)) parsed.accounts = [];
                 if (!Array.isArray(parsed.activationCodes)) parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
                 let didAssignLegacyOtp = false;
@@ -2201,6 +2390,14 @@
                 if (!Array.isArray(parsed.labs)) parsed.labs = [];
                 if (!Array.isArray(parsed.records)) parsed.records = [];
                 if (!Array.isArray(parsed.notifications)) parsed.notifications = [];
+                parsed.notifications = parsed.notifications.map((n) => Object.assign({
+                  targetAudience: 'ALL',
+                  targetId: '',
+                  senderLabel: '',
+                  createdAtMillis: Number(n && (n.createdAtMillis || n.id)) || Date.now(),
+                  isRead: Boolean(n && n.isRead)
+                }, n || {}));
+                if (!Array.isArray(parsed.messages)) parsed.messages = [];
                 if (!Array.isArray(parsed.blockedPhones)) parsed.blockedPhones = [];
                 if (!parsed.doctorFavorites || typeof parsed.doctorFavorites !== 'object') parsed.doctorFavorites = {};
                 parsed.adminSecurity = Object.assign({ failedAttempts: 0, lockoutUntilMillis: 0 }, parsed.adminSecurity || {});
@@ -2217,12 +2414,402 @@
         return clean;
       }
 
+      function getLocalStorageUsageInfo() {
+        try {
+          let totalChars = 0;
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i) || '';
+            const v = localStorage.getItem(k) || '';
+            totalChars += k.length + v.length;
+          }
+          const maxBytes = 4.5 * 1024 * 1024;
+          const usedBytes = totalChars * 2;
+          const percent = Math.min(100, Math.round((usedBytes / maxBytes) * 100));
+          return {
+            usedMb: (usedBytes / (1024 * 1024)).toFixed(2),
+            percent: percent,
+            isHigh: percent >= 75
+          };
+        } catch (e) {
+          return { usedMb: '0.00', percent: 0, isHigh: false };
+        }
+      }
+
+      function stripHeavyAttachmentsFromOldestRecords(stateObj, keepLatestMediaCount) {
+        if (!stateObj || !Array.isArray(stateObj.records)) return 0;
+        const sortedIds = stateObj.records
+          .slice()
+          .sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0))
+          .map((r) => r.id);
+        let heavyKept = 0;
+        let clearedCount = 0;
+        sortedIds.forEach((recId) => {
+          const rec = stateObj.records.find((r) => r.id === recId);
+          if (rec && rec.attachmentDataUrl && rec.attachmentDataUrl.length > 1000) {
+            heavyKept += 1;
+            if (heavyKept > (keepLatestMediaCount || 3)) {
+              rec.attachmentDataUrl = '';
+              rec.attachmentName = rec.attachmentName ? (rec.attachmentName + ' (archived)') : '';
+              clearedCount += 1;
+            }
+          }
+        });
+        return clearedCount;
+      }
+
+      function openStorageQuotaRecoveryModal(pendingState) {
+        const usage = getLocalStorageUsageInfo();
+        openModal(
+          bi('تنبيه امتلاء مساحة التخزين المحلية', 'Local Storage Space Warning'),
+          '<div class="alert-banner" style="background:#FEF3C7;border-color:#F59E0B;color:#92400E;">' +
+            '⚠️ ' + esc(bi(
+              'امتلأت مساحة التخزين المحلية في المتصفح (' + usage.usedMb + ' ميجابايت / ' + usage.percent + '%). لن يتم فقدان بياناتك السريرية أو ملخصات الذكاء الاصطناعي؛ يمكنك ضغط وحذف الصور الثقيلة القديمة أو حفظها.',
+              'Browser storage is nearly full (' + usage.usedMb + ' MB / ' + usage.percent + '%). Clinical summaries and extracted reports stay intact.'
+            )) +
+          '</div>' +
+          '<div style="font-size:0.86rem;color:var(--text-muted);line-height:1.55;">' +
+            esc(bi(
+              'سيقوم التنظيف الذكي بالإبقاء على أحدث 3 مرفقات مرئية فقط، مع الاحتفاظ الكامل بالنصوص المستخرجة والروشتات والملخصات الطبية.',
+              'Smart cleanup keeps the latest 3 visual attachments while preserving all extracted text, prescriptions, and AI medical summaries.'
+            )) +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">' +
+            '<button class="btn btn-outline" id="btnQuotaDismiss" type="button">' + esc(bi('إغلاق', 'Close')) + '</button>' +
+            '<button class="btn btn-primary" id="btnQuotaCleanupNow" type="button">🧹 ' + esc(bi('تنظيف الأقدم وحفظ البيانات', 'Clean Oldest & Save')) + '</button>' +
+          '</div>',
+          function () {
+            document.getElementById('btnQuotaDismiss').onclick = closeModal;
+            document.getElementById('btnQuotaCleanupNow').onclick = function () {
+              const target = pendingState || db;
+              let cleared = stripHeavyAttachmentsFromOldestRecords(target, 3);
+              let saved = false;
+              try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(target));
+                saved = true;
+              } catch (e1) {
+                cleared += stripHeavyAttachmentsFromOldestRecords(target, 1);
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(target));
+                  saved = true;
+                } catch (e2) {
+                  cleared += stripHeavyAttachmentsFromOldestRecords(target, 0);
+                  try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(target));
+                    saved = true;
+                  } catch (e3) { saved = false; }
+                }
+              }
+              closeModal();
+              if (saved) {
+                showToast(bi('تم توفير المساحة وحفظ البيانات بنجاح (تنظيف ' + cleared + ' مرفق قديم)', 'Freed space & saved data (cleaned ' + cleared + ' old media files)'));
+                renderApp();
+              } else {
+                showToast(bi('تعذر الحفظ — يرجى حذف بعض الملفات الكبيرة يدوياً', 'Unable to save — please delete large files manually'));
+              }
+            };
+          }
+        );
+      }
+
       function saveState(nextState) {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+          return true;
         } catch (e) {
-          showToast(bi('تنبيه: مساحة التخزين المحلية ممتلئة', 'Warning: Local storage is full'));
+          showToast(bi('تنبيه لطيف: مساحة التخزين المحلية ممتلئة — جاري فتح خيار التنظيف الذكي', 'Storage warning: Local storage is full'));
+          setTimeout(function () {
+            if (typeof openModal === 'function') {
+              openStorageQuotaRecoveryModal(nextState);
+            }
+          }, 60);
+          return false;
         }
+      }
+
+      function isFirebaseCloudConfigured(cfg) {
+        const c = cfg || (db && db.config) || {};
+        return Boolean(
+          String(c.firebaseApiKey || '').trim() &&
+          String(c.firebaseProjectId || '').trim() &&
+          String(c.firebaseMessagingSenderId || '').trim() &&
+          String(c.firebaseAppId || '').trim()
+        );
+      }
+
+      function toFirestoreFields(obj) {
+        const out = {};
+        Object.keys(obj || {}).forEach((k) => {
+          const val = obj[k];
+          if (val === undefined || val === null) return;
+          if (typeof val === 'boolean') out[k] = { booleanValue: val };
+          else if (typeof val === 'number' && isFinite(val)) out[k] = Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+          else if (typeof val === 'string') out[k] = { stringValue: val.length > 2000 ? val.slice(0, 2000) : val };
+        });
+        out.cloudNamespace = { stringValue: CLOUD_NAMESPACE };
+        out.updatedAtMillis = { integerValue: String(Date.now()) };
+        return out;
+      }
+
+      async function syncDocToFirestoreNamespace(subCollection, docId, payloadObj) {
+        try {
+          const cfg = (db && db.config) || {};
+          if (!isFirebaseCloudConfigured(cfg) || typeof fetch !== 'function') return;
+          const projectId = String(cfg.firebaseProjectId || '').trim();
+          const apiKey = String(cfg.firebaseApiKey || '').trim();
+          const safeId = encodeURIComponent(String(docId || Date.now()).replace(/[^\w\-]/g, '_'));
+          const safeCol = encodeURIComponent(String(subCollection || 'items').replace(/[^\w\-]/g, '_'));
+          const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
+            '/databases/(default)/documents/' + CLOUD_NAMESPACE + '/root/' + safeCol + '/' + safeId +
+            '?key=' + encodeURIComponent(apiKey);
+          await fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: toFirestoreFields(payloadObj) })
+          });
+        } catch (e) { /* offline-safe background sync */ }
+      }
+
+      async function dispatchWorkerPush(eventType, title, body, targetAudience, targetId, collectionPath) {
+        try {
+          const cfg = (db && db.config) || {};
+          const wUrl = String(cfg.workerUrl || '').trim();
+          if (!wUrl || typeof fetch !== 'function') return;
+          await fetch(wUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              namespace: CLOUD_NAMESPACE,
+              collectionPath: collectionPath || CLOUD_PATHS.notifications,
+              eventType: eventType || 'PLATFORM_ALERT',
+              title: String(title || 'طب الحجايزة'),
+              body: String(body || ''),
+              targetAudience: String(targetAudience || 'ALL'),
+              targetId: String(targetId || ''),
+              projectId: String(cfg.firebaseProjectId || ''),
+              createdAtMillis: Date.now()
+            })
+          });
+        } catch (e) { /* offline-safe worker dispatch */ }
+      }
+
+      function initFirebaseCloudBridge() {
+        try {
+          const cfg = (db && db.config) || {};
+          if (!isFirebaseCloudConfigured(cfg)) return;
+          const webCfg = {
+            apiKey: String(cfg.firebaseApiKey || '').trim(),
+            authDomain: String(cfg.firebaseAuthDomain || '').trim(),
+            projectId: String(cfg.firebaseProjectId || '').trim(),
+            storageBucket: String(cfg.firebaseStorageBucket || '').trim(),
+            messagingSenderId: String(cfg.firebaseMessagingSenderId || '').trim(),
+            appId: String(cfg.firebaseAppId || '').trim(),
+            vapidKey: String(cfg.firebaseVapidKey || '').trim()
+          };
+          if ('serviceWorker' in navigator && /^https?:$/i.test(window.location.protocol)) {
+            navigator.serviceWorker.register('./firebase-messaging-sw.js').then((reg) => {
+              const targetWorker = reg.active || reg.waiting || reg.installing;
+              if (targetWorker && targetWorker.postMessage) {
+                targetWorker.postMessage({ type: 'TEB_INIT_FIREBASE', config: webCfg });
+              }
+            }).catch(() => {});
+          }
+          if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission().catch(() => {});
+          }
+        } catch (e) { /* safe fallback */ }
+      }
+
+      function getCurrentLocalMinutesOfDay() {
+        const now = new Date();
+        return now.getHours() * 60 + now.getMinutes();
+      }
+
+      function getPatientModifyEligibility(slot) {
+        const effectiveMin = (slot.startMinutes || 0) + (slot.delayMinutes || 0);
+        const nowMin = getCurrentLocalMinutesOfDay();
+        const remainingMin = effectiveMin - nowMin;
+        return {
+          allowed: remainingMin >= PATIENT_MODIFY_CUTOFF_MINUTES,
+          remainingMinutes: remainingMin
+        };
+      }
+
+      function executeCancelSlot(slotId, actorRole) {
+        const slot = db.slots.find((s) => s.id === slotId);
+        if (!slot || slot.status !== 'BOOKED') return false;
+        const isPatient = actorRole === 'PATIENT';
+        if (isPatient) {
+          const gate = getPatientModifyEligibility(slot);
+          if (!gate.allowed) {
+            showToast(bi(
+              'عذراً، لا يمكن إلغاء الموعد قبل الكشف بأقل من ساعتين (' + Math.max(0, gate.remainingMinutes) + ' دقيقة متبقية) — تواصل مع سكرتيرة العيادة',
+              'Patients cannot cancel within 2 hours of the appointment — please contact the clinic secretary'
+            ));
+            return false;
+          }
+        }
+        const prevPatientName = slot.patientName || bi('مريض', 'Patient');
+        const prevPatientPhone = slot.patientPhone || '';
+        const prevTimeLabel = formatMinutesAr((slot.startMinutes || 0) + (slot.delayMinutes || 0));
+        const docObj = db.doctors.find((d) => d.id === slot.doctorId);
+        const clinicLabel = docObj ? getClinicDisplayName(docObj) : bi('العيادة', 'Clinic');
+
+        slot.status = 'AVAILABLE';
+        slot.patientName = '';
+        slot.patientPhone = '';
+        slot.familyMemberId = '';
+        slot.bookingSource = '';
+
+        if (isPatient) {
+          const alertMsg = '🗓️ تم إلغاء موعد المريض ' + prevPatientName + ' (الساعة ' + prevTimeLabel + ') بواسطة المريض وأصبح الموعد متاحاً.';
+          db.notifications.unshift({
+            id: Date.now(),
+            message: alertMsg,
+            isRead: false,
+            targetAudience: 'CLINIC',
+            targetId: slot.doctorId,
+            senderLabel: prevPatientName,
+            createdAtMillis: Date.now()
+          });
+          dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_PATIENT', clinicLabel, alertMsg, 'CLINIC', slot.doctorId, CLOUD_PATHS.appointments);
+        } else {
+          const targetAcc = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === normalizePhoneDigits(prevPatientPhone));
+          const alertMsg = '🗓️ إشعار من ' + clinicLabel + ': تم إلغاء موعد ' + prevPatientName + ' (الساعة ' + prevTimeLabel + ') وإتاحته بالجدول.';
+          db.notifications.unshift({
+            id: Date.now(),
+            message: alertMsg,
+            isRead: false,
+            targetAudience: 'PATIENT',
+            targetId: targetAcc ? targetAcc.id : '',
+            senderLabel: clinicLabel,
+            createdAtMillis: Date.now()
+          });
+          dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : '', CLOUD_PATHS.appointments);
+        }
+        saveState(db);
+        syncDocToFirestoreNamespace('appointments', slot.id, slot);
+        showToast(bi('تم إلغاء الحجز وإعادة الموعد متاحاً باللون الأخضر', 'Booking cancelled; slot is open again'));
+        renderApp();
+        return true;
+      }
+
+      function executeRescheduleSlot(fromSlotId, toSlotId, actorRole) {
+        const fromSlot = db.slots.find((s) => s.id === fromSlotId);
+        const toSlot = db.slots.find((s) => s.id === toSlotId);
+        if (!fromSlot || fromSlot.status !== 'BOOKED' || !toSlot || toSlot.status !== 'AVAILABLE') {
+          showToast(bi('الموعد المختار لم يعد متاحاً للتحويل', 'Target slot is no longer available'));
+          return false;
+        }
+        const isPatient = actorRole === 'PATIENT';
+        if (isPatient) {
+          const gate = getPatientModifyEligibility(fromSlot);
+          if (!gate.allowed) {
+            showToast(bi(
+              'عذراً، لا يمكن تعديل الموعد قبل الكشف بأقل من ساعتين — يرجى التواصل مع سكرتيرة العيادة',
+              'Patients cannot reschedule within 2 hours of the appointment — please contact the clinic secretary'
+            ));
+            return false;
+          }
+        }
+        const patientName = fromSlot.patientName;
+        const patientPhone = fromSlot.patientPhone;
+        const familyMemberId = fromSlot.familyMemberId;
+        const bookingSource = fromSlot.bookingSource;
+        const oldTimeLabel = formatMinutesAr((fromSlot.startMinutes || 0) + (fromSlot.delayMinutes || 0));
+        const newTimeLabel = formatMinutesAr((toSlot.startMinutes || 0) + (toSlot.delayMinutes || 0));
+        const docObj = db.doctors.find((d) => d.id === fromSlot.doctorId);
+        const clinicLabel = docObj ? getClinicDisplayName(docObj) : bi('العيادة', 'Clinic');
+
+        fromSlot.status = 'AVAILABLE';
+        fromSlot.patientName = '';
+        fromSlot.patientPhone = '';
+        fromSlot.familyMemberId = '';
+        fromSlot.bookingSource = '';
+
+        toSlot.status = 'BOOKED';
+        toSlot.patientName = patientName;
+        toSlot.patientPhone = patientPhone;
+        toSlot.familyMemberId = familyMemberId;
+        toSlot.bookingSource = bookingSource;
+
+        if (isPatient) {
+          const alertMsg = '🔄 قام المريض ' + patientName + ' بتعديل موعده من ' + oldTimeLabel + ' إلى ' + newTimeLabel + '.';
+          db.notifications.unshift({
+            id: Date.now(),
+            message: alertMsg,
+            isRead: false,
+            targetAudience: 'CLINIC',
+            targetId: fromSlot.doctorId,
+            senderLabel: patientName,
+            createdAtMillis: Date.now()
+          });
+          dispatchWorkerPush('APPOINTMENT_RESCHEDULED_BY_PATIENT', clinicLabel, alertMsg, 'CLINIC', fromSlot.doctorId, CLOUD_PATHS.appointments);
+        } else {
+          const targetAcc = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === normalizePhoneDigits(patientPhone));
+          const alertMsg = '🔄 تنبيه من ' + clinicLabel + ': تم تعديل موعد كشف ' + patientName + ' من ' + oldTimeLabel + ' إلى الساعة ' + newTimeLabel + '.';
+          db.notifications.unshift({
+            id: Date.now(),
+            message: alertMsg,
+            isRead: false,
+            targetAudience: 'PATIENT',
+            targetId: targetAcc ? targetAcc.id : '',
+            senderLabel: clinicLabel,
+            createdAtMillis: Date.now()
+          });
+          dispatchWorkerPush('APPOINTMENT_RESCHEDULED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : '', CLOUD_PATHS.appointments);
+        }
+        saveState(db);
+        syncDocToFirestoreNamespace('appointments', fromSlot.id, fromSlot);
+        syncDocToFirestoreNamespace('appointments', toSlot.id, toSlot);
+        showToast(bi('تم تعديل الموعد إلى الساعة ' + newTimeLabel + ' بنجاح', 'Appointment rescheduled to ' + newTimeLabel));
+        renderApp();
+        return true;
+      }
+
+      function openRescheduleSlotModal(slotId, actorRole) {
+        const slot = db.slots.find((s) => s.id === slotId);
+        if (!slot || slot.status !== 'BOOKED') return;
+        const isPatient = actorRole === 'PATIENT';
+        if (isPatient) {
+          const gate = getPatientModifyEligibility(slot);
+          if (!gate.allowed) {
+            showToast(bi(
+              'عذراً، لا يمكن تعديل الموعد قبل الكشف بأقل من ساعتين (' + Math.max(0, gate.remainingMinutes) + ' دقيقة متبقية) — تواصل مع سكرتيرة العيادة',
+              'Cannot reschedule within 2 hours of visit — contact clinic secretary'
+            ));
+            return;
+          }
+        }
+        const openSlots = db.slots
+          .filter((s) => s.doctorId === slot.doctorId && s.status === 'AVAILABLE')
+          .sort((a, b) => a.startMinutes - b.startMinutes);
+        const curTimeLabel = formatMinutesAr((slot.startMinutes || 0) + (slot.delayMinutes || 0));
+
+        openModal(
+          bi('تعديل موعد الكشف', 'Reschedule Appointment'),
+          '<div style="font-weight:700;">' + esc(bi('الموعد الحالي: ', 'Current slot: ')) + esc(curTimeLabel) + ' — ' + esc(slot.patientName) + '</div>' +
+          (isPatient
+            ? '<div style="font-size:0.83rem;color:var(--text-muted);">' + esc(bi('يسمح بتعديل أو إلغاء الموعد للمريض قبل الكشف بساعتين على الأقل.', 'Patients can reschedule or cancel at least 2 hours before the visit.')) + '</div>'
+            : '<div style="font-size:0.83rem;color:var(--teal-text);">' + esc(bi('تحكم العيادة والسكرتيرة: يمكنك نقل الموعد في أي وقت وسيصل تنبيه فوري للمريض.', 'Clinic Secretary: move appointment anytime with instant patient notification.')) + '</div>') +
+          (openSlots.length === 0
+            ? '<div class="alert-banner">' + esc(bi('لا توجد مواعيد أخرى متاحة حالياً في نفس العيادة.', 'No other open slots available right now.')) + '</div>'
+            : '<div style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;">' +
+                openSlots.map((t) =>
+                  '<button class="btn btn-outline" type="button" data-pick-reschedule-target="' + esc(t.id) + '" style="justify-content:center;">📅 ' +
+                    esc(bi('نقل إلى الساعة ', 'Move to ')) + esc(formatMinutesAr((t.startMinutes || 0) + (t.delayMinutes || 0))) +
+                  '</button>'
+                ).join('') +
+              '</div>'),
+          function () {
+            document.querySelectorAll('[data-pick-reschedule-target]').forEach((btn) => {
+              btn.onclick = function () {
+                const targetId = btn.getAttribute('data-pick-reschedule-target');
+                closeModal();
+                executeRescheduleSlot(slot.id, targetId, actorRole);
+              };
+            });
+          }
+        );
       }
 
       function loadSavedLang() {
@@ -2247,20 +2834,22 @@
         searchQuery: '',
         homeSearchQuery: '',
         loggedInDoctorId: null,
-        doctorTab: 'SLOTS', // SLOTS | ACTIVATE_PATIENT
+        doctorTab: 'SLOTS', // SLOTS | ACTIVATE_PATIENT | MESSAGES
         docActivatePhoneQuery: '',
         docActivateResults: [],
         docActivateSuccessMsg: '',
+        docAlertTargetAccId: '',
         loggedInLabId: null,
         labPhoneQuery: '',
         labSearchResults: [],
         labTargetMemberId: '',
         labTargetAccountPhone: '',
         isAdminLoggedIn: false,
-        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | USERS | BOOKINGS | OTP_CODES | SETTINGS
+        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | USERS | BOOKINGS | OTP_CODES | MESSAGES | SETTINGS
         adminSearchQuery: '',
         adminUsersQuery: '',
         adminUsersFilter: 'ALL', // ALL | VERIFIED | UNVERIFIED
+        adminAlertDocId: '',
         versionTapCount: 0,
         medications: BUILTIN_MEDICATIONS.slice(),
         isLiveMedsApi: false,
@@ -2274,6 +2863,7 @@
       };
 
       const EXTERNAL_SPECIALTIES = SPECIALTIES_CATALOG;
+      const PDFJS_ASSETS_BASE = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/';
 
       if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -2317,7 +2907,12 @@
       async function extractTextFromPdfBytes(bytes) {
         if (!bytes || !window.pdfjsLib) return '';
         try {
-          const loadingTask = window.pdfjsLib.getDocument({ data: bytes.slice() });
+          const loadingTask = window.pdfjsLib.getDocument({
+            data: bytes.slice(),
+            cMapUrl: PDFJS_ASSETS_BASE + 'cmaps/',
+            cMapPacked: true,
+            standardFontDataUrl: PDFJS_ASSETS_BASE + 'standard_fonts/'
+          });
           const pdfDoc = await loadingTask.promise;
           const pageLimit = Math.min(pdfDoc.numPages || 0, 15);
           const pagesOut = [];
@@ -2389,7 +2984,7 @@
         reader.onload = function () {
           const img = new Image();
           img.onload = function () {
-            const maxDim = 1200;
+            const maxDim = 1024;
             let w = img.width || 800;
             let h = img.height || 600;
             if (w > maxDim || h > maxDim) {
@@ -2407,7 +3002,12 @@
               canvas.height = h;
               const ctx = canvas.getContext('2d');
               ctx.drawImage(img, 0, 0, w, h);
-              const compressedUrl = canvas.toDataURL('image/jpeg', 0.78);
+              let quality = 0.72;
+              let compressedUrl = canvas.toDataURL('image/jpeg', quality);
+              while (compressedUrl.length > 220000 && quality > 0.42) {
+                quality = Math.max(0.42, quality - 0.1);
+                compressedUrl = canvas.toDataURL('image/jpeg', quality);
+              }
               onDone({
                 dataUrl: compressedUrl,
                 mimeType: 'image/jpeg',
@@ -3932,6 +4532,118 @@
       // ================================================================
       // 5. العرض والتفاعل (Rendering Engine)
       // ================================================================
+      function canPatientChatWith(doc) {
+        return Boolean(db.config && db.config.globalChatEnabled !== false && doc && doc.chatEnabled !== false);
+      }
+
+      function isNotificationVisibleForRole(n) {
+        if (!n) return false;
+        const aud = String(n.targetAudience || 'ALL').toUpperCase();
+        const tid = String(n.targetId || '').trim();
+        if (ui.roleMode === 'ADMIN') {
+          return aud === 'ADMIN' || aud === 'ALL';
+        }
+        if (ui.roleMode === 'DOCTOR') {
+          return aud === 'ALL' || (aud === 'CLINIC' && (!tid || tid === ui.loggedInDoctorId));
+        }
+        if (aud === 'ALL') return true;
+        if (aud === 'PATIENT') {
+          if (!tid) return true;
+          if (db.account && (tid === db.account.id || normalizePhoneDigits(tid) === normalizePhoneDigits(db.account.phone))) return true;
+          return (db.familyMembers || []).some((m) => m.id === tid);
+        }
+        return false;
+      }
+
+      function getVisibleNotificationsForRole() {
+        return (db.notifications || [])
+          .filter(isNotificationVisibleForRole)
+          .slice()
+          .sort((a, b) => (Number(b.createdAtMillis || b.id) || 0) - (Number(a.createdAtMillis || a.id) || 0));
+      }
+
+      function isIncomingMessageForRole(msg, roleModeOverride) {
+        if (!msg || msg.isRead) return false;
+        const mode = roleModeOverride || ui.roleMode;
+        if (mode === 'PATIENT') {
+          if (!db.account) return false;
+          if (msg.patientAccountId !== db.account.id) return false;
+          return (msg.threadType === 'PATIENT_CLINIC' && msg.senderRole === 'CLINIC') ||
+            (msg.threadType === 'PATIENT_ADMIN' && msg.senderRole === 'ADMIN');
+        }
+        if (mode === 'DOCTOR') {
+          if (!ui.loggedInDoctorId || msg.doctorId !== ui.loggedInDoctorId) return false;
+          return (msg.threadType === 'PATIENT_CLINIC' && msg.senderRole === 'PATIENT') ||
+            (msg.threadType === 'CLINIC_ADMIN' && msg.senderRole === 'ADMIN');
+        }
+        if (mode === 'ADMIN') {
+          if (!ui.isAdminLoggedIn) return false;
+          return (msg.threadType === 'PATIENT_ADMIN' && msg.senderRole === 'PATIENT') ||
+            (msg.threadType === 'CLINIC_ADMIN' && msg.senderRole === 'CLINIC');
+        }
+        return false;
+      }
+
+      function getUnreadMessagesCountForRole() {
+        return (db.messages || []).filter((m) => isIncomingMessageForRole(m, ui.roleMode)).length;
+      }
+
+      function getUnreadMessagesForPatientSupport() {
+        if (!db.account) return 0;
+        return (db.messages || []).filter((m) =>
+          !m.isRead && m.threadType === 'PATIENT_ADMIN' && m.patientAccountId === db.account.id && m.senderRole === 'ADMIN'
+        ).length;
+      }
+
+      function getUnreadMessagesForDoctor(docId) {
+        if (!docId) return 0;
+        return (db.messages || []).filter((m) =>
+          !m.isRead && m.doctorId === docId && (
+            (m.threadType === 'PATIENT_CLINIC' && m.senderRole === 'PATIENT') ||
+            (m.threadType === 'CLINIC_ADMIN' && m.senderRole === 'ADMIN')
+          )
+        ).length;
+      }
+
+      function getUnreadSupportInboxForAdmin() {
+        return (db.messages || []).filter((m) =>
+          !m.isRead && (
+            (m.threadType === 'PATIENT_ADMIN' && m.senderRole === 'PATIENT') ||
+            (m.threadType === 'CLINIC_ADMIN' && m.senderRole === 'CLINIC')
+          )
+        ).length;
+      }
+
+      function formatMessageTime(ms) {
+        try {
+          return new Date(Number(ms) || Date.now()).toLocaleTimeString(ui.lang === 'en' ? 'en-US' : 'ar-EG', {
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function pushDirectMessage(payload) {
+        if (!Array.isArray(db.messages)) db.messages = [];
+        db.messages.push({
+          id: 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+          threadType: payload.threadType,
+          senderRole: payload.senderRole,
+          senderName: payload.senderName || '',
+          patientAccountId: payload.patientAccountId || '',
+          patientName: payload.patientName || '',
+          patientPhone: payload.patientPhone || '',
+          doctorId: payload.doctorId || '',
+          doctorName: payload.doctorName || '',
+          body: payload.body || '',
+          isRead: false,
+          createdAtMillis: Date.now()
+        });
+        saveState(db);
+      }
+
       function updateHeader() {
         const isEn = ui.lang === 'en';
         document.documentElement.lang = isEn ? 'en' : 'ar';
@@ -3985,7 +4697,9 @@
         document.getElementById('navLblSpecs').textContent = bi('التخصصات', 'Specialties');
         document.getElementById('navLblEmr').textContent = bi('ملفي الطبي', 'My Records');
 
-        const unread = db.notifications.filter((n) => !n.isRead).length;
+        const unreadAlerts = getVisibleNotificationsForRole().filter((n) => !n.isRead).length;
+        const unreadMsgs = getUnreadMessagesCountForRole();
+        const unread = unreadAlerts + unreadMsgs;
         const badge = document.getElementById('alertBadge');
         badge.textContent = String(unread);
         badge.style.display = unread > 0 ? 'flex' : 'none';
@@ -4006,6 +4720,7 @@
         const specsText = formatDoctorSpecialties(doc);
         const clinicLabel = getClinicDisplayName(doc);
         const locLabel = getDoctorLocationDisplay(doc);
+        const chatAllowed = canPatientChatWith(doc);
         return '<div class="doctor-card">' +
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">' +
             '<div>' +
@@ -4026,12 +4741,17 @@
           (doc.currentDelayMinutes > 0
             ? '<div class="alert-banner" style="padding:8px 10px;font-size:0.84rem;">⚠️ ' + esc(bi('تأخير حالي: +' + doc.currentDelayMinutes + ' دقيقة', 'Current Delay: +' + doc.currentDelayMinutes + ' min')) + '</div>'
             : '') +
-          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">' +
             '<div style="display:flex;gap:6px;">' +
               '<span class="badge badge-avail">' + esc(bi('متاح: ', 'Open: ')) + avail + '</span>' +
               '<span class="badge badge-booked">' + esc(bi('محجوز: ', 'Booked: ')) + booked + '</span>' +
             '</div>' +
-            '<button class="btn btn-primary" type="button" data-open-doc="' + esc(doc.id) + '" style="min-height:40px;padding:8px 14px;">' + esc(bi('عرض المواعيد', 'View Slots')) + '</button>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+              (chatAllowed
+                ? '<button class="btn btn-outline" type="button" data-chat-doc="' + esc(doc.id) + '" style="min-height:40px;padding:8px 12px;">💬 ' + esc(bi('مراسلة العيادة', 'Message Clinic')) + '</button>'
+                : '') +
+              '<button class="btn btn-primary" type="button" data-open-doc="' + esc(doc.id) + '" style="min-height:40px;padding:8px 14px;">' + esc(bi('عرض المواعيد', 'View Slots')) + '</button>' +
+            '</div>' +
           '</div>' +
         '</div>';
       }
@@ -4390,10 +5110,11 @@
                     (slot.delayMinutes > 0
                       ? '<div style="color:var(--warn-border);font-size:0.84rem;font-weight:700;margin-top:4px;">' + esc(bi('تم تعديل الموعد (+' + slot.delayMinutes + ' دقيقة تأخير)', 'Updated (+' + slot.delayMinutes + ' min delay)')) + '</div>'
                       : '') +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap;">' +
                       '<span style="font-weight:700;">' + esc(bi('المريض: ', 'Patient: ')) + esc(slot.patientName) + '</span>' +
-                      '<div style="display:flex;gap:8px;">' +
-                        '<button class="btn btn-danger-outline" type="button" data-cancel-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;">' + esc(bi('إلغاء', 'Cancel')) + '</button>' +
+                      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                        '<button class="btn btn-outline" type="button" data-reschedule-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 10px;">📅 ' + esc(bi('تعديل الموعد', 'Reschedule')) + '</button>' +
+                        '<button class="btn btn-danger-outline" type="button" data-cancel-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 10px;">' + esc(bi('إلغاء', 'Cancel')) + '</button>' +
                         '<button class="btn btn-primary" type="button" data-open-doc="' + esc(doc.id) + '" style="min-height:38px;padding:6px 12px;">' + esc(bi('تفاصيل العيادة', 'Details')) + '</button>' +
                       '</div>' +
                     '</div>' +
@@ -4468,9 +5189,14 @@
             (doc.bio ? '<div style="font-size:0.9rem;color:var(--text-muted);margin-top:4px;">' + esc(doc.bio) + '</div>' : '') +
             '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:4px;">📍 ' + esc(getDoctorLocationDisplay(doc)) + ' • ' + esc(bi('سعر الكشف: ', 'Fee: ')) + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
             '<div style="font-size:0.88rem;margin-top:4px;">🕒 ' + esc(bi('مواعيد العمل: ', 'Working Hours: ')) + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' (' + esc(bi('كل ' + doc.slotDurationMinutes + ' دقيقة', 'Every ' + doc.slotDurationMinutes + ' min')) + ')</div>' +
-            (doc.mapsUrl
-              ? '<div style="margin-top:8px;"><a class="btn btn-outline" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:40px;padding:6px 14px;display:inline-flex;">🗺️ ' + esc(bi('فتح موقع العيادة على خرائط جوجل', 'Open Clinic on Google Maps')) + '</a></div>'
-              : '') +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
+              (doc.mapsUrl
+                ? '<a class="btn btn-outline" href="' + esc(doc.mapsUrl) + '" target="_blank" rel="noopener" style="min-height:40px;padding:6px 14px;display:inline-flex;">🗺️ ' + esc(bi('فتح موقع العيادة على خرائط جوجل', 'Open Clinic on Google Maps')) + '</a>'
+                : '') +
+              (canPatientChatWith(doc)
+                ? '<button class="btn btn-primary" type="button" data-chat-doc="' + esc(doc.id) + '" style="min-height:40px;padding:6px 14px;">💬 ' + esc(bi('مراسلة العيادة', 'Message Clinic')) + '</button>'
+                : '') +
+            '</div>' +
             (doc.currentDelayMinutes > 0
               ? '<div class="alert-banner" style="margin-top:8px;">' + esc(bi('تحديث: العيادة متأخرة ' + doc.currentDelayMinutes + ' دقيقة والأوقات الظاهرة معدّلة تلقائياً.', 'Update: Clinic delayed by ' + doc.currentDelayMinutes + ' min. Times auto-adjusted.')) + '</div>'
               : '') +
@@ -4506,7 +5232,12 @@
               return '<div class="slot-tile ' + cls + '" ' + (slot.status === 'AVAILABLE' ? 'data-book-slot="' + esc(slot.id) + '"' : '') + '>' +
                 '<div class="slot-time">' + formatMinutesAr(eff) + '</div>' +
                 '<div class="slot-state">' + esc(label) + '</div>' +
-                (isMine ? '<button class="chip" type="button" style="min-height:28px;padding:2px 8px;font-size:0.75rem;color:var(--booked-border);margin-top:4px;" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إلغاء', 'Cancel')) + '</button>' : '') +
+                (isMine
+                  ? '<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin-top:4px;">' +
+                      '<button class="chip" type="button" style="min-height:28px;padding:2px 8px;font-size:0.75rem;color:var(--teal-text);" data-reschedule-slot="' + esc(slot.id) + '">' + esc(bi('تعديل', 'Reschedule')) + '</button>' +
+                      '<button class="chip" type="button" style="min-height:28px;padding:2px 8px;font-size:0.75rem;color:var(--booked-border);" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إلغاء', 'Cancel')) + '</button>' +
+                    '</div>'
+                  : '') +
               '</div>';
             }).join('') +
           '</section>';
@@ -4603,6 +5334,15 @@
 
           renderAiMedicalSummaryCardHtml(activeMember.fullName, records, activeMember) +
 
+          (function () {
+            const usage = getLocalStorageUsageInfo();
+            if (!usage.isHigh) return '';
+            return '<div class="alert-banner" style="background:#FEF3C7;border-color:#F59E0B;color:#92400E;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<span>⚠️ ' + esc(bi('مساحة تخزين الملفات اقتربت من الامتلاء (' + usage.percent + '% • ' + usage.usedMb + ' ميجا)', 'Local storage usage is high (' + usage.percent + '% • ' + usage.usedMb + ' MB)')) + '</span>' +
+              '<button class="btn btn-outline" id="btnQuickCleanupOldUploads" type="button" style="min-height:36px;padding:4px 10px;">🧹 ' + esc(bi('تنظيف المرفقات القديمة', 'Free Storage')) + '</button>' +
+            '</div>';
+          })() +
+
           '<button class="btn btn-primary btn-block" id="btnOpenExternalVisitModal" type="button" style="background:linear-gradient(135deg,#EA580C 0%,#C2410C 100%);">' +
             esc(bi('➕ تسجيل زيارة طبيب خارجي / خاص', '➕ Log External / Private Doctor Visit')) +
           '</button>' +
@@ -4691,6 +5431,88 @@
           '</section>';
       }
 
+      function renderDoctorMessagesSectionHtml(doc) {
+        const clinicThreadsMap = {};
+        (db.messages || []).forEach((m) => {
+          if (m.threadType === 'PATIENT_CLINIC' && m.doctorId === doc.id && m.patientAccountId) {
+            if (!clinicThreadsMap[m.patientAccountId]) {
+              clinicThreadsMap[m.patientAccountId] = {
+                patientAccountId: m.patientAccountId,
+                patientName: m.patientName || m.senderName || bi('مريض', 'Patient'),
+                patientPhone: m.patientPhone || '',
+                msgs: [],
+                unread: 0
+              };
+            }
+            clinicThreadsMap[m.patientAccountId].msgs.push(m);
+            if (!m.isRead && m.senderRole === 'PATIENT') clinicThreadsMap[m.patientAccountId].unread += 1;
+          }
+        });
+        const threads = Object.values(clinicThreadsMap).sort((a, b) => {
+          const al = a.msgs[a.msgs.length - 1];
+          const bl = b.msgs[b.msgs.length - 1];
+          return (bl ? bl.createdAtMillis : 0) - (al ? al.createdAtMillis : 0);
+        });
+        const unreadAdminReplies = (db.messages || []).filter((m) =>
+          !m.isRead && m.threadType === 'CLINIC_ADMIN' && m.doctorId === doc.id && m.senderRole === 'ADMIN'
+        ).length;
+        const adminAlerts = (db.notifications || []).filter((n) => {
+          const aud = String(n.targetAudience || 'ALL').toUpperCase();
+          return aud === 'CLINIC' && (!n.targetId || n.targetId === doc.id);
+        }).slice(0, 6);
+        const accountsList = db.accounts || [];
+
+        return '<section class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--teal-soft);border-color:rgba(13,115,119,0.28);">' +
+            '<div>' +
+              '<div style="font-weight:800;color:var(--teal-text);">💬 ' + esc(bi('تواصل العيادة مع الإدارة والمرضى', 'Clinic Messaging & Admin Support')) + '</div>' +
+              '<div style="font-size:0.83rem;color:var(--teal-text);">' +
+                esc(bi('حالة دردشة المرضى لعيادتك: ', 'Patient chat status: ')) +
+                '<strong>' + esc(canPatientChatWith(doc) ? bi('مفعلة ✓', 'Enabled ✓') : bi('متوقفة مؤقتاً', 'Disabled')) + '</strong>' +
+              '</div>' +
+            '</div>' +
+            '<button class="btn btn-primary" id="btnDoctorChatAdmin" type="button">' +
+              '🛡️ ' + esc(bi('مراسلة الإدارة العليا', 'Message Super Admin')) +
+              (unreadAdminReplies > 0 ? ' (' + unreadAdminReplies + ')' : '') +
+            '</button>' +
+          '</section>' +
+
+          (adminAlerts.length > 0
+            ? '<section class="card" style="display:flex;flex-direction:column;gap:8px;">' +
+                '<h3>🔔 ' + esc(bi('تنبيهات موجهة من الإدارة للعيادة', 'Admin Notices for Clinic')) + '</h3>' +
+                adminAlerts.map((n) => '<div class="alert-banner">' + esc(n.message) + '</div>').join('') +
+              '</section>'
+            : '') +
+
+          '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
+            '<h3>📣 ' + esc(bi('إرسال إشعار مباشر لمريض', 'Send Direct Alert to Patient')) + '</h3>' +
+            '<select class="select" id="docAlertPatientSel">' +
+              '<option value="">' + esc(bi('جميع المرضى (تنبيه عام للعيادة)', 'All Patients (General Clinic Notice)')) + '</option>' +
+              accountsList.map((a) =>
+                '<option value="' + esc(a.id) + '"' + (ui.docAlertTargetAccId === a.id ? ' selected' : '') + '>' + esc(a.fullName) + ' (' + esc(a.phone) + ')</option>'
+              ).join('') +
+            '</select>' +
+            '<textarea class="textarea" id="docAlertMessageInp" placeholder="' + esc(bi('اكتب نص الإشعار الطبي أو الإداري للمريض...', 'Write alert message for the patient...')) + '"></textarea>' +
+            '<button class="btn btn-primary btn-block" id="btnDocSendPatientAlert" type="button">📤 ' + esc(bi('إرسال الإشعار للمريض', 'Send Alert to Patient')) + '</button>' +
+          '</section>' +
+
+          '<section style="display:flex;flex-direction:column;gap:10px;">' +
+            '<h3>💬 ' + esc(bi('رسائل المرضى الواردة للعيادة (' + threads.length + ')', 'Incoming Patient Threads (' + threads.length + ')')) + '</h3>' +
+            (threads.length === 0
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد محادثات من المرضى حتى الآن.', 'No patient conversations yet.')) + '</div>'
+              : threads.map((t) => {
+                  const last = t.msgs[t.msgs.length - 1];
+                  return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;' + (t.unread > 0 ? 'border-color:var(--teal);background:var(--teal-soft);' : '') + '">' +
+                    '<div style="flex:1;min-width:190px;">' +
+                      '<div style="font-weight:800;">👤 ' + esc(t.patientName) + (t.unread > 0 ? ' <span class="badge badge-booked">' + t.unread + ' ' + esc(bi('جديد', 'new')) + '</span>' : '') + '</div>' +
+                      (t.patientPhone ? '<div style="font-size:0.8rem;color:var(--text-muted);" dir="ltr">' + esc(t.patientPhone) + '</div>' : '') +
+                      (last ? '<div style="font-size:0.86rem;color:var(--text-muted);margin-top:4px;">' + esc(last.body) + '</div>' : '') +
+                    '</div>' +
+                    '<button class="btn btn-primary" type="button" data-doc-reply-patient="' + esc(t.patientAccountId) + '" style="min-height:40px;">💬 ' + esc(bi('فتح والرد', 'Open & Reply')) + '</button>' +
+                  '</div>';
+                }).join('')) +
+          '</section>';
+      }
+
       function renderDoctorDashboard() {
         const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
         if (!doc) return renderDoctorLoginGate();
@@ -4698,10 +5520,13 @@
         const bookedCount = slots.filter((s) => s.status === 'BOOKED').length;
         const availCount = slots.filter((s) => s.status === 'AVAILABLE').length;
         const doneCount = slots.filter((s) => s.status === 'COMPLETED').length;
+        const unreadClinicMsgs = getUnreadMessagesForDoctor(doc.id);
 
         const bodyHtml = ui.doctorTab === 'ACTIVATE_PATIENT'
           ? renderDoctorActivationSectionHtml(doc)
-          : '<section class="card">' +
+          : (ui.doctorTab === 'MESSAGES'
+              ? renderDoctorMessagesSectionHtml(doc)
+              : '<section class="card">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
                 '<div>' +
                   '<h3 style="font-size:1.15rem;">' + esc(getClinicDisplayName(doc)) + ' (' + esc(formatDoctorSpecialties(doc)) + ')</h3>' +
@@ -4750,12 +5575,15 @@
                               '<button class="btn btn-outline" type="button" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('ملف المريض', 'Patient EMR')) + '</button>' +
                               '<button class="btn btn-primary" type="button" data-write-rx="' + esc(slot.id) + '">💊 ' + esc(bi('كتابة روشتة', 'Write Rx')) + '</button>' +
                             '</div>' +
-                            '<div style="text-align:end;margin-top:6px;"><button class="btn" type="button" style="background:transparent;color:var(--booked-border);min-height:34px;padding:4px 8px;" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إلغاء الحجز وإتاحته', 'Cancel & Free Slot')) + '</button></div>'
+                            '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:6px;">' +
+                              '<button class="btn btn-outline" type="button" style="min-height:36px;padding:4px 10px;" data-clinic-reschedule-slot="' + esc(slot.id) + '">📅 ' + esc(bi('تعديل الموعد', 'Reschedule')) + '</button>' +
+                              '<button class="btn" type="button" style="background:transparent;color:var(--booked-border);min-height:36px;padding:4px 8px;" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إلغاء الحجز وإتاحته', 'Cancel & Free Slot')) + '</button>' +
+                            '</div>'
                           : '<button class="btn btn-outline btn-block" type="button" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('عرض الملف الطبي والروشتة', 'View Record & Rx')) + '</button>')) +
                   '</div>';
                 }).join('') +
               '</div>' +
-            '</section>';
+            '</section>');
 
         return '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
             '<div>' +
@@ -4765,8 +5593,9 @@
             '<button class="btn btn-danger-outline" id="btnDoctorLogout" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
           '</section>' +
           '<div class="chips-row">' +
-            '<button class="chip ' + (ui.doctorTab !== 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
+            '<button class="chip ' + (ui.doctorTab === 'SLOTS' || !ui.doctorTab ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
             '<button class="chip ' + (ui.doctorTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT">✅ ' + esc(bi('تفعيل حساب مريض برقم الهاتف', 'Activate Patient by Phone')) + '</button>' +
+            '<button class="chip ' + (ui.doctorTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-doc-tab="MESSAGES">💬 ' + esc(bi('رسائل المرضى', 'Patient Messages')) + (unreadClinicMsgs > 0 ? ' (' + unreadClinicMsgs + ')' : '') + '</button>' +
           '</div>' +
           bodyHtml;
       }
@@ -5134,6 +5963,100 @@
                 '</div>');
         } else if (ui.adminTab === 'OTP_CODES') {
           tabBodyHtml = renderOtpGeneratorSectionHtml();
+        } else if (ui.adminTab === 'MESSAGES') {
+          const globalEnabled = db.config.globalChatEnabled !== false;
+          const supportThreadsMap = {};
+          (db.messages || []).forEach((m) => {
+            if (m.threadType === 'PATIENT_ADMIN' || m.threadType === 'CLINIC_ADMIN') {
+              const key = m.threadType === 'PATIENT_ADMIN' ? ('PA_' + m.patientAccountId) : ('CA_' + m.doctorId);
+              if (!supportThreadsMap[key]) {
+                supportThreadsMap[key] = {
+                  key: key,
+                  threadType: m.threadType,
+                  patientAccountId: m.patientAccountId || '',
+                  doctorId: m.doctorId || '',
+                  title: m.threadType === 'PATIENT_ADMIN' ? (m.patientName || m.senderName || bi('مريض', 'Patient')) : (m.doctorName || m.senderName || bi('عيادة', 'Clinic')),
+                  subtitle: m.threadType === 'PATIENT_ADMIN' ? (m.patientPhone || bi('رسالة مريض للإدارة', 'Patient Support')) : bi('رسالة عيادة / طبيب للإدارة', 'Clinic Support'),
+                  msgs: [],
+                  unread: 0
+                };
+              }
+              supportThreadsMap[key].msgs.push(m);
+              if (!m.isRead && m.senderRole !== 'ADMIN') supportThreadsMap[key].unread += 1;
+            }
+          });
+          const supportThreads = Object.values(supportThreadsMap).sort((a, b) => {
+            const al = a.msgs[a.msgs.length - 1];
+            const bl = b.msgs[b.msgs.length - 1];
+            return (bl ? bl.createdAtMillis : 0) - (al ? al.createdAtMillis : 0);
+          });
+
+          tabBodyHtml =
+            '<section class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:' + (globalEnabled ? 'var(--avail-bg)' : 'var(--booked-bg)') + ';border-color:' + (globalEnabled ? 'var(--avail-border)' : 'var(--booked-border)') + ';">' +
+              '<div>' +
+                '<div style="font-weight:800;font-size:1.04rem;">🛡️ ' + esc(bi('المفتاح الرئيسي لدردشة المرضى مع العيادات', 'Master Global Chat Switch (Patients ↔ Clinics)')) + '</div>' +
+                '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(globalEnabled ? bi('مفعّل حالياً: يظهر زر "مراسلة العيادة" في العيادات المفعّلة.', 'ON: Patients can chat with enabled clinics.') : bi('معطّل بالكامل: تم إخفاء وإيقاف زر مراسلة العيادات على مستوى المنصة.', 'OFF: Patient-to-clinic chat is suspended platform-wide.')) + '</div>' +
+              '</div>' +
+              '<label class="switch-toggle">' +
+                '<input type="checkbox" id="admGlobalChatToggle"' + (globalEnabled ? ' checked' : '') + ' />' +
+                '<span class="switch-slider"></span>' +
+                '<strong style="font-size:0.86rem;">' + esc(globalEnabled ? 'ON' : 'OFF') + '</strong>' +
+              '</label>' +
+            '</section>' +
+
+            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
+              '<h3>📣 ' + esc(bi('إرسال إشعار عام لجميع مستخدمي المنصة (Broadcast)', 'Send Global Platform Broadcast')) + '</h3>' +
+              '<textarea class="textarea" id="admBroadcastMsg" placeholder="' + esc(bi('اكتب رسالة تنبيه أو إعلان عام يصل لجميع المرضى والعيادات...', 'Write broadcast message for all users and clinics...')) + '"></textarea>' +
+              '<button class="btn btn-primary btn-block" id="btnAdmSendBroadcast" type="button">🚀 ' + esc(bi('نشر الإشعار العام للجميع', 'Send Global Broadcast')) + '</button>' +
+            '</section>' +
+
+            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
+              '<h3>🏥 ' + esc(bi('تنبيهات العيادات والتحكم الفردي في دردشة كل عيادة', 'Clinic Alerts & Per-Clinic Chat Control')) + '</h3>' +
+              '<select class="select" id="admClinicAlertTarget">' +
+                '<option value="">' + esc(bi('جميع العيادات والأقسام', 'All Clinics & Departments')) + '</option>' +
+                db.doctors.map((d) =>
+                  '<option value="' + esc(d.id) + '"' + (ui.adminAlertDocId === d.id ? ' selected' : '') + '>' + esc(getDoctorDisplayName(d)) + ' — ' + esc(getClinicDisplayName(d)) + '</option>'
+                ).join('') +
+              '</select>' +
+              '<textarea class="textarea" id="admClinicAlertMsg" placeholder="' + esc(bi('تنبيه إداري موجه للعيادة المحددة أو جميع العيادات...', 'Targeted administrative notice for clinic(s)...')) + '"></textarea>' +
+              '<button class="btn btn-outline btn-block" id="btnAdmSendClinicAlert" type="button">🔔 ' + esc(bi('إرسال تنبيه للعيادة', 'Send Clinic Alert')) + '</button>' +
+              '<hr style="border:none;border-top:1px dashed var(--border);margin:4px 0;" />' +
+              '<div style="font-weight:700;font-size:0.9rem;color:var(--teal-text);">' + esc(bi('تشغيل / إيقاف الدردشة لكل عيادة على حدة:', 'Per-Clinic Chat Switches:')) + '</div>' +
+              '<div style="display:flex;flex-direction:column;gap:8px;">' +
+                db.doctors.map((d) => {
+                  const docChatOn = d.chatEnabled !== false;
+                  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg);">' +
+                    '<div><strong>' + esc(getDoctorDisplayName(d)) + '</strong><div style="font-size:0.8rem;color:var(--text-muted);">' + esc(getClinicDisplayName(d)) + '</div></div>' +
+                    '<label class="switch-toggle">' +
+                      '<input type="checkbox" data-adm-clinic-chat-toggle="' + esc(d.id) + '"' + (docChatOn ? ' checked' : '') + ' />' +
+                      '<span class="switch-slider"></span>' +
+                    '</label>' +
+                  '</div>';
+                }).join('') +
+              '</div>' +
+            '</section>' +
+
+            '<section style="display:flex;flex-direction:column;gap:10px;">' +
+              '<h3>📥 ' + esc(bi('صندوق رسائل الدعم الفني الواردة (' + supportThreads.length + ')', 'Support Inbox: Patients & Clinics (' + supportThreads.length + ')')) + '</h3>' +
+              (supportThreads.length === 0
+                ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد رسائل دعم فني واردة من المرضى أو العيادات حالياً.', 'No support messages from patients or clinics yet.')) + '</div>'
+                : supportThreads.map((t) => {
+                    const last = t.msgs[t.msgs.length - 1];
+                    const roleBadge = t.threadType === 'PATIENT_ADMIN' ? bi('مريض', 'Patient') : bi('عيادة', 'Clinic');
+                    return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;' + (t.unread > 0 ? 'border-color:var(--teal);background:var(--teal-soft);' : '') + '">' +
+                      '<div style="flex:1;min-width:190px;">' +
+                        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+                          '<span class="badge badge-lab">' + esc(roleBadge) + '</span>' +
+                          '<strong>' + esc(t.title) + '</strong>' +
+                          (t.unread > 0 ? '<span class="badge badge-booked">' + t.unread + ' ' + esc(bi('غير مقروء', 'unread')) + '</span>' : '') +
+                        '</div>' +
+                        '<div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">' + esc(t.subtitle) + '</div>' +
+                        (last ? '<div style="font-size:0.86rem;margin-top:4px;">' + esc(last.body) + '</div>' : '') +
+                      '</div>' +
+                      '<button class="btn btn-primary" type="button" data-adm-open-thread="' + esc(t.key) + '" style="min-height:40px;">💬 ' + esc(bi('فتح والرد', 'Open & Reply')) + '</button>' +
+                    '</div>';
+                  }).join('')) +
+            '</section>';
         } else {
           const cfg = db.config;
           tabBodyHtml =
@@ -5147,6 +6070,24 @@
               '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط تحميل التطبيق المباشر (APK)', 'Direct APK Download URL')) + '<input class="input" id="admSetApk" value="' + esc(cfg.apkDownloadUrl) + '" dir="ltr" /></label>' +
               '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط API الأدوية المصرية (اختياري)', 'Medications API URL (optional)')) + '<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
               '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 ' + esc(bi('الرقم السري للدخول السري (Admin PIN - 4 أرقام فأكثر)', 'Secret Admin PIN (4+ digits)')) + renderPasswordFieldHtml('admSetPin', cfg.adminPin || '202600', 'Admin PIN') + '</label>' +
+              '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;" />' +
+              '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;">' +
+                '<div style="font-weight:800;color:#1D4ED8;">☁️ ' + esc(bi('إعدادات الربط السحابي والإشعارات (Firebase FCM & Cloudflare Worker)', 'Cloud Sync & Push Settings (FCM & Cloudflare Worker)')) + '</div>' +
+                '<div style="font-size:0.8rem;color:#1E3A8A;line-height:1.5;">' +
+                  esc(bi('مسارات البيانات المعزولة تلقائياً لمنع التداخل:', 'Isolated cloud collection namespace paths:')) +
+                  '<div dir="ltr" style="font-family:monospace;font-size:0.74rem;margin-top:4px;color:#0F766E;">' +
+                    esc(CLOUD_PATHS.users) + ' • ' + esc(CLOUD_PATHS.clinics) + ' • ' + esc(CLOUD_PATHS.appointments) + ' • ' + esc(CLOUD_PATHS.messages) + ' • ' + esc(CLOUD_PATHS.notifications) +
+                  '</div>' +
+                '</div>' +
+                '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('رابط الخادم الوسيط (Cloudflare Worker URL)', 'Cloudflare Worker URL')) + '<input class="input" id="admSetWorkerUrl" value="' + esc(cfg.workerUrl || '') + '" placeholder="https://teb-worker.your-subdomain.workers.dev" dir="ltr" /></label>' +
+                '<label style="font-size:0.82rem;font-weight:700;">Firebase apiKey<input class="input" id="admSetFbApiKey" value="' + esc(cfg.firebaseApiKey || '') + '" dir="ltr" /></label>' +
+                '<label style="font-size:0.82rem;font-weight:700;">Firebase authDomain<input class="input" id="admSetFbAuthDomain" value="' + esc(cfg.firebaseAuthDomain || '') + '" dir="ltr" /></label>' +
+                '<label style="font-size:0.82rem;font-weight:700;">Firebase projectId<input class="input" id="admSetFbProjectId" value="' + esc(cfg.firebaseProjectId || '') + '" dir="ltr" /></label>' +
+                '<label style="font-size:0.82rem;font-weight:700;">Firebase storageBucket<input class="input" id="admSetFbStorageBucket" value="' + esc(cfg.firebaseStorageBucket || '') + '" dir="ltr" /></label>' +
+                '<label style="font-size:0.82rem;font-weight:700;">Firebase messagingSenderId<input class="input" id="admSetFbMessagingSenderId" value="' + esc(cfg.firebaseMessagingSenderId || '') + '" dir="ltr" /></label>' +
+                '<label style="font-size:0.82rem;font-weight:700;">Firebase appId<input class="input" id="admSetFbAppId" value="' + esc(cfg.firebaseAppId || '') + '" dir="ltr" /></label>' +
+                '<label style="font-size:0.82rem;font-weight:700;">Firebase vapidKey (Web Push)<input class="input" id="admSetFbVapidKey" value="' + esc(cfg.firebaseVapidKey || '') + '" dir="ltr" /></label>' +
+              '</div>' +
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
                 '<button class="btn btn-outline" id="btnAdmResetCfg" type="button">' + esc(bi('استعادة الافتراضي', 'Reset Defaults')) + '</button>' +
                 '<button class="btn btn-primary" id="btnAdmSaveCfg" type="button">💾 ' + esc(bi('حفظ كافة الإعدادات', 'Save Settings')) + '</button>' +
@@ -5154,12 +6095,14 @@
             '</section>';
         }
 
+        const unreadAdminInbox = getUnreadSupportInboxForAdmin();
+
         return '<section class="hero-card">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
               '<div>' +
                 '<span class="hero-pill">🛡️ ' + esc(bi('الإدارة العليا السرية • محمية بالـ PIN', 'Protected Super Admin • PIN Locked')) + '</span>' +
                 '<h2 style="font-size:1.35rem;margin-top:6px;">' + esc(bi('أهلاً بك، ' + (db.config.adminOwnerName || 'المهندس محمد يوسف'), 'Welcome, ' + (db.config.adminOwnerName || 'Eng. Mohamed Youssef'))) + '</h2>' +
-                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، معامل التحاليل، قائمة العملاء، الحجوزات، أكواد التفعيل، وإعدادات المنصة.', 'Full control over clinics, hospital, medical labs, users, bookings, OTP codes, and platform settings.')) + '</div>' +
+                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، معامل التحاليل، قائمة العملاء، الحجوزات، الرسائل والإشعارات، وإعدادات المنصة.', 'Full control over clinics, hospital, medical labs, users, bookings, messaging & notifications, and platform settings.')) + '</div>' +
               '</div>' +
               '<button class="btn" id="btnAdminLogout" type="button" style="background:#fff;color:var(--teal);min-height:40px;">🚪 ' + esc(bi('خروج وتأمين', 'Lock & Exit')) + '</button>' +
             '</div>' +
@@ -5179,6 +6122,7 @@
             '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين (Users)', 'Users List')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'OTP_CODES' ? 'active' : '') + '" type="button" data-admin-tab="OTP_CODES">🔑 ' + esc(bi('أكواد التفعيل (OTP)', 'OTP Codes')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-admin-tab="MESSAGES">💬 ' + esc(bi('التحكم في الرسائل والإشعارات', 'Messaging & Alerts')) + (unreadAdminInbox > 0 ? ' (' + unreadAdminInbox + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('إعدادات المنصة والـ PIN', 'Settings & PIN')) + '</button>' +
           '</div>' +
 
@@ -5399,7 +6343,20 @@
                 latestSlot.patientPhone = member.phone;
                 latestSlot.familyMemberId = member.id;
                 latestSlot.bookingSource = 'APP';
+                const newBookTime = formatMinutesAr((latestSlot.startMinutes || 0) + (latestSlot.delayMinutes || 0));
+                const bookAlert = '🩺 حجز جديد في ' + getClinicDisplayName(doc) + ': ' + member.fullName + ' (' + newBookTime + ')';
+                db.notifications.unshift({
+                  id: Date.now(),
+                  message: bookAlert,
+                  isRead: false,
+                  targetAudience: 'CLINIC',
+                  targetId: doc.id,
+                  senderLabel: member.fullName,
+                  createdAtMillis: Date.now()
+                });
                 saveState(db);
+                syncDocToFirestoreNamespace('appointments', latestSlot.id, latestSlot);
+                dispatchWorkerPush('NEW_BOOKING', getClinicDisplayName(doc), bookAlert, 'CLINIC', doc.id, CLOUD_PATHS.appointments);
                 isSubmittingBook = false;
                 closeModal();
                 showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
@@ -5591,7 +6548,11 @@
             otpCardHtml +
             authTabsHtml +
             (hasAcc
-              ? '<h4>' + esc(bi('أفراد العائلة المسجلون', 'Registered Family Members')) + '</h4>' + mHtml +
+              ? '<button class="btn btn-primary btn-block" id="btnPatientSupportChat" type="button" style="background:linear-gradient(135deg,#3730A3 0%,#4F46E5 100%);">' +
+                  '💬 ' + esc(bi('مراسلة الإدارة / الدعم الفني', 'Message Admin / Support')) +
+                  (getUnreadMessagesForPatientSupport() > 0 ? ' (' + getUnreadMessagesForPatientSupport() + ')' : '') +
+                '</button>' +
+                '<h4>' + esc(bi('أفراد العائلة المسجلون', 'Registered Family Members')) + '</h4>' + mHtml +
                 '<h4 style="margin-top:6px;">' + esc(bi('إضافة فرد جديد من العائلة', 'Add Family Member')) + '</h4>' +
                 '<input class="input" id="newMemName" placeholder="' + esc(bi('الاسم الكامل', 'Full Name')) + '" />' +
                 '<div style="display:grid;grid-template-columns:1.3fr 0.7fr;gap:8px;">' +
@@ -5818,6 +6779,20 @@
               showToast(bi('تم تسجيل الخروج من الحساب', 'Signed out successfully'));
               refreshAccountModal();
               renderApp();
+            };
+          }
+
+          const supportChatBtn = document.getElementById('btnPatientSupportChat');
+          if (supportChatBtn && db.account) {
+            supportChatBtn.onclick = function () {
+              const acc = db.account;
+              closeModal();
+              openDirectChatModal({
+                threadType: 'PATIENT_ADMIN',
+                patientAccountId: acc.id,
+                patientName: acc.fullName,
+                patientPhone: acc.phone
+              });
             };
           }
 
@@ -6231,7 +7206,8 @@
                   workEndMinutes: eHr * 60,
                   slotDurationMinutes: slotDurationMinutes,
                   currentDelayMinutes: 0,
-                  rating: 4.9
+                  rating: 4.9,
+                  chatEnabled: true
                 };
                 db.doctors.unshift(newDoc);
                 db.slots = db.slots.concat(buildDoctorSlots(newDoc));
@@ -6245,16 +7221,279 @@
         );
       }
 
+      function openDirectChatModal(target) {
+        if (!target || !target.threadType) return;
+        const viewerRole = ui.roleMode === 'ADMIN' && ui.isAdminLoggedIn
+          ? 'ADMIN'
+          : (ui.roleMode === 'DOCTOR' && ui.loggedInDoctorId ? 'DOCTOR' : 'PATIENT');
+
+        function matchesThread(m) {
+          if (!m || m.threadType !== target.threadType) return false;
+          if (target.threadType === 'PATIENT_CLINIC') {
+            return m.patientAccountId === target.patientAccountId && m.doctorId === target.doctorId;
+          }
+          if (target.threadType === 'PATIENT_ADMIN') {
+            return m.patientAccountId === target.patientAccountId;
+          }
+          if (target.threadType === 'CLINIC_ADMIN') {
+            return m.doctorId === target.doctorId;
+          }
+          return false;
+        }
+
+        function markThreadReadForViewer() {
+          let changed = false;
+          (db.messages || []).forEach((m) => {
+            if (!matchesThread(m) || m.isRead) return;
+            const isFromOther =
+              (viewerRole === 'PATIENT' && m.senderRole !== 'PATIENT') ||
+              (viewerRole === 'DOCTOR' && m.senderRole !== 'CLINIC') ||
+              (viewerRole === 'ADMIN' && m.senderRole !== 'ADMIN');
+            if (isFromOther) {
+              m.isRead = true;
+              changed = true;
+            }
+          });
+          if (changed) {
+            saveState(db);
+            updateHeader();
+          }
+        }
+
+        markThreadReadForViewer();
+
+        const titleText = target.threadType === 'PATIENT_CLINIC'
+          ? (viewerRole === 'DOCTOR'
+              ? bi('محادثة المريض: ' + (target.patientName || ''), 'Patient Chat: ' + (target.patientName || ''))
+              : bi('مراسلة: ' + (target.doctorName || 'العيادة'), 'Chat: ' + (target.doctorName || 'Clinic')))
+          : (target.threadType === 'PATIENT_ADMIN'
+              ? (viewerRole === 'ADMIN'
+                  ? bi('دعم فني — المريض: ' + (target.patientName || ''), 'Support — Patient: ' + (target.patientName || ''))
+                  : bi('مراسلة الإدارة / الدعم الفني', 'Message Admin / Support'))
+              : (viewerRole === 'ADMIN'
+                  ? bi('دعم فني — العيادة: ' + (target.doctorName || ''), 'Support — Clinic: ' + (target.doctorName || ''))
+                  : bi('مراسلة الإدارة العليا', 'Message Super Admin')));
+
+        function isMine(m) {
+          if (viewerRole === 'PATIENT') return m.senderRole === 'PATIENT';
+          if (viewerRole === 'DOCTOR') return m.senderRole === 'CLINIC';
+          return m.senderRole === 'ADMIN';
+        }
+
+        function renderChatHtml() {
+          const msgs = (db.messages || []).filter(matchesThread).sort((a, b) => a.createdAtMillis - b.createdAtMillis);
+          const listHtml = msgs.length === 0
+            ? '<div style="text-align:center;color:var(--text-muted);padding:24px 8px;">' + esc(bi('ابدأ المحادثة الآن بكتابة رسالتك بالأسفل.', 'Start the conversation by typing your message below.')) + '</div>'
+            : msgs.map((m) => {
+                const mine = isMine(m);
+                return '<div class="chat-bubble ' + (mine ? 'mine' : 'theirs') + '">' +
+                  '<div style="font-size:0.74rem;font-weight:700;opacity:0.9;margin-bottom:2px;">' + esc(m.senderName || '') + '</div>' +
+                  '<div style="white-space:pre-wrap;">' + esc(m.body) + '</div>' +
+                  '<div class="chat-meta"><span>' + esc(formatMessageTime(m.createdAtMillis)) + '</span><span>' + (mine ? (m.isRead ? '✓✓' : '✓') : '') + '</span></div>' +
+                '</div>';
+              }).join('');
+          return '<div class="chat-thread-list" id="chatThreadList">' + listHtml + '</div>' +
+            '<div style="display:flex;gap:8px;align-items:center;">' +
+              '<input class="input" id="chatComposerInput" placeholder="' + esc(bi('اكتب رسالتك هنا...', 'Type your message...')) + '" style="flex:1;" />' +
+              '<button class="btn btn-primary" id="btnSendChatMessage" type="button" style="min-height:46px;">📤 ' + esc(bi('إرسال', 'Send')) + '</button>' +
+            '</div>';
+        }
+
+        function mountChatHandlers() {
+          const box = document.getElementById('chatThreadList');
+          if (box) box.scrollTop = box.scrollHeight;
+          const inp = document.getElementById('chatComposerInput');
+          const btn = document.getElementById('btnSendChatMessage');
+
+          function submitMsg() {
+            const txt = (inp ? inp.value : '').trim();
+            if (!txt) return;
+            if (target.threadType === 'PATIENT_CLINIC' && viewerRole === 'PATIENT') {
+              const docObj = db.doctors.find((d) => d.id === target.doctorId);
+              if (!canPatientChatWith(docObj)) {
+                showToast(bi('تم إيقاف الدردشة مع هذه العيادة من قبل الإدارة', 'Chat is currently disabled by Admin'));
+                return;
+              }
+            }
+            const senderRole = viewerRole === 'PATIENT' ? 'PATIENT' : (viewerRole === 'DOCTOR' ? 'CLINIC' : 'ADMIN');
+            const senderName = viewerRole === 'PATIENT'
+              ? (target.patientName || (db.account && db.account.fullName) || bi('مريض', 'Patient'))
+              : (viewerRole === 'DOCTOR'
+                  ? (target.doctorName || bi('العيادة', 'Clinic'))
+                  : (db.config.adminOwnerName || bi('الإدارة العليا', 'Super Admin')));
+            pushDirectMessage({
+              threadType: target.threadType,
+              senderRole: senderRole,
+              senderName: senderName,
+              patientAccountId: target.patientAccountId || '',
+              patientName: target.patientName || '',
+              patientPhone: target.patientPhone || '',
+              doctorId: target.doctorId || '',
+              doctorName: target.doctorName || '',
+              body: txt
+            });
+            const bodyEl = document.getElementById('modalBody');
+            if (bodyEl) {
+              bodyEl.innerHTML = renderChatHtml();
+              mountChatHandlers();
+              const reInp = document.getElementById('chatComposerInput');
+              if (reInp) reInp.focus();
+            }
+            updateHeader();
+          }
+
+          if (btn) btn.onclick = submitMsg;
+          if (inp) {
+            inp.onkeydown = function (e) {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitMsg();
+              }
+            };
+          }
+        }
+
+        openModal(titleText, renderChatHtml(), mountChatHandlers);
+      }
+
       function openNotificationsModal() {
-        db.notifications.forEach((n) => { n.isRead = true; });
-        saveState(db);
-        updateHeader();
+        const roleMode = ui.roleMode === 'ADMIN' && ui.isAdminLoggedIn
+          ? 'ADMIN'
+          : (ui.roleMode === 'DOCTOR' && ui.loggedInDoctorId ? 'DOCTOR' : 'PATIENT');
 
-        const listHtml = db.notifications.length === 0
-          ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد تنبيهات تأخير حالياً. جميع العيادات تعمل في مواعيدها.', 'No delay alerts right now. All clinics are on schedule.')) + '</div>'
-          : db.notifications.map((n) => '<div class="alert-banner">⚠️ ' + esc(n.message) + '</div>').join('');
+        function buildThreadsForModal() {
+          const map = {};
+          (db.messages || []).forEach((m) => {
+            if (roleMode === 'PATIENT') {
+              if (!db.account || m.patientAccountId !== db.account.id) return;
+              if (m.threadType !== 'PATIENT_CLINIC' && m.threadType !== 'PATIENT_ADMIN') return;
+              const k = m.threadType === 'PATIENT_CLINIC' ? ('PC_' + m.doctorId) : 'PA_ADMIN';
+              if (!map[k]) {
+                map[k] = {
+                  key: k,
+                  threadType: m.threadType,
+                  doctorId: m.doctorId,
+                  doctorName: m.doctorName,
+                  patientAccountId: m.patientAccountId,
+                  patientName: m.patientName,
+                  patientPhone: m.patientPhone,
+                  title: m.threadType === 'PATIENT_CLINIC' ? (m.doctorName || bi('عيادة', 'Clinic')) : bi('الإدارة / الدعم الفني', 'Admin / Support'),
+                  msgs: [],
+                  unread: 0
+                };
+              }
+              map[k].msgs.push(m);
+              if (!m.isRead && m.senderRole !== 'PATIENT') map[k].unread += 1;
+            } else if (roleMode === 'DOCTOR') {
+              if (!ui.loggedInDoctorId || m.doctorId !== ui.loggedInDoctorId) return;
+              const k = m.threadType === 'PATIENT_CLINIC' ? ('PC_' + m.patientAccountId) : 'CA_ADMIN';
+              if (!map[k]) {
+                map[k] = {
+                  key: k,
+                  threadType: m.threadType,
+                  doctorId: m.doctorId,
+                  doctorName: m.doctorName,
+                  patientAccountId: m.patientAccountId,
+                  patientName: m.patientName,
+                  patientPhone: m.patientPhone,
+                  title: m.threadType === 'PATIENT_CLINIC' ? (m.patientName || bi('مريض', 'Patient')) : bi('الإدارة العليا', 'Super Admin'),
+                  msgs: [],
+                  unread: 0
+                };
+              }
+              map[k].msgs.push(m);
+              if (!m.isRead && m.senderRole !== 'CLINIC') map[k].unread += 1;
+            } else {
+              if (m.threadType !== 'PATIENT_ADMIN' && m.threadType !== 'CLINIC_ADMIN') return;
+              const k = m.threadType === 'PATIENT_ADMIN' ? ('PA_' + m.patientAccountId) : ('CA_' + m.doctorId);
+              if (!map[k]) {
+                map[k] = {
+                  key: k,
+                  threadType: m.threadType,
+                  doctorId: m.doctorId,
+                  doctorName: m.doctorName,
+                  patientAccountId: m.patientAccountId,
+                  patientName: m.patientName,
+                  patientPhone: m.patientPhone,
+                  title: m.threadType === 'PATIENT_ADMIN' ? (m.patientName || bi('مريض', 'Patient')) : (m.doctorName || bi('عيادة', 'Clinic')),
+                  msgs: [],
+                  unread: 0
+                };
+              }
+              map[k].msgs.push(m);
+              if (!m.isRead && m.senderRole !== 'ADMIN') map[k].unread += 1;
+            }
+          });
+          return Object.values(map).sort((a, b) => {
+            const al = a.msgs[a.msgs.length - 1];
+            const bl = b.msgs[b.msgs.length - 1];
+            return (bl ? bl.createdAtMillis : 0) - (al ? al.createdAtMillis : 0);
+          });
+        }
 
-        openModal(bi('تنبيهات تأخير المواعيد', 'Delay Notifications'), listHtml);
+        function renderNotificationsBody() {
+          const visibleAlerts = getVisibleNotificationsForRole();
+          const threads = buildThreadsForModal();
+
+          const markAllBtnHtml = (visibleAlerts.some((n) => !n.isRead) || threads.some((t) => t.unread > 0))
+            ? '<button class="btn btn-outline btn-block" id="btnNotifMarkAllRead" type="button">✓ ' + esc(bi('تحديد الكل كمقروء', 'Mark All as Read')) + '</button>'
+            : '';
+
+          const threadsHtml = threads.length > 0
+            ? '<h4 style="margin-top:4px;">💬 ' + esc(bi('المحادثات والرسائل المباشرة', 'Direct Conversations')) + '</h4>' +
+              threads.map((t) => {
+                const last = t.msgs[t.msgs.length - 1];
+                return '<div class="card" style="padding:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;' + (t.unread > 0 ? 'border-color:var(--teal);background:var(--teal-soft);' : '') + '">' +
+                  '<div style="flex:1;min-width:170px;">' +
+                    '<div style="font-weight:800;">' + esc(t.title) + (t.unread > 0 ? ' <span class="badge badge-booked">' + t.unread + '</span>' : '') + '</div>' +
+                    (last ? '<div style="font-size:0.83rem;color:var(--text-muted);margin-top:2px;">' + esc(last.body) + '</div>' : '') +
+                  '</div>' +
+                  '<button class="btn btn-primary" type="button" data-notif-open-thread="' + esc(t.key) + '" style="min-height:36px;padding:4px 10px;font-size:0.82rem;">💬 ' + esc(bi('رد / فتح المحادثة', 'Reply / Open')) + '</button>' +
+                '</div>';
+              }).join('')
+            : '';
+
+          const alertsHtml = visibleAlerts.length === 0
+            ? '<div style="padding:14px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد إشعارات أو تنبيهات حالياً.', 'No alerts or notifications right now.')) + '</div>'
+            : '<h4 style="margin-top:4px;">🔔 ' + esc(bi('الإشعارات والتنبيهات', 'Alerts & Broadcasts')) + '</h4>' +
+              visibleAlerts.map((n) =>
+                '<div class="alert-banner" style="' + (n.isRead ? 'opacity:0.82;' : 'border-width:2px;') + '">' +
+                  (n.senderLabel ? '<div style="font-size:0.76rem;font-weight:800;margin-bottom:2px;">' + esc(n.senderLabel) + '</div>' : '') +
+                  '<div>' + esc(n.message) + '</div>' +
+                '</div>'
+              ).join('');
+
+          return markAllBtnHtml + threadsHtml + alertsHtml;
+        }
+
+        function mountNotificationsHandlers() {
+          const threads = buildThreadsForModal();
+          const markBtn = document.getElementById('btnNotifMarkAllRead');
+          if (markBtn) {
+            markBtn.onclick = function () {
+              getVisibleNotificationsForRole().forEach((n) => { n.isRead = true; });
+              (db.messages || []).forEach((m) => {
+                if (isIncomingMessageForRole(m, roleMode)) m.isRead = true;
+              });
+              saveState(db);
+              updateHeader();
+              const body = document.getElementById('modalBody');
+              if (body) {
+                body.innerHTML = renderNotificationsBody();
+                mountNotificationsHandlers();
+              }
+            };
+          }
+          document.querySelectorAll('[data-notif-open-thread]').forEach((btn) => {
+            btn.onclick = function () {
+              const key = btn.getAttribute('data-notif-open-thread');
+              const t = threads.find((x) => x.key === key);
+              if (t) openDirectChatModal(t);
+            };
+          });
+        }
+
+        openModal(bi('الإشعارات والرسائل', 'Notifications & Messages'), renderNotificationsBody(), mountNotificationsHandlers);
       }
 
       function openManualPhoneModal(slotId) {
@@ -6789,6 +8028,37 @@
           String(rec.attachmentDataUrl).indexOf('data:application/pdf') === 0 ||
           /\.pdf$/i.test(rec.attachmentName || '');
         const safeName = rec.attachmentName || (isPdf ? 'medical_report.pdf' : 'medical_attachment.jpg');
+        let zoomFactor = 1.0;
+        let isFullscreen = false;
+
+        function bindZoomAndFullscreen(applyZoom) {
+          const zOut = document.getElementById('btnViewerZoomOut');
+          const zReset = document.getElementById('btnViewerZoomReset');
+          const zIn = document.getElementById('btnViewerZoomIn');
+          const fsBtn = document.getElementById('btnViewerFullscreen');
+          if (zOut) zOut.onclick = function () { zoomFactor = Math.max(0.75, +(zoomFactor - 0.25).toFixed(2)); applyZoom(); };
+          if (zReset) zReset.onclick = function () { zoomFactor = 1.0; applyZoom(); };
+          if (zIn) zIn.onclick = function () { zoomFactor = Math.min(3.0, +(zoomFactor + 0.25).toFixed(2)); applyZoom(); };
+          if (fsBtn) {
+            fsBtn.onclick = function () {
+              isFullscreen = !isFullscreen;
+              const backdrop = document.getElementById('modalBackdrop');
+              if (backdrop) backdrop.classList.toggle('pdf-fullscreen', isFullscreen);
+              fsBtn.textContent = isFullscreen ? bi('⤢ تصغير', '⤢ Exit') : bi('⛶ ملء الشاشة', '⛶ Fullscreen');
+            };
+          }
+          applyZoom();
+        }
+
+        const zoomBarHtml =
+          '<div class="pdf-zoom-toolbar">' +
+            '<div class="pdf-zoom-group">' +
+              '<button class="pdf-zoom-btn" id="btnViewerZoomOut" type="button" title="Zoom Out">−</button>' +
+              '<button class="pdf-zoom-btn" id="btnViewerZoomReset" type="button" style="min-width:56px;">100%</button>' +
+              '<button class="pdf-zoom-btn" id="btnViewerZoomIn" type="button" title="Zoom In">+</button>' +
+            '</div>' +
+            '<button class="pdf-zoom-btn" id="btnViewerFullscreen" type="button">' + esc(bi('⛶ ملء الشاشة', '⛶ Fullscreen')) + '</button>' +
+          '</div>';
 
         if (!isPdf) {
           openModal(
@@ -6797,10 +8067,17 @@
               '<button class="btn btn-primary" id="btnModalDownloadAtt" type="button" style="flex:1;">⬇️ ' + esc(bi('تحميل المرفق', 'Download Image')) + '</button>' +
               '<button class="btn btn-danger-outline" id="btnModalDeleteAtt" type="button">🗑️ ' + esc(bi('حذف الملف', 'Delete File')) + '</button>' +
             '</div>' +
-            '<img src="' + esc(rec.attachmentDataUrl) + '" style="width:100%;border-radius:14px;border:1px solid var(--border);" alt="' + esc(safeName) + '" />',
+            zoomBarHtml +
+            '<div class="img-preview-scroll"><img id="previewAttImage" src="' + esc(rec.attachmentDataUrl) + '" style="width:100%;height:auto;border-radius:14px;border:1px solid var(--border);display:block;margin:0 auto;" alt="' + esc(safeName) + '" /></div>',
             function () {
               document.getElementById('btnModalDownloadAtt').onclick = function () { downloadAttachmentFile(rec); };
               document.getElementById('btnModalDeleteAtt').onclick = function () { openDeleteFileConfirmModal(rec.id); };
+              bindZoomAndFullscreen(function () {
+                const img = document.getElementById('previewAttImage');
+                const zLbl = document.getElementById('btnViewerZoomReset');
+                if (img) img.style.width = Math.round(zoomFactor * 100) + '%';
+                if (zLbl) zLbl.textContent = Math.round(zoomFactor * 100) + '%';
+              });
             }
           );
           return;
@@ -6816,8 +8093,9 @@
             '<button class="btn btn-primary" id="btnModalDownloadPdf" type="button" style="flex:1;">⬇️ ' + esc(bi('تحميل ملف التحليل (PDF)', 'Download PDF Report')) + '</button>' +
             '<button class="btn btn-danger-outline" id="btnModalDeletePdf" type="button">🗑️ ' + esc(bi('حذف الملف', 'Delete File')) + '</button>' +
           '</div>' +
+          zoomBarHtml +
           '<div id="pdfRenderStatus" style="font-size:0.84rem;color:var(--teal-text);font-weight:700;">⏳ ' + esc(bi('جاري تحميل ومعالجة صفحات الـ PDF...', 'Rendering PDF pages...')) + '</div>' +
-          '<div id="pdfCanvasList" class="pdf-canvas-list"></div>' +
+          '<div id="pdfCanvasList" class="pdf-canvas-list" dir="ltr"></div>' +
           (rec.extractedText
             ? '<details style="margin-top:4px;"><summary style="cursor:pointer;font-weight:700;color:var(--teal-text);font-size:0.86rem;">📄 ' + esc(bi('عرض النص المستخرج من التحليل', 'Show Extracted PDF Text')) + '</summary>' +
                 '<div style="white-space:pre-wrap;font-size:0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:6px;max-height:180px;overflow-y:auto;">' + esc(rec.extractedText) + '</div>' +
@@ -6826,6 +8104,16 @@
           async function () {
             document.getElementById('btnModalDownloadPdf').onclick = function () { downloadAttachmentFile(rec); };
             document.getElementById('btnModalDeletePdf').onclick = function () { openDeleteFileConfirmModal(rec.id); };
+
+            function applyPdfZoom() {
+              const zLbl = document.getElementById('btnViewerZoomReset');
+              if (zLbl) zLbl.textContent = Math.round(zoomFactor * 100) + '%';
+              document.querySelectorAll('#pdfCanvasList .pdf-page-canvas').forEach((cv) => {
+                cv.style.width = Math.round(zoomFactor * 100) + '%';
+                cv.style.height = 'auto';
+              });
+            }
+            bindZoomAndFullscreen(applyPdfZoom);
 
             const container = document.getElementById('pdfCanvasList');
             const statusEl = document.getElementById('pdfRenderStatus');
@@ -6836,20 +8124,26 @@
             }
             if (window.pdfjsLib) {
               try {
-                const pdfDoc = await window.pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+                const pdfDoc = await window.pdfjsLib.getDocument({
+                  data: bytes.slice(),
+                  cMapUrl: PDFJS_ASSETS_BASE + 'cmaps/',
+                  cMapPacked: true,
+                  standardFontDataUrl: PDFJS_ASSETS_BASE + 'standard_fonts/'
+                }).promise;
                 const total = pdfDoc.numPages || 0;
                 if (statusEl) statusEl.textContent = bi('📄 عدد الصفحات: ' + total, '📄 Pages: ' + total);
-                const maxWidth = Math.max(container.clientWidth - 24, 320);
+                const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1.5, 2.5));
+                const renderScale = 2.0 * Math.max(1.0, dpr / 1.5);
                 for (let p = 1; p <= total; p++) {
                   const page = await pdfDoc.getPage(p);
-                  const unscaledVp = page.getViewport({ scale: 1.0 });
-                  const cssScale = maxWidth / (unscaledVp.width || 600);
-                  const renderScale = cssScale * Math.min(window.devicePixelRatio || 1.5, 2.0);
                   const vp = page.getViewport({ scale: renderScale });
                   const canvas = document.createElement('canvas');
                   canvas.className = 'pdf-page-canvas';
                   canvas.width = Math.ceil(vp.width);
                   canvas.height = Math.ceil(vp.height);
+                  canvas.style.width = Math.round(zoomFactor * 100) + '%';
+                  canvas.style.height = 'auto';
+                  canvas.style.display = 'block';
                   container.appendChild(canvas);
                   const ctx = canvas.getContext('2d');
                   await page.render({ canvasContext: ctx, viewport: vp }).promise;
@@ -7002,19 +8296,36 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
           };
         });
+        document.querySelectorAll('[data-chat-doc]').forEach((btn) => {
+          btn.onclick = function () {
+            const doc = db.doctors.find((d) => d.id === btn.getAttribute('data-chat-doc'));
+            if (!doc || !canPatientChatWith(doc)) {
+              showToast(bi('الدردشة غير مفعلة حالياً لهذه العيادة', 'Chat is disabled for this clinic'));
+              return;
+            }
+            if (!db.account) {
+              showToast(bi('يرجى تسجيل الدخول أولاً لمراسلة العيادة', 'Please sign in first to message the clinic'));
+              openAccountModal('LOGIN');
+              return;
+            }
+            openDirectChatModal({
+              threadType: 'PATIENT_CLINIC',
+              doctorId: doc.id,
+              doctorName: getDoctorDisplayName(doc),
+              patientAccountId: db.account.id,
+              patientName: db.account.fullName,
+              patientPhone: db.account.phone
+            });
+          };
+        });
         document.querySelectorAll('[data-cancel-slot]').forEach((btn) => {
           btn.onclick = function () {
-            const slot = db.slots.find((s) => s.id === btn.getAttribute('data-cancel-slot'));
-            if (slot && slot.status === 'BOOKED') {
-              slot.status = 'AVAILABLE';
-              slot.patientName = '';
-              slot.patientPhone = '';
-              slot.familyMemberId = '';
-              slot.bookingSource = '';
-              saveState(db);
-              showToast(bi('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر', 'Booking cancelled; slot is available again'));
-              renderApp();
-            }
+            executeCancelSlot(btn.getAttribute('data-cancel-slot'), 'PATIENT');
+          };
+        });
+        document.querySelectorAll('[data-reschedule-slot]').forEach((btn) => {
+          btn.onclick = function () {
+            openRescheduleSlotModal(btn.getAttribute('data-reschedule-slot'), 'PATIENT');
           };
         });
       }
@@ -7063,6 +8374,25 @@
               ui.bookingDoctorId = btn.getAttribute('data-open-doc');
               renderApp();
               window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+          });
+          box.querySelectorAll('[data-chat-doc]').forEach((btn) => {
+            btn.onclick = function () {
+              const doc = db.doctors.find((d) => d.id === btn.getAttribute('data-chat-doc'));
+              if (!doc || !canPatientChatWith(doc)) return;
+              if (!db.account) {
+                showToast(bi('يرجى تسجيل الدخول أولاً لمراسلة العيادة', 'Please sign in first to message the clinic'));
+                openAccountModal('LOGIN');
+                return;
+              }
+              openDirectChatModal({
+                threadType: 'PATIENT_CLINIC',
+                doctorId: doc.id,
+                doctorName: getDoctorDisplayName(doc),
+                patientAccountId: db.account.id,
+                patientName: db.account.fullName,
+                patientPhone: db.account.phone
+              });
             };
           });
           box.querySelectorAll('[data-quick-spec]').forEach((btn) => {
@@ -7121,6 +8451,13 @@
           editBioBtn.onclick = function () {
             const member = getActiveMember();
             if (member) openEditPatientBioModal(member);
+          };
+        }
+
+        const quickCleanupBtn = document.getElementById('btnQuickCleanupOldUploads');
+        if (quickCleanupBtn) {
+          quickCleanupBtn.onclick = function () {
+            openStorageQuotaRecoveryModal(db);
           };
         }
 
@@ -7573,17 +8910,7 @@
 
         document.querySelectorAll('[data-admin-cancel-slot]').forEach((btn) => {
           btn.onclick = function () {
-            const slot = db.slots.find((s) => s.id === btn.getAttribute('data-admin-cancel-slot'));
-            if (slot && slot.status === 'BOOKED') {
-              slot.status = 'AVAILABLE';
-              slot.patientName = '';
-              slot.patientPhone = '';
-              slot.familyMemberId = '';
-              slot.bookingSource = '';
-              saveState(db);
-              showToast(bi('تم إلغاء الحجز وإعادة الموعد متاحاً', 'Booking cancelled'));
-              renderApp();
-            }
+            executeCancelSlot(btn.getAttribute('data-admin-cancel-slot'), 'ADMIN');
           };
         });
 
@@ -7602,10 +8929,20 @@
             db.config.homeAnnouncementAr = document.getElementById('admSetAnnouncement').value.trim();
             db.config.apkDownloadUrl = document.getElementById('admSetApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
             db.config.medicationsApiUrl = document.getElementById('admSetMedsApi').value.trim();
+            db.config.workerUrl = (document.getElementById('admSetWorkerUrl') || {}).value ? document.getElementById('admSetWorkerUrl').value.trim() : '';
+            db.config.firebaseApiKey = (document.getElementById('admSetFbApiKey') || {}).value ? document.getElementById('admSetFbApiKey').value.trim() : '';
+            db.config.firebaseAuthDomain = (document.getElementById('admSetFbAuthDomain') || {}).value ? document.getElementById('admSetFbAuthDomain').value.trim() : '';
+            db.config.firebaseProjectId = (document.getElementById('admSetFbProjectId') || {}).value ? document.getElementById('admSetFbProjectId').value.trim() : '';
+            db.config.firebaseStorageBucket = (document.getElementById('admSetFbStorageBucket') || {}).value ? document.getElementById('admSetFbStorageBucket').value.trim() : '';
+            db.config.firebaseMessagingSenderId = (document.getElementById('admSetFbMessagingSenderId') || {}).value ? document.getElementById('admSetFbMessagingSenderId').value.trim() : '';
+            db.config.firebaseAppId = (document.getElementById('admSetFbAppId') || {}).value ? document.getElementById('admSetFbAppId').value.trim() : '';
+            db.config.firebaseVapidKey = (document.getElementById('admSetFbVapidKey') || {}).value ? document.getElementById('admSetFbVapidKey').value.trim() : '';
             if (newPin.length >= 4) db.config.adminPin = newPin;
             saveState(db);
+            initFirebaseCloudBridge();
+            syncDocToFirestoreNamespace('config', 'platform', db.config);
             await refreshMedicationsFromApi();
-            showToast(bi('تم حفظ جميع إعدادات المنصة والـ PIN بنجاح', 'All platform settings & PIN saved'));
+            showToast(bi('تم حفظ إعدادات المنصة والربط السحابي والـ PIN بنجاح', 'Platform & cloud settings saved'));
             renderApp();
           };
         }
@@ -7615,6 +8952,7 @@
           resetAdmCfgBtn.onclick = async function () {
             db.config = Object.assign({}, DEFAULT_CONFIG);
             saveState(db);
+            initFirebaseCloudBridge();
             await refreshMedicationsFromApi();
             showToast(bi('تمت استعادة الإعدادات الافتراضية للمنصة', 'Restored default settings'));
             renderApp();
@@ -7776,6 +9114,108 @@
           };
         });
 
+        const globalToggle = document.getElementById('admGlobalChatToggle');
+        if (globalToggle) {
+          globalToggle.onchange = function () {
+            db.config.globalChatEnabled = Boolean(globalToggle.checked);
+            saveState(db);
+            showToast(bi(
+              db.config.globalChatEnabled ? 'تم تفعيل دردشة المرضى والعيادات على مستوى المنصة' : 'تم إيقاف دردشة المرضى والعيادات على مستوى المنصة',
+              db.config.globalChatEnabled ? 'Global chat enabled' : 'Global chat disabled'
+            ));
+            renderApp();
+          };
+        }
+
+        document.querySelectorAll('[data-adm-clinic-chat-toggle]').forEach((chk) => {
+          chk.onchange = function () {
+            const docObj = db.doctors.find((d) => d.id === chk.getAttribute('data-adm-clinic-chat-toggle'));
+            if (!docObj) return;
+            docObj.chatEnabled = Boolean(chk.checked);
+            saveState(db);
+            showToast(bi(
+              (docObj.chatEnabled ? 'تم تفعيل الدردشة لعيادة ' : 'تم إيقاف الدردشة لعيادة ') + docObj.doctorName,
+              (docObj.chatEnabled ? 'Enabled chat for ' : 'Disabled chat for ') + docObj.doctorName
+            ));
+            renderApp();
+          };
+        });
+
+        const broadcastBtn = document.getElementById('btnAdmSendBroadcast');
+        if (broadcastBtn) {
+          broadcastBtn.onclick = function () {
+            const msgInp = document.getElementById('admBroadcastMsg');
+            const msg = (msgInp ? msgInp.value : '').trim();
+            if (!msg) { showToast(bi('اكتب نص الإشعار العام أولاً', 'Write broadcast message first')); return; }
+            db.notifications.unshift({
+              id: Date.now(),
+              message: '📢 ' + msg,
+              isRead: false,
+              targetAudience: 'ALL',
+              targetId: '',
+              senderLabel: bi('إعلان عام من الإدارة العليا', 'Global Admin Broadcast'),
+              createdAtMillis: Date.now()
+            });
+            saveState(db);
+            showToast(bi('تم إرسال الإشعار العام لجميع مستخدمي المنصة', 'Global broadcast sent'));
+            renderApp();
+          };
+        }
+
+        const clinicAlertSel = document.getElementById('admClinicAlertTarget');
+        if (clinicAlertSel) {
+          clinicAlertSel.onchange = function () {
+            ui.adminAlertDocId = clinicAlertSel.value || '';
+          };
+        }
+
+        const clinicAlertBtn = document.getElementById('btnAdmSendClinicAlert');
+        if (clinicAlertBtn) {
+          clinicAlertBtn.onclick = function () {
+            const targetId = (document.getElementById('admClinicAlertTarget') || {}).value || '';
+            const msg = ((document.getElementById('admClinicAlertMsg') || {}).value || '').trim();
+            if (!msg) { showToast(bi('اكتب نص التنبيه للعيادة أولاً', 'Write clinic alert message first')); return; }
+            db.notifications.unshift({
+              id: Date.now(),
+              message: '🔔 ' + msg,
+              isRead: false,
+              targetAudience: 'CLINIC',
+              targetId: targetId,
+              senderLabel: bi('تنبيه من الإدارة العليا للعيادة', 'Admin Clinic Alert'),
+              createdAtMillis: Date.now()
+            });
+            saveState(db);
+            showToast(bi('تم إرسال التنبيه للعيادة بنجاح', 'Clinic alert sent'));
+            renderApp();
+          };
+        }
+
+        document.querySelectorAll('[data-adm-open-thread]').forEach((btn) => {
+          btn.onclick = function () {
+            const key = btn.getAttribute('data-adm-open-thread') || '';
+            if (key.indexOf('PA_') === 0) {
+              const accId = key.slice(3);
+              const sample = (db.messages || []).find((m) => m.threadType === 'PATIENT_ADMIN' && m.patientAccountId === accId);
+              const acc = (db.accounts || []).find((a) => a.id === accId);
+              openDirectChatModal({
+                threadType: 'PATIENT_ADMIN',
+                patientAccountId: accId,
+                patientName: (acc && acc.fullName) || (sample && sample.patientName) || bi('مريض', 'Patient'),
+                patientPhone: (acc && acc.phone) || (sample && sample.patientPhone) || ''
+              });
+            } else if (key.indexOf('CA_') === 0) {
+              const docId = key.slice(3);
+              const docObj = db.doctors.find((d) => d.id === docId);
+              const sample = (db.messages || []).find((m) => m.threadType === 'CLINIC_ADMIN' && m.doctorId === docId);
+              openDirectChatModal({
+                threadType: 'CLINIC_ADMIN',
+                doctorId: docId,
+                doctorName: docObj ? getDoctorDisplayName(docObj) : ((sample && sample.doctorName) || bi('عيادة', 'Clinic'))
+              });
+            }
+          };
+        });
+
         bindOtpGeneratorEvents('ADMIN');
         bindPasswordToggleButtons(document);
       }
@@ -7789,6 +9229,61 @@
             ui.doctorTab = btn.getAttribute('data-doc-tab');
             ui.docActivateSuccessMsg = '';
             renderApp();
+          };
+        });
+
+        const docChatAdmBtn = document.getElementById('btnDoctorChatAdmin');
+        if (docChatAdmBtn) {
+          docChatAdmBtn.onclick = function () {
+            openDirectChatModal({
+              threadType: 'CLINIC_ADMIN',
+              doctorId: doc.id,
+              doctorName: getDoctorDisplayName(doc)
+            });
+          };
+        }
+
+        const docAlertSel = document.getElementById('docAlertPatientSel');
+        if (docAlertSel) {
+          docAlertSel.onchange = function () {
+            ui.docAlertTargetAccId = docAlertSel.value || '';
+          };
+        }
+
+        const docAlertBtn = document.getElementById('btnDocSendPatientAlert');
+        if (docAlertBtn) {
+          docAlertBtn.onclick = function () {
+            const targetAccId = (document.getElementById('docAlertPatientSel') || {}).value || '';
+            const msg = ((document.getElementById('docAlertMessageInp') || {}).value || '').trim();
+            if (!msg) { showToast(bi('اكتب نص الإشعار للمريض أولاً', 'Write alert message first')); return; }
+            db.notifications.unshift({
+              id: Date.now(),
+              message: '🩺 ' + getDoctorDisplayName(doc) + ': ' + msg,
+              isRead: false,
+              targetAudience: 'PATIENT',
+              targetId: targetAccId,
+              senderLabel: getClinicDisplayName(doc),
+              createdAtMillis: Date.now()
+            });
+            saveState(db);
+            showToast(bi('تم إرسال الإشعار للمريض بنجاح', 'Alert sent to patient'));
+            renderApp();
+          };
+        }
+
+        document.querySelectorAll('[data-doc-reply-patient]').forEach((btn) => {
+          btn.onclick = function () {
+            const accId = btn.getAttribute('data-doc-reply-patient');
+            const sample = (db.messages || []).find((m) => m.threadType === 'PATIENT_CLINIC' && m.doctorId === doc.id && m.patientAccountId === accId);
+            const acc = (db.accounts || []).find((a) => a.id === accId);
+            openDirectChatModal({
+              threadType: 'PATIENT_CLINIC',
+              doctorId: doc.id,
+              doctorName: getDoctorDisplayName(doc),
+              patientAccountId: accId,
+              patientName: (acc && acc.fullName) || (sample && sample.patientName) || bi('مريض', 'Patient'),
+              patientPhone: (acc && acc.phone) || (sample && sample.patientPhone) || ''
+            });
           };
         });
 
@@ -7865,7 +9360,11 @@
           db.notifications.unshift({
             id: Date.now(),
             message: 'تنبيه عاجل: تم تأخير مواعيد ' + doc.doctorName + ' (' + doc.clinicName + ') لمدة ' + mins + ' دقيقة (الإجمالي: ' + doc.currentDelayMinutes + ' دقيقة).',
-            isRead: false
+            isRead: false,
+            targetAudience: 'PATIENT',
+            targetId: '',
+            senderLabel: getClinicDisplayName(doc),
+            createdAtMillis: Date.now()
           });
           saveState(db);
           showToast(bi('تم تأخير المواعيد ' + mins + ' دقيقة وإرسال تنبيه فوري للمرضى', 'Delayed slots by ' + mins + ' min'));
@@ -7890,17 +9389,12 @@
         });
         document.querySelectorAll('[data-cancel-slot]').forEach((btn) => {
           btn.onclick = function () {
-            const slot = db.slots.find((s) => s.id === btn.getAttribute('data-cancel-slot'));
-            if (slot && slot.status === 'BOOKED') {
-              slot.status = 'AVAILABLE';
-              slot.patientName = '';
-              slot.patientPhone = '';
-              slot.familyMemberId = '';
-              slot.bookingSource = '';
-              saveState(db);
-              showToast(bi('تم إلغاء الحجز وعاد الموعد متاحاً باللون الأخضر', 'Booking cancelled'));
-              renderApp();
-            }
+            executeCancelSlot(btn.getAttribute('data-cancel-slot'), 'CLINIC');
+          };
+        });
+        document.querySelectorAll('[data-clinic-reschedule-slot]').forEach((btn) => {
+          btn.onclick = function () {
+            openRescheduleSlotModal(btn.getAttribute('data-clinic-reschedule-slot'), 'CLINIC');
           };
         });
       }
@@ -8083,12 +9577,13 @@
         }).catch(function () {});
       }
 
-      // Service Worker Registration for PWA Installability
+      // Service Worker & Dynamic Firebase Cloud Messaging Registration
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker.register('./sw.js').then(function (reg) {
             if (reg && reg.update) reg.update();
           }).catch(function () {});
+          initFirebaseCloudBridge();
         });
       }
 

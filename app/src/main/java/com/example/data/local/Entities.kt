@@ -27,6 +27,25 @@ object MedicalRecordType {
     const val LAB_RESULT = "LAB_RESULT"
 }
 
+object ChatThreadType {
+    const val PATIENT_CLINIC = "PATIENT_CLINIC"
+    const val PATIENT_ADMIN = "PATIENT_ADMIN"
+    const val CLINIC_ADMIN = "CLINIC_ADMIN"
+}
+
+object NotificationAudience {
+    const val ALL = "ALL"
+    const val PATIENT = "PATIENT"
+    const val CLINIC = "CLINIC"
+    const val ADMIN = "ADMIN"
+}
+
+object MessageSenderRole {
+    const val PATIENT = "PATIENT"
+    const val CLINIC = "CLINIC"
+    const val ADMIN = "ADMIN"
+}
+
 @Entity(tableName = "patient_accounts")
 data class PatientAccountEntity(
     @PrimaryKey val id: String,
@@ -86,6 +105,7 @@ data class ClinicDoctorEntity(
     val clinicNameEn: String = "",
     val locationLabelEn: String = "",
     val additionalSpecialties: String = "",
+    val chatEnabled: Boolean = true,
 )
 
 @Entity(tableName = "appointment_slots")
@@ -141,6 +161,28 @@ data class DelayNotificationEntity(
     val message: String,
     val createdAtMillis: Long = System.currentTimeMillis(),
     val isRead: Boolean = false,
+    val targetAudience: String = NotificationAudience.ALL,
+    val targetId: String = "",
+    val senderLabel: String = "",
+)
+
+@Entity(tableName = "direct_messages")
+data class DirectMessageEntity(
+    @PrimaryKey val id: String,
+    val threadType: String,
+    val patientAccountId: String = "",
+    val patientName: String = "",
+    val patientPhone: String = "",
+    val doctorId: String = "",
+    val doctorName: String = "",
+    val clinicName: String = "",
+    val senderRole: String,
+    val senderName: String,
+    val body: String,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val isReadByPatient: Boolean = false,
+    val isReadByClinic: Boolean = false,
+    val isReadByAdmin: Boolean = false,
 )
 
 @Entity(

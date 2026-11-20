@@ -24,16 +24,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,14 +72,19 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.BookingSource
+import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
+import com.example.data.local.MessageSenderRole
+import com.example.data.local.NotificationAudience
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
 import com.example.ui.components.AttachmentPreviewTarget
+import com.example.ui.patient.RescheduleSlotPickerDialog
+import com.example.ui.components.DirectChatTarget
 import com.example.ui.components.DoctorPatientMedicalAlertBanner
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.patient.MedicalRecordTimelineCard
@@ -215,6 +224,7 @@ fun DoctorDashboardScreen(
     onLogoutDoctor: () -> Unit,
     onBookManualPhoneSlot: (slotId: String, name: String, phone: String) -> Unit,
     onCancelSlot: (slotId: String) -> Unit,
+    onRescheduleSlot: (fromSlotId: String, toSlotId: String) -> Unit = { _, _ -> },
     onDelayDoctor: (doctorId: String, delayMinutes: Int) -> Unit,
     onGenerateSchedule: (doctorId: String, startMin: Int, endMin: Int, durationMin: Int) -> Unit,
     onCompleteVisit: (
@@ -233,6 +243,8 @@ fun DoctorDashboardScreen(
     onSearchPatientsForActivation: (phoneQuery: String) -> Unit,
     onActivatePatientByClinic: (accountId: String) -> Unit,
     onRefreshAiSummary: (memberId: String) -> Unit = {},
+    onOpenChatThread: (DirectChatTarget) -> Unit = {},
+    onSendPatientAlert: (patientAccountId: String, patientName: String, message: String, onSent: () -> Unit) -> Unit = { _, _, _, _ -> },
     onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
@@ -245,10 +257,15 @@ fun DoctorDashboardScreen(
     val availableCount = slots.count { it.status == SlotStatus.AVAILABLE }
     val bookedCount = slots.count { it.status == SlotStatus.BOOKED }
     val completedCount = slots.count { it.status == SlotStatus.COMPLETED }
+    val unreadClinicMsgs = state.unreadMessagesCountForDoctor(activeDoctor.id)
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var activationPhoneQuery by remember { mutableStateOf("") }
+    var alertTargetAccountId by remember { mutableStateOf("") }
+    var alertTargetName by remember { mutableStateOf("") }
+    var alertDraftMessage by remember { mutableStateOf("") }
     var slotForManualBooking by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
+    var slotForReschedule by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForPrescription by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForEmrView by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var showScheduleDialog by remember { mutableStateOf(false) }
@@ -307,13 +324,325 @@ fun DoctorDashboardScreen(
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text(bi(isEn, "تفعيل حساب مريض برقم الهاتف", "Activate Patient by Phone")) },
+                        text = { Text(bi(isEn, "تفعيل مريض", "Activate"), maxLines = 1) },
                         modifier = Modifier.testTag("doctor_activate_patient_tab"),
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(bi(isEn, "💬 رسائل المرضى", "💬 Messages"), maxLines = 1)
+                                if (unreadClinicMsgs > 0) {
+                                    Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                        Text(unreadClinicMsgs.toString())
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.testTag("doctor_messages_tab"),
                     )
                 }
             }
 
-            if (selectedTab == 1) {
+            if (selectedTab == 2) {
+                val patientThreads = state.directMessages
+                    .filter { it.doctorId == activeDoctor.id && it.threadType == ChatThreadType.PATIENT_CLINIC }
+                    .groupBy { it.patientAccountId }
+                    .values
+                    .mapNotNull { list ->
+                        val latest = list.maxByOrNull { it.createdAtMillis } ?: return@mapNotNull null
+                        Triple(latest, list.count { !it.isReadByClinic }, list.size)
+                    }
+                    .sortedByDescending { it.first.createdAtMillis }
+
+                val unreadAdminReplies = state.directMessages.count {
+                    it.doctorId == activeDoctor.id &&
+                        it.threadType == ChatThreadType.CLINIC_ADMIN &&
+                        !it.isReadByClinic
+                }
+
+                val adminClinicAlerts = state.notifications.filter { alert ->
+                    alert.targetAudience == NotificationAudience.ALL ||
+                        (alert.targetAudience == NotificationAudience.CLINIC &&
+                            (alert.targetId.isBlank() || alert.targetId == activeDoctor.id))
+                }
+
+                val patientAlertRecipients = buildList {
+                    state.allAccounts.forEach { acc ->
+                        add(Triple(acc.id, acc.fullName, acc.phone))
+                    }
+                }
+
+                item {
+                    Card(
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.2.dp, TealPrimary.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = bi(isEn, "التواصل مع الإدارة العليا للمنصة", "Platform Super Admin Support"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Surface(
+                                    color = if (state.canPatientChatWith(activeDoctor)) SlotAvailableBg else SlotBookedBg,
+                                    shape = RoundedCornerShape(8.dp),
+                                ) {
+                                    Text(
+                                        text = if (state.canPatientChatWith(activeDoctor)) {
+                                            bi(isEn, "دردشة المرضى مفعّلة", "Patient Chat ON")
+                                        } else {
+                                            bi(isEn, "دردشة المرضى متوقفة", "Patient Chat OFF")
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (state.canPatientChatWith(activeDoctor)) SlotAvailableText else SlotBookedText,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    onOpenChatThread(
+                                        DirectChatTarget(
+                                            threadType = ChatThreadType.CLINIC_ADMIN,
+                                            viewerRole = MessageSenderRole.CLINIC,
+                                            title = bi(isEn, "الإدارة العليا للمنصة", "Super Admin Support"),
+                                            subtitle = activeDoctor.clinicName,
+                                            doctorId = activeDoctor.id,
+                                        )
+                                    )
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("doctor_chat_admin_button"),
+                            ) {
+                                Icon(Icons.Filled.SupportAgent, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    if (unreadAdminReplies > 0) {
+                                        bi(isEn, "💬 مراسلة الإدارة العليا ($unreadAdminReplies جديد)", "💬 Message Super Admin ($unreadAdminReplies new)")
+                                    } else {
+                                        bi(isEn, "💬 مراسلة الإدارة العليا", "💬 Message Super Admin")
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (adminClinicAlerts.isNotEmpty()) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = DelayWarningBg),
+                            border = BorderStroke(1.dp, DelayWarningBorder),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = bi(isEn, "إشعارات الإدارة الموجهة للعيادة (${adminClinicAlerts.size})", "Admin Alerts for Clinic (${adminClinicAlerts.size})"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = DelayWarningText,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                adminClinicAlerts.take(5).forEach { alert ->
+                                    Text(
+                                        text = "• ${alert.message}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = DelayWarningText,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Card(
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Filled.Notifications, contentDescription = null, tint = TealPrimary)
+                                Text(
+                                    text = bi(isEn, "إرسال تنبيه مباشر لمريض (تأخير / تجهيز تحاليل / موعد)", "Send Direct Alert to Patient"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            if (patientAlertRecipients.isEmpty()) {
+                                Text(
+                                    text = bi(isEn, "لا يوجد مرضى مسجلون حالياً لإرسال تنبيهات مباشرة.", "No registered patients yet."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    items(patientAlertRecipients, key = { "rec_${it.first}" }) { (accId, name, phone) ->
+                                        val isSel = alertTargetAccountId == accId
+                                        FilterChip(
+                                            selected = isSel,
+                                            onClick = {
+                                                alertTargetAccountId = accId
+                                                alertTargetName = name
+                                            },
+                                            label = { Text("$name ($phone)") },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = TealPrimary,
+                                                selectedLabelColor = Color.White,
+                                            ),
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = alertDraftMessage,
+                                    onValueChange = { alertDraftMessage = it },
+                                    label = { Text(bi(isEn, "نص التنبيه للمريض", "Patient Alert Message")) },
+                                    maxLines = 3,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("doctor_patient_alert_input"),
+                                )
+                                Button(
+                                    onClick = {
+                                        if (alertTargetAccountId.isBlank()) {
+                                            onShowMessage(bi(isEn, "يرجى اختيار المريض أولاً", "Select a patient first"))
+                                        } else {
+                                            onSendPatientAlert(alertTargetAccountId, alertTargetName, alertDraftMessage) {
+                                                alertDraftMessage = ""
+                                            }
+                                        }
+                                    },
+                                    enabled = alertDraftMessage.isNotBlank(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("doctor_patient_alert_send"),
+                                ) {
+                                    Text(bi(isEn, "إرسال تنبيه مباشر للمريض", "Send Direct Patient Alert"))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Text(
+                        text = bi(isEn, "محادثات المرضى (${patientThreads.size})", "Patient Conversations (${patientThreads.size})"),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TealPrimary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                if (patientThreads.isEmpty()) {
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = bi(
+                                    isEn,
+                                    "لا توجد رسائل واردة من المرضى حتى الآن.",
+                                    "No incoming patient messages yet.",
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        }
+                    }
+                } else {
+                    items(patientThreads, key = { "pt_${it.first.patientAccountId}" }) { (latest, unread, total) ->
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.2.dp, if (unread > 0) TealPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") },
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                        if (unread > 0) {
+                                            Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                                Text(unread.toString())
+                                            }
+                                        }
+                                    }
+                                    if (latest.patientPhone.isNotBlank()) {
+                                        Text(
+                                            text = "${latest.patientPhone} • ($total ${bi(isEn, "رسالة", "msgs")})",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Text(
+                                        text = "${latest.senderName}: ${latest.body}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        onOpenChatThread(
+                                            DirectChatTarget(
+                                                threadType = ChatThreadType.PATIENT_CLINIC,
+                                                viewerRole = MessageSenderRole.CLINIC,
+                                                title = latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") },
+                                                subtitle = latest.patientPhone,
+                                                patientAccountId = latest.patientAccountId,
+                                                patientName = latest.patientName,
+                                                patientPhone = latest.patientPhone,
+                                                doctorId = activeDoctor.id,
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.height(44.dp),
+                                ) {
+                                    Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(bi(isEn, "فتح والرد", "Reply"))
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (selectedTab == 1) {
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
@@ -596,6 +925,7 @@ fun DoctorDashboardScreen(
                         onManualBook = { slotForManualBooking = slot },
                         onViewEmr = { slotForEmrView = slot },
                         onWritePrescription = { slotForPrescription = slot },
+                        onReschedule = { slotForReschedule = slot },
                         onCancel = { onCancelSlot(slot.id) },
                     )
                 }
@@ -697,6 +1027,22 @@ fun DoctorDashboardScreen(
             onDismiss = { slotForEmrView = null },
         )
     }
+
+    val clinicRescheduleSlot = slotForReschedule
+    if (clinicRescheduleSlot != null) {
+        val openClinicSlots = slots.filter { it.status == SlotStatus.AVAILABLE }
+        RescheduleSlotPickerDialog(
+            currentSlot = clinicRescheduleSlot,
+            availableSlots = openClinicSlots,
+            isPatient = false,
+            isEn = isEn,
+            onPickNewSlot = { targetSlotId ->
+                onRescheduleSlot(clinicRescheduleSlot.id, targetSlotId)
+                slotForReschedule = null
+            },
+            onDismiss = { slotForReschedule = null },
+        )
+    }
 }
 
 @Composable
@@ -738,6 +1084,7 @@ private fun DoctorSlotCard(
     onManualBook: () -> Unit,
     onViewEmr: () -> Unit,
     onWritePrescription: () -> Unit,
+    onReschedule: () -> Unit = {},
     onCancel: () -> Unit,
 ) {
     val bgColor = when (slot.status) {
@@ -851,11 +1198,25 @@ private fun DoctorSlotCard(
                             Text(bi(isEn, "كتابة روشتة", "Write Rx"))
                         }
                     }
-                    TextButton(
-                        onClick = onCancel,
-                        modifier = Modifier.align(Alignment.End),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(bi(isEn, "إلغاء الحجز وإتاحته", "Cancel & Release"), color = SlotBookedBorder)
+                        OutlinedButton(
+                            onClick = onReschedule,
+                            modifier = Modifier
+                                .height(42.dp)
+                                .testTag("clinic_reschedule_${slot.id}"),
+                        ) {
+                            Text(bi(isEn, "تعديل الموعد", "Reschedule"))
+                        }
+                        TextButton(
+                            onClick = onCancel,
+                            modifier = Modifier.testTag("clinic_cancel_${slot.id}"),
+                        ) {
+                            Text(bi(isEn, "إلغاء الحجز وإتاحته", "Cancel & Release"), color = SlotBookedBorder)
+                        }
                     }
                 }
 

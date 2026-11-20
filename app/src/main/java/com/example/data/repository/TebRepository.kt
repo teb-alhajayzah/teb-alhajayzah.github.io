@@ -10,19 +10,24 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.BuildConfig
 import com.example.config.AppConfig
+import com.example.config.CloudNamespacePaths
 import com.example.config.PlatformBrandConfig
 import com.example.data.local.ActivationOtpCodeEntity
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.BlockedPhoneEntity
 import com.example.data.local.BookingSource
+import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.DelayNotificationEntity
+import com.example.data.local.DirectMessageEntity
 import com.example.data.local.DoctorFavoriteMedEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
+import com.example.data.local.MessageSenderRole
+import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.SlotStatus
 import com.example.data.local.TebDao
@@ -46,6 +51,7 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.SecureRandom
+import java.util.Calendar
 import java.util.UUID
 import org.json.JSONObject
 
@@ -89,6 +95,15 @@ class TebRepository(
     private val cfgAnnouncementKey = stringPreferencesKey("cfg_home_announcement")
     private val cfgApkUrlKey = stringPreferencesKey("cfg_apk_url")
     private val cfgMedsApiKey = stringPreferencesKey("cfg_meds_api_url")
+    private val cfgGlobalChatEnabledKey = booleanPreferencesKey("cfg_global_chat_enabled")
+    private val cfgFbApiKey = stringPreferencesKey("cfg_fb_api_key")
+    private val cfgFbAuthDomainKey = stringPreferencesKey("cfg_fb_auth_domain")
+    private val cfgFbProjectIdKey = stringPreferencesKey("cfg_fb_project_id")
+    private val cfgFbStorageBucketKey = stringPreferencesKey("cfg_fb_storage_bucket")
+    private val cfgFbMessagingSenderIdKey = stringPreferencesKey("cfg_fb_messaging_sender_id")
+    private val cfgFbAppIdKey = stringPreferencesKey("cfg_fb_app_id")
+    private val cfgFbVapidKey = stringPreferencesKey("cfg_fb_vapid_key")
+    private val cfgWorkerUrlKey = stringPreferencesKey("cfg_worker_url")
     private val appLanguageKey = stringPreferencesKey("app_language")
     private val seededRealDoctorsKey = booleanPreferencesKey("seeded_real_doctors_v1")
 
@@ -129,6 +144,15 @@ class TebRepository(
                 adminUsername = prefs[adminUsernameKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminUsername,
                 adminPassword = prefs[adminPasswordKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPassword,
                 adminPin = prefs[adminPinKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.adminPin,
+                globalChatEnabled = prefs[cfgGlobalChatEnabledKey] ?: AppConfig.defaultBrand.globalChatEnabled,
+                firebaseApiKey = prefs[cfgFbApiKey].orEmpty(),
+                firebaseAuthDomain = prefs[cfgFbAuthDomainKey].orEmpty(),
+                firebaseProjectId = prefs[cfgFbProjectIdKey].orEmpty(),
+                firebaseStorageBucket = prefs[cfgFbStorageBucketKey].orEmpty(),
+                firebaseMessagingSenderId = prefs[cfgFbMessagingSenderIdKey].orEmpty(),
+                firebaseAppId = prefs[cfgFbAppIdKey].orEmpty(),
+                firebaseVapidKey = prefs[cfgFbVapidKey].orEmpty(),
+                workerUrl = prefs[cfgWorkerUrlKey].orEmpty(),
             )
         }
 
@@ -144,6 +168,7 @@ class TebRepository(
     val allFamilyMembersFlow: Flow<List<FamilyMemberEntity>> = dao.observeAllFamilyMembers()
     val allMedicalRecordsFlow: Flow<List<MedicalRecordEntity>> = dao.observeAllMedicalRecords()
     val notificationsFlow: Flow<List<DelayNotificationEntity>> = dao.observeNotifications()
+    val directMessagesFlow: Flow<List<DirectMessageEntity>> = dao.observeAllDirectMessages()
     val allDoctorFavoritesFlow: Flow<List<DoctorFavoriteMedEntity>> = dao.observeAllDoctorFavorites()
     val blockedPhonesFlow: Flow<List<BlockedPhoneEntity>> = dao.observeBlockedPhones()
     val activationCodesFlow: Flow<List<ActivationOtpCodeEntity>> = dao.observeAllActivationCodes()
@@ -229,6 +254,14 @@ class TebRepository(
         apkUrl: String,
         medsApiUrl: String,
         adminPin: String,
+        firebaseApiKey: String? = null,
+        firebaseAuthDomain: String? = null,
+        firebaseProjectId: String? = null,
+        firebaseStorageBucket: String? = null,
+        firebaseMessagingSenderId: String? = null,
+        firebaseAppId: String? = null,
+        firebaseVapidKey: String? = null,
+        workerUrl: String? = null,
     ) {
         appContext.tebDataStore.edit { prefs ->
             prefs[cfgPlatformNameKey] = platformNameAr.trim().ifEmpty { AppConfig.defaultBrand.platformNameAr }
@@ -242,6 +275,14 @@ class TebRepository(
             if (cleanPin.length >= 4) {
                 prefs[adminPinKey] = cleanPin
             }
+            if (firebaseApiKey != null) prefs[cfgFbApiKey] = firebaseApiKey.trim()
+            if (firebaseAuthDomain != null) prefs[cfgFbAuthDomainKey] = firebaseAuthDomain.trim()
+            if (firebaseProjectId != null) prefs[cfgFbProjectIdKey] = firebaseProjectId.trim()
+            if (firebaseStorageBucket != null) prefs[cfgFbStorageBucketKey] = firebaseStorageBucket.trim()
+            if (firebaseMessagingSenderId != null) prefs[cfgFbMessagingSenderIdKey] = firebaseMessagingSenderId.trim()
+            if (firebaseAppId != null) prefs[cfgFbAppIdKey] = firebaseAppId.trim()
+            if (firebaseVapidKey != null) prefs[cfgFbVapidKey] = firebaseVapidKey.trim()
+            if (workerUrl != null) prefs[cfgWorkerUrlKey] = workerUrl.trim()
         }
     }
 
@@ -257,6 +298,15 @@ class TebRepository(
             prefs.remove(adminPinKey)
             prefs.remove(adminUsernameKey)
             prefs.remove(adminPasswordKey)
+            prefs.remove(cfgGlobalChatEnabledKey)
+            prefs.remove(cfgFbApiKey)
+            prefs.remove(cfgFbAuthDomainKey)
+            prefs.remove(cfgFbProjectIdKey)
+            prefs.remove(cfgFbStorageBucketKey)
+            prefs.remove(cfgFbMessagingSenderIdKey)
+            prefs.remove(cfgFbAppIdKey)
+            prefs.remove(cfgFbVapidKey)
+            prefs.remove(cfgWorkerUrlKey)
         }
     }
 
@@ -1053,6 +1103,11 @@ class TebRepository(
         return list
     }
 
+    fun currentLocalMinutesOfDay(): Int {
+        val cal = Calendar.getInstance()
+        return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+    }
+
     suspend fun bookSlot(
         slotId: String,
         patientName: String,
@@ -1079,22 +1134,304 @@ class TebRepository(
                 bookedAtMillis = System.currentTimeMillis(),
             )
         )
+        val doc = dao.getDoctorById(slot.doctorId)
+        val formattedTime = TimeUtils.formatMinutesAr(slot.effectiveMinutes, false)
+        dispatchWorkerPushAsync(
+            eventType = "BOOKING_CONFIRMED",
+            title = "تأكيد حجز جديد — ${doc?.clinicName.orEmpty()}",
+            body = "تم حجز موعد الساعة $formattedTime للمريض ${patientName.trim()}.",
+            targetAudience = NotificationAudience.CLINIC,
+            targetId = slot.doctorId,
+            namespacePath = CloudNamespacePaths.APPOINTMENTS,
+        )
         return Result.success(Unit)
     }
 
     suspend fun cancelSlot(slotId: String) {
-        val slot = dao.getSlotById(slotId) ?: return
-        if (slot.status == SlotStatus.BOOKED) {
-            dao.updateSlot(
-                slot.copy(
-                    status = SlotStatus.AVAILABLE,
-                    patientName = "",
-                    patientPhone = "",
-                    familyMemberId = "",
-                    bookingSource = BookingSource.NONE,
-                    bookedAtMillis = 0L,
+        cancelSlotByClinic(slotId)
+    }
+
+    suspend fun cancelSlotByPatient(
+        slotId: String,
+        nowMinutesOfDay: Int = currentLocalMinutesOfDay(),
+        enforceTwoHourRule: Boolean = true,
+    ): Result<Unit> {
+        val slot = dao.getSlotById(slotId)
+            ?: return Result.failure(IllegalStateException("الموعد غير موجود"))
+        if (slot.status != SlotStatus.BOOKED) {
+            return Result.failure(IllegalStateException("هذا الموعد غير محجوز حالياً"))
+        }
+        val minutesRemaining = slot.effectiveMinutes - nowMinutesOfDay
+        if (enforceTwoHourRule && minutesRemaining < PATIENT_MODIFY_CUTOFF_MINUTES) {
+            return Result.failure(
+                IllegalStateException("عذراً، لا يمكن إلغاء الموعد قبل الكشف بأقل من ساعتين — يرجى التواصل مع سكرتيرة العيادة.")
+            )
+        }
+        val doctor = dao.getDoctorById(slot.doctorId)
+        val oldTime = TimeUtils.formatMinutesAr(slot.effectiveMinutes, false)
+        val oldPatientName = slot.patientName
+        dao.updateSlot(
+            slot.copy(
+                status = SlotStatus.AVAILABLE,
+                patientName = "",
+                patientPhone = "",
+                familyMemberId = "",
+                bookingSource = BookingSource.NONE,
+                bookedAtMillis = 0L,
+            )
+        )
+        val notifMsg = "إلغاء حجز من المريض: قام $oldPatientName بإلغاء موعد الساعة $oldTime وإتاحته مجدداً."
+        dao.insertNotification(
+            DelayNotificationEntity(
+                doctorId = slot.doctorId,
+                doctorName = doctor?.doctorName.orEmpty(),
+                clinicName = doctor?.clinicName.orEmpty(),
+                delayMinutes = 0,
+                message = notifMsg,
+                targetAudience = NotificationAudience.CLINIC,
+                targetId = slot.doctorId,
+                senderLabel = oldPatientName.ifBlank { "مريض" },
+            )
+        )
+        dispatchWorkerPushAsync(
+            eventType = "PATIENT_CANCELLED",
+            title = "إلغاء موعد — ${doctor?.clinicName.orEmpty()}",
+            body = notifMsg,
+            targetAudience = NotificationAudience.CLINIC,
+            targetId = slot.doctorId,
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
+        return Result.success(Unit)
+    }
+
+    suspend fun rescheduleSlotByPatient(
+        fromSlotId: String,
+        toSlotId: String,
+        nowMinutesOfDay: Int = currentLocalMinutesOfDay(),
+        enforceTwoHourRule: Boolean = true,
+    ): Result<Unit> {
+        if (fromSlotId == toSlotId) {
+            return Result.failure(IllegalArgumentException("يرجى اختيار موعد جديد مختلف"))
+        }
+        val fromSlot = dao.getSlotById(fromSlotId)
+            ?: return Result.failure(IllegalStateException("الموعد الحالي غير موجود"))
+        val toSlot = dao.getSlotById(toSlotId)
+            ?: return Result.failure(IllegalStateException("الموعد الجديد غير موجود"))
+        if (fromSlot.status != SlotStatus.BOOKED) {
+            return Result.failure(IllegalStateException("الموعد الحالي غير محجوز"))
+        }
+        if (toSlot.doctorId != fromSlot.doctorId) {
+            return Result.failure(IllegalArgumentException("يجب اختيار موعد بديل في نفس العيادة"))
+        }
+        if (toSlot.status != SlotStatus.AVAILABLE) {
+            return Result.failure(IllegalStateException("عذراً، الموعد الجديد تم حجزه للتو"))
+        }
+        val minutesRemaining = fromSlot.effectiveMinutes - nowMinutesOfDay
+        if (enforceTwoHourRule && minutesRemaining < PATIENT_MODIFY_CUTOFF_MINUTES) {
+            return Result.failure(
+                IllegalStateException("عذراً، لا يمكن تعديل الموعد قبل الكشف بأقل من ساعتين — يرجى التواصل مع سكرتيرة العيادة.")
+            )
+        }
+        val doctor = dao.getDoctorById(fromSlot.doctorId)
+        val oldTime = TimeUtils.formatMinutesAr(fromSlot.effectiveMinutes, false)
+        val newTime = TimeUtils.formatMinutesAr(toSlot.effectiveMinutes, false)
+        val patientName = fromSlot.patientName
+
+        dao.updateSlot(
+            toSlot.copy(
+                status = SlotStatus.BOOKED,
+                patientName = fromSlot.patientName,
+                patientPhone = fromSlot.patientPhone,
+                familyMemberId = fromSlot.familyMemberId,
+                bookingSource = fromSlot.bookingSource,
+                bookedAtMillis = System.currentTimeMillis(),
+            )
+        )
+        dao.updateSlot(
+            fromSlot.copy(
+                status = SlotStatus.AVAILABLE,
+                patientName = "",
+                patientPhone = "",
+                familyMemberId = "",
+                bookingSource = BookingSource.NONE,
+                bookedAtMillis = 0L,
+            )
+        )
+        val notifMsg = "تعديل موعد من المريض: نقل $patientName حجزه من الساعة $oldTime إلى الساعة $newTime."
+        dao.insertNotification(
+            DelayNotificationEntity(
+                doctorId = fromSlot.doctorId,
+                doctorName = doctor?.doctorName.orEmpty(),
+                clinicName = doctor?.clinicName.orEmpty(),
+                delayMinutes = 0,
+                message = notifMsg,
+                targetAudience = NotificationAudience.CLINIC,
+                targetId = fromSlot.doctorId,
+                senderLabel = patientName.ifBlank { "مريض" },
+            )
+        )
+        dispatchWorkerPushAsync(
+            eventType = "PATIENT_RESCHEDULED",
+            title = "تعديل موعد — ${doctor?.clinicName.orEmpty()}",
+            body = notifMsg,
+            targetAudience = NotificationAudience.CLINIC,
+            targetId = fromSlot.doctorId,
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
+        return Result.success(Unit)
+    }
+
+    suspend fun cancelSlotByClinic(slotId: String): Result<Unit> {
+        val slot = dao.getSlotById(slotId)
+            ?: return Result.failure(IllegalStateException("الموعد غير موجود"))
+        if (slot.status != SlotStatus.BOOKED) {
+            return Result.success(Unit)
+        }
+        val doctor = dao.getDoctorById(slot.doctorId)
+        val oldTime = TimeUtils.formatMinutesAr(slot.effectiveMinutes, false)
+        val targetPatientId = slot.familyMemberId.ifBlank { slot.patientPhone }
+        val oldPatientName = slot.patientName
+        dao.updateSlot(
+            slot.copy(
+                status = SlotStatus.AVAILABLE,
+                patientName = "",
+                patientPhone = "",
+                familyMemberId = "",
+                bookingSource = BookingSource.NONE,
+                bookedAtMillis = 0L,
+            )
+        )
+        if (targetPatientId.isNotBlank()) {
+            val notifMsg = "إشعار من ${doctor?.clinicName ?: "العيادة"}: تم إلغاء حجز موعدك الساعة $oldTime ($oldPatientName). يمكنك الحجز في موعد آخر متاح."
+            dao.insertNotification(
+                DelayNotificationEntity(
+                    doctorId = slot.doctorId,
+                    doctorName = doctor?.doctorName.orEmpty(),
+                    clinicName = doctor?.clinicName.orEmpty(),
+                    delayMinutes = 0,
+                    message = notifMsg,
+                    targetAudience = NotificationAudience.PATIENT,
+                    targetId = targetPatientId,
+                    senderLabel = doctor?.clinicName.orEmpty(),
                 )
             )
+            dispatchWorkerPushAsync(
+                eventType = "CLINIC_CANCELLED",
+                title = "تحديث الحجز — ${doctor?.clinicName.orEmpty()}",
+                body = notifMsg,
+                targetAudience = NotificationAudience.PATIENT,
+                targetId = targetPatientId,
+                namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+            )
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun rescheduleSlotByClinic(
+        fromSlotId: String,
+        toSlotId: String,
+    ): Result<Unit> {
+        if (fromSlotId == toSlotId) {
+            return Result.failure(IllegalArgumentException("يرجى اختيار موعد جديد مختلف"))
+        }
+        val fromSlot = dao.getSlotById(fromSlotId)
+            ?: return Result.failure(IllegalStateException("الموعد الحالي غير موجود"))
+        val toSlot = dao.getSlotById(toSlotId)
+            ?: return Result.failure(IllegalStateException("الموعد الجديد غير موجود"))
+        if (fromSlot.status != SlotStatus.BOOKED) {
+            return Result.failure(IllegalStateException("الموعد الحالي غير محجوز"))
+        }
+        if (toSlot.doctorId != fromSlot.doctorId) {
+            return Result.failure(IllegalArgumentException("يجب اختيار موعد بديل في نفس العيادة"))
+        }
+        if (toSlot.status != SlotStatus.AVAILABLE) {
+            return Result.failure(IllegalStateException("عذراً، الموعد الجديد غير متاح"))
+        }
+        val doctor = dao.getDoctorById(fromSlot.doctorId)
+        val oldTime = TimeUtils.formatMinutesAr(fromSlot.effectiveMinutes, false)
+        val newTime = TimeUtils.formatMinutesAr(toSlot.effectiveMinutes, false)
+        val targetPatientId = fromSlot.familyMemberId.ifBlank { fromSlot.patientPhone }
+
+        dao.updateSlot(
+            toSlot.copy(
+                status = SlotStatus.BOOKED,
+                patientName = fromSlot.patientName,
+                patientPhone = fromSlot.patientPhone,
+                familyMemberId = fromSlot.familyMemberId,
+                bookingSource = fromSlot.bookingSource,
+                bookedAtMillis = System.currentTimeMillis(),
+            )
+        )
+        dao.updateSlot(
+            fromSlot.copy(
+                status = SlotStatus.AVAILABLE,
+                patientName = "",
+                patientPhone = "",
+                familyMemberId = "",
+                bookingSource = BookingSource.NONE,
+                bookedAtMillis = 0L,
+            )
+        )
+        if (targetPatientId.isNotBlank()) {
+            val notifMsg = "تحديث من ${doctor?.clinicName ?: "العيادة"}: تم تعديل موعد ${fromSlot.patientName} من الساعة $oldTime إلى الساعة $newTime."
+            dao.insertNotification(
+                DelayNotificationEntity(
+                    doctorId = fromSlot.doctorId,
+                    doctorName = doctor?.doctorName.orEmpty(),
+                    clinicName = doctor?.clinicName.orEmpty(),
+                    delayMinutes = 0,
+                    message = notifMsg,
+                    targetAudience = NotificationAudience.PATIENT,
+                    targetId = targetPatientId,
+                    senderLabel = doctor?.clinicName.orEmpty(),
+                )
+            )
+            dispatchWorkerPushAsync(
+                eventType = "CLINIC_RESCHEDULED",
+                title = "تعديل موعدك — ${doctor?.clinicName.orEmpty()}",
+                body = notifMsg,
+                targetAudience = NotificationAudience.PATIENT,
+                targetId = targetPatientId,
+                namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+            )
+        }
+        return Result.success(Unit)
+    }
+
+    private suspend fun dispatchWorkerPushAsync(
+        eventType: String,
+        title: String,
+        body: String,
+        targetAudience: String,
+        targetId: String,
+        namespacePath: String,
+    ) {
+        val brand = runCatching { brandConfigFlow.first() }.getOrNull() ?: return
+        val urlStr = brand.workerUrl.trim()
+        if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://")) return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 4000
+                    readTimeout = 4000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                }
+                val payload = JSONObject().apply {
+                    put("namespace", CloudNamespacePaths.ROOT)
+                    put("collectionPath", namespacePath)
+                    put("eventType", eventType)
+                    put("title", title)
+                    put("body", body)
+                    put("targetAudience", targetAudience)
+                    put("targetId", targetId)
+                    put("projectId", brand.firebaseProjectId)
+                }
+                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                conn.responseCode
+                conn.disconnect()
+            }
         }
     }
 
@@ -1139,6 +1476,9 @@ class TebRepository(
                 clinicName = doctor.clinicName,
                 delayMinutes = additionalMinutes,
                 message = "تنبيه عاجل: تم تأخير مواعيد ${doctor.doctorName} (${doctor.clinicName}) لمدة $additionalMinutes دقيقة (إجمالي التأخير: $newTotalDelay دقيقة). تم تحديث موعدك تلقائياً.",
+                targetAudience = NotificationAudience.ALL,
+                targetId = "",
+                senderLabel = doctor.clinicName,
             )
         )
         return Result.success(Unit)
@@ -1528,6 +1868,361 @@ class TebRepository(
         dao.markAllNotificationsRead()
     }
 
+    suspend fun setGlobalChatEnabled(enabled: Boolean) {
+        appContext.tebDataStore.edit { prefs ->
+            prefs[cfgGlobalChatEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setClinicChatEnabled(doctorId: String, enabled: Boolean) {
+        dao.updateDoctorChatEnabled(doctorId, enabled)
+    }
+
+    suspend fun sendPatientToClinicMessage(
+        account: PatientAccountEntity,
+        doctorId: String,
+        body: String,
+    ): Result<DirectMessageEntity> {
+        val cleanBody = body.trim()
+        if (cleanBody.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة نص الرسالة"))
+        }
+        val brand = brandConfigFlow.first()
+        if (!brand.globalChatEnabled) {
+            return Result.failure(IllegalStateException("نظام المحادثة مع العيادات معطل حالياً من الإدارة"))
+        }
+        val doctor = dao.getDoctorById(doctorId)
+            ?: return Result.failure(IllegalStateException("العيادة غير موجودة"))
+        if (!doctor.chatEnabled) {
+            return Result.failure(IllegalStateException("استقبال رسائل المرضى معطل لهذه العيادة حالياً"))
+        }
+        val msg = DirectMessageEntity(
+            id = "msg_${UUID.randomUUID()}",
+            threadType = ChatThreadType.PATIENT_CLINIC,
+            patientAccountId = account.id,
+            patientName = account.fullName,
+            patientPhone = account.phone,
+            doctorId = doctor.id,
+            doctorName = doctor.doctorName,
+            clinicName = doctor.clinicName,
+            senderRole = MessageSenderRole.PATIENT,
+            senderName = account.fullName,
+            body = cleanBody,
+            createdAtMillis = System.currentTimeMillis(),
+            isReadByPatient = true,
+            isReadByClinic = false,
+            isReadByAdmin = true,
+        )
+        dao.insertDirectMessage(msg)
+        return Result.success(msg)
+    }
+
+    suspend fun sendPatientToAdminMessage(
+        account: PatientAccountEntity,
+        body: String,
+    ): Result<DirectMessageEntity> {
+        val cleanBody = body.trim()
+        if (cleanBody.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة نص الرسالة"))
+        }
+        val msg = DirectMessageEntity(
+            id = "msg_${UUID.randomUUID()}",
+            threadType = ChatThreadType.PATIENT_ADMIN,
+            patientAccountId = account.id,
+            patientName = account.fullName,
+            patientPhone = account.phone,
+            doctorId = "",
+            doctorName = "",
+            clinicName = "",
+            senderRole = MessageSenderRole.PATIENT,
+            senderName = account.fullName,
+            body = cleanBody,
+            createdAtMillis = System.currentTimeMillis(),
+            isReadByPatient = true,
+            isReadByClinic = true,
+            isReadByAdmin = false,
+        )
+        dao.insertDirectMessage(msg)
+        return Result.success(msg)
+    }
+
+    suspend fun sendClinicReplyToPatient(
+        doctor: ClinicDoctorEntity,
+        patientAccountId: String,
+        patientName: String,
+        patientPhone: String,
+        body: String,
+    ): Result<DirectMessageEntity> {
+        val cleanBody = body.trim()
+        if (cleanBody.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة الرد أولاً"))
+        }
+        val msg = DirectMessageEntity(
+            id = "msg_${UUID.randomUUID()}",
+            threadType = ChatThreadType.PATIENT_CLINIC,
+            patientAccountId = patientAccountId,
+            patientName = patientName.ifBlank { "مريض" },
+            patientPhone = patientPhone,
+            doctorId = doctor.id,
+            doctorName = doctor.doctorName,
+            clinicName = doctor.clinicName,
+            senderRole = MessageSenderRole.CLINIC,
+            senderName = "${doctor.doctorName} — ${doctor.clinicName}",
+            body = cleanBody,
+            createdAtMillis = System.currentTimeMillis(),
+            isReadByPatient = false,
+            isReadByClinic = true,
+            isReadByAdmin = true,
+        )
+        dao.insertDirectMessage(msg)
+        return Result.success(msg)
+    }
+
+    suspend fun sendClinicToPatientAlert(
+        doctor: ClinicDoctorEntity,
+        patientAccountId: String,
+        patientName: String,
+        message: String,
+    ): Result<DelayNotificationEntity> {
+        val cleanMsg = message.trim()
+        if (cleanMsg.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة نص التنبيه للمريض"))
+        }
+        val entity = DelayNotificationEntity(
+            doctorId = doctor.id,
+            doctorName = doctor.doctorName,
+            clinicName = doctor.clinicName,
+            delayMinutes = 0,
+            message = "تنبيه من ${doctor.clinicName}: $cleanMsg",
+            createdAtMillis = System.currentTimeMillis(),
+            isRead = false,
+            targetAudience = NotificationAudience.PATIENT,
+            targetId = patientAccountId,
+            senderLabel = doctor.clinicName,
+        )
+        val newId = dao.insertNotification(entity)
+        return Result.success(entity.copy(id = newId))
+    }
+
+    suspend fun sendClinicToAdminMessage(
+        doctor: ClinicDoctorEntity,
+        body: String,
+    ): Result<DirectMessageEntity> {
+        val cleanBody = body.trim()
+        if (cleanBody.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة الرسالة للإدارة"))
+        }
+        val msg = DirectMessageEntity(
+            id = "msg_${UUID.randomUUID()}",
+            threadType = ChatThreadType.CLINIC_ADMIN,
+            patientAccountId = "",
+            patientName = "",
+            patientPhone = doctor.username,
+            doctorId = doctor.id,
+            doctorName = doctor.doctorName,
+            clinicName = doctor.clinicName,
+            senderRole = MessageSenderRole.CLINIC,
+            senderName = "${doctor.doctorName} (${doctor.clinicName})",
+            body = cleanBody,
+            createdAtMillis = System.currentTimeMillis(),
+            isReadByPatient = true,
+            isReadByClinic = true,
+            isReadByAdmin = false,
+        )
+        dao.insertDirectMessage(msg)
+        return Result.success(msg)
+    }
+
+    suspend fun sendAdminReplyToPatient(
+        patientAccountId: String,
+        patientName: String,
+        patientPhone: String,
+        body: String,
+    ): Result<DirectMessageEntity> {
+        val cleanBody = body.trim()
+        if (cleanBody.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة الرد أولاً"))
+        }
+        val msg = DirectMessageEntity(
+            id = "msg_${UUID.randomUUID()}",
+            threadType = ChatThreadType.PATIENT_ADMIN,
+            patientAccountId = patientAccountId,
+            patientName = patientName.ifBlank { "مريض" },
+            patientPhone = patientPhone,
+            doctorId = "",
+            doctorName = "",
+            clinicName = "",
+            senderRole = MessageSenderRole.ADMIN,
+            senderName = "إدارة منصة طب الحجايزة",
+            body = cleanBody,
+            createdAtMillis = System.currentTimeMillis(),
+            isReadByPatient = false,
+            isReadByClinic = true,
+            isReadByAdmin = true,
+        )
+        dao.insertDirectMessage(msg)
+        return Result.success(msg)
+    }
+
+    suspend fun sendAdminReplyToClinic(
+        doctor: ClinicDoctorEntity,
+        body: String,
+    ): Result<DirectMessageEntity> {
+        val cleanBody = body.trim()
+        if (cleanBody.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة الرد للعيادة"))
+        }
+        val msg = DirectMessageEntity(
+            id = "msg_${UUID.randomUUID()}",
+            threadType = ChatThreadType.CLINIC_ADMIN,
+            patientAccountId = "",
+            patientName = "",
+            patientPhone = doctor.username,
+            doctorId = doctor.id,
+            doctorName = doctor.doctorName,
+            clinicName = doctor.clinicName,
+            senderRole = MessageSenderRole.ADMIN,
+            senderName = "إدارة منصة طب الحجايزة",
+            body = cleanBody,
+            createdAtMillis = System.currentTimeMillis(),
+            isReadByPatient = true,
+            isReadByClinic = false,
+            isReadByAdmin = true,
+        )
+        dao.insertDirectMessage(msg)
+        return Result.success(msg)
+    }
+
+    suspend fun sendAdminClinicAlert(
+        doctor: ClinicDoctorEntity?,
+        message: String,
+    ): Result<DelayNotificationEntity> {
+        val cleanMsg = message.trim()
+        if (cleanMsg.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة نص التنبيه للعيادات"))
+        }
+        val entity = DelayNotificationEntity(
+            doctorId = doctor?.id.orEmpty(),
+            doctorName = doctor?.doctorName ?: "جميع العيادات",
+            clinicName = doctor?.clinicName ?: "توجيه إداري للعيادات",
+            delayMinutes = 0,
+            message = if (doctor != null) {
+                "إشعار إداري إلى ${doctor.clinicName}: $cleanMsg"
+            } else {
+                "تعميم إداري لجميع العيادات: $cleanMsg"
+            },
+            createdAtMillis = System.currentTimeMillis(),
+            isRead = false,
+            targetAudience = NotificationAudience.CLINIC,
+            targetId = doctor?.id.orEmpty(),
+            senderLabel = "إدارة المنصة",
+        )
+        val newId = dao.insertNotification(entity)
+        return Result.success(entity.copy(id = newId))
+    }
+
+    suspend fun sendAdminGlobalBroadcast(message: String): Result<DelayNotificationEntity> {
+        val cleanMsg = message.trim()
+        if (cleanMsg.isEmpty()) {
+            return Result.failure(IllegalArgumentException("يرجى كتابة نص الإشعار العام"))
+        }
+        val entity = DelayNotificationEntity(
+            doctorId = "",
+            doctorName = "إدارة منصة طب الحجايزة",
+            clinicName = "إشعار عام",
+            delayMinutes = 0,
+            message = "📢 إشعار عام من إدارة المنصة: $cleanMsg",
+            createdAtMillis = System.currentTimeMillis(),
+            isRead = false,
+            targetAudience = NotificationAudience.ALL,
+            targetId = "",
+            senderLabel = "إدارة المنصة",
+        )
+        val newId = dao.insertNotification(entity)
+        return Result.success(entity.copy(id = newId))
+    }
+
+    suspend fun markDirectThreadRead(
+        threadType: String,
+        viewerRole: String,
+        patientAccountId: String = "",
+        doctorId: String = "",
+    ) {
+        when (viewerRole) {
+            MessageSenderRole.PATIENT -> {
+                if (patientAccountId.isNotBlank()) {
+                    dao.markThreadReadByPatient(threadType, patientAccountId, doctorId)
+                }
+            }
+            MessageSenderRole.CLINIC -> {
+                if (doctorId.isNotBlank()) {
+                    dao.markThreadReadByClinic(threadType, doctorId, patientAccountId)
+                }
+            }
+            MessageSenderRole.ADMIN -> {
+                dao.markThreadReadByAdmin(threadType, patientAccountId, doctorId)
+            }
+        }
+    }
+
+    suspend fun markRoleNotificationsRead(
+        roleName: String,
+        activeAccountId: String,
+        activeAccountPhone: String,
+        familyMemberIds: Set<String>,
+        loggedInDoctorId: String?,
+    ) {
+        val allNotifs = dao.observeNotifications().first()
+        allNotifs.forEach { alert ->
+            if (!alert.isRead && isNotificationVisibleForRole(
+                    alert = alert,
+                    roleName = roleName,
+                    activeAccountId = activeAccountId,
+                    activeAccountPhone = activeAccountPhone,
+                    familyMemberIds = familyMemberIds,
+                    loggedInDoctorId = loggedInDoctorId,
+                )
+            ) {
+                dao.markNotificationReadById(alert.id)
+            }
+        }
+        when (roleName) {
+            "PATIENT" -> if (activeAccountId.isNotBlank()) dao.markAllPatientMessagesRead(activeAccountId)
+            "DOCTOR_ADMIN" -> if (!loggedInDoctorId.isNullOrBlank()) dao.markAllClinicMessagesRead(loggedInDoctorId)
+            "SUPER_ADMIN" -> dao.markAllAdminMessagesRead()
+        }
+    }
+
+    fun isNotificationVisibleForRole(
+        alert: DelayNotificationEntity,
+        roleName: String,
+        activeAccountId: String,
+        activeAccountPhone: String,
+        familyMemberIds: Set<String>,
+        loggedInDoctorId: String?,
+    ): Boolean {
+        return when (roleName) {
+            "DOCTOR_ADMIN" -> {
+                alert.targetAudience == NotificationAudience.ALL ||
+                    (alert.targetAudience == NotificationAudience.CLINIC &&
+                        (alert.targetId.isBlank() || alert.targetId == loggedInDoctorId))
+            }
+            "SUPER_ADMIN" -> {
+                alert.targetAudience == NotificationAudience.ADMIN ||
+                    alert.targetAudience == NotificationAudience.ALL
+            }
+            else -> {
+                alert.targetAudience == NotificationAudience.ALL ||
+                    (alert.targetAudience == NotificationAudience.PATIENT && (
+                        alert.targetId.isBlank() ||
+                            (activeAccountId.isNotBlank() && alert.targetId == activeAccountId) ||
+                            (activeAccountPhone.isNotBlank() && alert.targetId == activeAccountPhone) ||
+                            alert.targetId in familyMemberIds
+                        ))
+            }
+        }
+    }
+
     fun toAsciiDigits(raw: String): String {
         val sb = StringBuilder(raw.length)
         for (ch in raw) {
@@ -1554,5 +2249,6 @@ class TebRepository(
         const val ADMIN_LOCKOUT_MILLIS = 15 * 60_000L
         const val MASTER_ADMIN_OTP = "999000"
         const val OTP_TTL_MILLIS = 24L * 60L * 60L * 1000L
+        const val PATIENT_MODIFY_CUTOFF_MINUTES = 120
     }
 }

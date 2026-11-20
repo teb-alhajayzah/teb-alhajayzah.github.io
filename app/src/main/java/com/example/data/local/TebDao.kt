@@ -199,14 +199,53 @@ interface TebDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMedicalRecords(records: List<MedicalRecordEntity>)
 
+    @Query("UPDATE clinic_doctors SET chatEnabled = :chatEnabled WHERE id = :doctorId")
+    suspend fun updateDoctorChatEnabled(doctorId: String, chatEnabled: Boolean)
+
     @Query("SELECT * FROM delay_notifications ORDER BY createdAtMillis DESC")
     fun observeNotifications(): Flow<List<DelayNotificationEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertNotification(notification: DelayNotificationEntity)
+    suspend fun insertNotification(notification: DelayNotificationEntity): Long
 
     @Query("UPDATE delay_notifications SET isRead = 1")
     suspend fun markAllNotificationsRead()
+
+    @Query("UPDATE delay_notifications SET isRead = 1 WHERE id = :notificationId")
+    suspend fun markNotificationReadById(notificationId: Long)
+
+    @Query("SELECT * FROM direct_messages ORDER BY createdAtMillis ASC")
+    fun observeAllDirectMessages(): Flow<List<DirectMessageEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDirectMessage(message: DirectMessageEntity)
+
+    @Query(
+        "UPDATE direct_messages SET isReadByPatient = 1 " +
+            "WHERE threadType = :threadType AND patientAccountId = :patientAccountId AND doctorId = :doctorId"
+    )
+    suspend fun markThreadReadByPatient(threadType: String, patientAccountId: String, doctorId: String)
+
+    @Query(
+        "UPDATE direct_messages SET isReadByClinic = 1 " +
+            "WHERE threadType = :threadType AND doctorId = :doctorId AND patientAccountId = :patientAccountId"
+    )
+    suspend fun markThreadReadByClinic(threadType: String, doctorId: String, patientAccountId: String)
+
+    @Query(
+        "UPDATE direct_messages SET isReadByAdmin = 1 " +
+            "WHERE threadType = :threadType AND patientAccountId = :patientAccountId AND doctorId = :doctorId"
+    )
+    suspend fun markThreadReadByAdmin(threadType: String, patientAccountId: String, doctorId: String)
+
+    @Query("UPDATE direct_messages SET isReadByPatient = 1 WHERE patientAccountId = :patientAccountId AND (threadType = 'PATIENT_CLINIC' OR threadType = 'PATIENT_ADMIN')")
+    suspend fun markAllPatientMessagesRead(patientAccountId: String)
+
+    @Query("UPDATE direct_messages SET isReadByClinic = 1 WHERE doctorId = :doctorId AND (threadType = 'PATIENT_CLINIC' OR threadType = 'CLINIC_ADMIN')")
+    suspend fun markAllClinicMessagesRead(doctorId: String)
+
+    @Query("UPDATE direct_messages SET isReadByAdmin = 1 WHERE threadType = 'PATIENT_ADMIN' OR threadType = 'CLINIC_ADMIN'")
+    suspend fun markAllAdminMessagesRead()
 
     @Query("SELECT * FROM doctor_favorite_meds")
     fun observeAllDoctorFavorites(): Flow<List<DoctorFavoriteMedEntity>>
@@ -215,7 +254,7 @@ interface TebDao {
     suspend fun isMedicationFavorite(doctorId: String, medicationId: String): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertFavoriteMed(fav: DoctorFavoriteMedEntity)
+    suspend fun insertFavoriteMed(favorite: DoctorFavoriteMedEntity)
 
     @Query("DELETE FROM doctor_favorite_meds WHERE doctorId = :doctorId AND medicationId = :medicationId")
     suspend fun deleteFavoriteMed(doctorId: String, medicationId: String)
@@ -232,7 +271,7 @@ interface TebDao {
     @Query("DELETE FROM blocked_phones WHERE phone = :phone")
     suspend fun unblockPhone(phone: String)
 
-    @Query("SELECT * FROM activation_otp_codes ORDER BY isUsed ASC, createdAtMillis DESC")
+    @Query("SELECT * FROM activation_otp_codes ORDER BY createdAtMillis DESC")
     fun observeAllActivationCodes(): Flow<List<ActivationOtpCodeEntity>>
 
     @Query("SELECT * FROM activation_otp_codes")
@@ -241,13 +280,11 @@ interface TebDao {
     @Query("SELECT * FROM activation_otp_codes WHERE code = :code LIMIT 1")
     suspend fun getActivationCode(code: String): ActivationOtpCodeEntity?
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertActivationCodes(codes: List<ActivationOtpCodeEntity>)
 
     @Query(
-        "UPDATE activation_otp_codes " +
-            "SET isUsed = 1, usedByName = :usedByName, usedByPhone = :usedByPhone, usedAtMillis = :usedAtMillis " +
-            "WHERE code = :code AND isUsed = 0"
+        "UPDATE activation_otp_codes SET isUsed = 1, usedByName = :usedByName, usedByPhone = :usedByPhone, usedAtMillis = :usedAtMillis WHERE code = :code AND isUsed = 0"
     )
     suspend fun markActivationCodeUsed(
         code: String,
@@ -264,12 +301,7 @@ interface TebDao {
         usedByPhone: String,
         usedAtMillis: Long,
     ): Boolean {
-        val updatedRows = markActivationCodeUsed(
-            code = code,
-            usedByName = usedByName,
-            usedByPhone = usedByPhone,
-            usedAtMillis = usedAtMillis,
-        )
+        val updatedRows = markActivationCodeUsed(code, usedByName, usedByPhone, usedAtMillis)
         if (updatedRows <= 0) return false
         markAccountPhoneVerified(accountId, "كود OTP", usedAtMillis)
         return true

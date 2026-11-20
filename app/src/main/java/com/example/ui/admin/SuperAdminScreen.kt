@@ -28,19 +28,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -59,6 +64,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -81,14 +87,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
+import com.example.data.local.MessageSenderRole
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.bi
+import com.example.ui.components.DirectChatTarget
 import com.example.ui.components.PasswordOutlinedTextField
 import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.theme.SlotAvailableBg
@@ -157,6 +166,14 @@ fun SuperAdminDashboardScreen(
         apkUrl: String,
         medsApiUrl: String,
         adminPin: String,
+        firebaseApiKey: String,
+        firebaseAuthDomain: String,
+        firebaseProjectId: String,
+        firebaseStorageBucket: String,
+        firebaseMessagingSenderId: String,
+        firebaseAppId: String,
+        firebaseVapidKey: String,
+        workerUrl: String,
     ) -> Unit,
     onResetPlatformSettings: () -> Unit,
     onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
@@ -167,6 +184,11 @@ fun SuperAdminDashboardScreen(
     onRegenerateUserOtp: (accountId: String) -> Unit = {},
     onUpdateUser: (accountId: String, fullName: String, phone: String, newPassword: String?) -> Unit,
     onDeleteUser: (accountId: String) -> Unit,
+    onToggleGlobalChat: (Boolean) -> Unit = {},
+    onToggleClinicChat: (doctorId: String, Boolean) -> Unit = { _, _ -> },
+    onSendAdminGlobalBroadcast: (message: String, onSent: () -> Unit) -> Unit = { _, _ -> },
+    onSendAdminClinicAlert: (doctorId: String?, message: String, onSent: () -> Unit) -> Unit = { _, _, _ -> },
+    onOpenChatThread: (DirectChatTarget) -> Unit = {},
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -174,10 +196,14 @@ fun SuperAdminDashboardScreen(
     val clipboardManager = LocalClipboardManager.current
     val isEn = state.isEn
     val currencyLabel = bi(isEn, state.brandConfig.currencyLabelAr, state.brandConfig.currencyLabelEn)
+    val unreadAdminInbox = state.unreadSupportInboxCountForAdmin()
     var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var usersSearchQuery by remember { mutableStateOf("") }
     var usersStatusFilter by remember { mutableStateOf("ALL") }
+    var globalBroadcastDraft by remember { mutableStateOf("") }
+    var clinicAlertDraft by remember { mutableStateOf("") }
+    var selectedAlertDoctorId by remember { mutableStateOf<String?>(null) }
     var defaultFormClinicType by remember { mutableStateOf(ClinicType.PRIVATE) }
     var showAddForm by remember { mutableStateOf(false) }
     var doctorToEdit by remember { mutableStateOf<ClinicDoctorEntity?>(null) }
@@ -202,6 +228,14 @@ fun SuperAdminDashboardScreen(
     var cfgApkUrl by remember(state.brandConfig.apkDownloadUrl) { mutableStateOf(state.brandConfig.apkDownloadUrl) }
     var cfgMedsApi by remember(state.brandConfig.medicationsApiUrl) { mutableStateOf(state.brandConfig.medicationsApiUrl) }
     var cfgAdminPin by remember(state.brandConfig.adminPin) { mutableStateOf(state.brandConfig.adminPin) }
+    var cfgFbApiKey by remember(state.brandConfig.firebaseApiKey) { mutableStateOf(state.brandConfig.firebaseApiKey) }
+    var cfgFbAuthDomain by remember(state.brandConfig.firebaseAuthDomain) { mutableStateOf(state.brandConfig.firebaseAuthDomain) }
+    var cfgFbProjectId by remember(state.brandConfig.firebaseProjectId) { mutableStateOf(state.brandConfig.firebaseProjectId) }
+    var cfgFbStorageBucket by remember(state.brandConfig.firebaseStorageBucket) { mutableStateOf(state.brandConfig.firebaseStorageBucket) }
+    var cfgFbMessagingSenderId by remember(state.brandConfig.firebaseMessagingSenderId) { mutableStateOf(state.brandConfig.firebaseMessagingSenderId) }
+    var cfgFbAppId by remember(state.brandConfig.firebaseAppId) { mutableStateOf(state.brandConfig.firebaseAppId) }
+    var cfgFbVapidKey by remember(state.brandConfig.firebaseVapidKey) { mutableStateOf(state.brandConfig.firebaseVapidKey) }
+    var cfgWorkerUrl by remember(state.brandConfig.workerUrl) { mutableStateOf(state.brandConfig.workerUrl) }
 
     val q = searchQuery.trim()
     val privateDoctors = remember(state.doctors, q) {
@@ -341,6 +375,24 @@ fun SuperAdminDashboardScreen(
                         onClick = { selectedTab = 6 },
                         text = { Text(bi(isEn, "قائمة العملاء والمشتركين (Users)", "Users & Subscribers")) },
                         modifier = Modifier.testTag("admin_users_tab"),
+                    )
+                    Tab(
+                        selected = selectedTab == 7,
+                        onClick = { selectedTab = 7 },
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(bi(isEn, "💬 التحكم في الرسائل والإشعارات", "💬 Messaging & Alerts"))
+                                if (unreadAdminInbox > 0) {
+                                    Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                        Text(unreadAdminInbox.toString())
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.testTag("admin_messages_control_tab"),
                     )
                 }
             }
@@ -645,6 +697,110 @@ fun SuperAdminDashboardScreen(
                                         .fillMaxWidth()
                                         .testTag("admin_change_pin_input"),
                                 )
+                            }
+                        }
+                    }
+
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Filled.Notifications, contentDescription = null, tint = TealPrimary)
+                                    Text(
+                                        text = bi(isEn, "إعدادات الربط السحابي والإشعارات (FCM & Worker)", "Cloud Integration & Push Settings"),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TealPrimary,
+                                    )
+                                }
+                                Surface(
+                                    color = SlotAvailableBg.copy(alpha = 0.7f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, SlotAvailableBorder.copy(alpha = 0.5f)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(
+                                            text = bi(
+                                                isEn,
+                                                "🔒 مسارات عزل البيانات المخصصة (Namespace Isolation):",
+                                                "🔒 مسارات عزل البيانات السحابية المخصصة لطب الحجايزة:",
+                                            ),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SlotAvailableText,
+                                        )
+                                        Text(
+                                            text = "teb_alhajayzah/users • teb_alhajayzah/clinics • teb_alhajayzah/appointments • teb_alhajayzah/messages • teb_alhajayzah/notifications",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = SlotAvailableText,
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = cfgWorkerUrl,
+                                    onValueChange = { cfgWorkerUrl = it },
+                                    label = { Text(bi(isEn, "رابط الخادم الوسيط (Cloudflare Worker URL)", "Cloudflare Worker URL (Push & WhatsApp)")) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("admin_worker_url_input"),
+                                )
+                                OutlinedTextField(
+                                    value = cfgFbApiKey,
+                                    onValueChange = { cfgFbApiKey = it },
+                                    label = { Text("Firebase apiKey") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("admin_fb_api_key_input"),
+                                )
+                                OutlinedTextField(
+                                    value = cfgFbAuthDomain,
+                                    onValueChange = { cfgFbAuthDomain = it },
+                                    label = { Text("Firebase authDomain") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgFbProjectId,
+                                    onValueChange = { cfgFbProjectId = it },
+                                    label = { Text("Firebase projectId") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("admin_fb_project_id_input"),
+                                )
+                                OutlinedTextField(
+                                    value = cfgFbStorageBucket,
+                                    onValueChange = { cfgFbStorageBucket = it },
+                                    label = { Text("Firebase storageBucket") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgFbMessagingSenderId,
+                                    onValueChange = { cfgFbMessagingSenderId = it },
+                                    label = { Text("Firebase messagingSenderId") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgFbAppId,
+                                    onValueChange = { cfgFbAppId = it },
+                                    label = { Text("Firebase appId") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = cfgFbVapidKey,
+                                    onValueChange = { cfgFbVapidKey = it },
+                                    label = { Text("Firebase FCM vapidKey") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(
                                         onClick = onResetPlatformSettings,
@@ -663,6 +819,14 @@ fun SuperAdminDashboardScreen(
                                                 cfgApkUrl,
                                                 cfgMedsApi,
                                                 cfgAdminPin,
+                                                cfgFbApiKey,
+                                                cfgFbAuthDomain,
+                                                cfgFbProjectId,
+                                                cfgFbStorageBucket,
+                                                cfgFbMessagingSenderId,
+                                                cfgFbAppId,
+                                                cfgFbVapidKey,
+                                                cfgWorkerUrl,
                                             )
                                         },
                                         modifier = Modifier
@@ -852,6 +1016,295 @@ fun SuperAdminDashboardScreen(
                                 onEdit = { userToEdit = userAcc },
                                 onDelete = { userToDelete = userAcc },
                             )
+                        }
+                    }
+                }
+
+                7 -> {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(
+                                        text = bi(isEn, "الزر الرئيسي للمحادثات مع العيادات", "Master Global Chat Switch"),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text(
+                                        text = bi(
+                                            isEn,
+                                            "تفعيل أو إيقاف زر (💬 مراسلة العيادة) للمرضى على مستوى جميع العيادات فوراً.",
+                                            "Immediately enable or disable Patient ↔ Clinic messaging across all clinics.",
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Switch(
+                                    checked = state.brandConfig.globalChatEnabled,
+                                    onCheckedChange = onToggleGlobalChat,
+                                    modifier = Modifier.testTag("admin_global_chat_switch"),
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(Icons.Filled.Campaign, contentDescription = null, tint = TealPrimary)
+                                    Text(
+                                        text = bi(isEn, "إرسال إشعار عام لجميع مستخدمي المنصة", "Broadcast Alert to All Platform Users"),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = globalBroadcastDraft,
+                                    onValueChange = { globalBroadcastDraft = it },
+                                    label = { Text(bi(isEn, "نص الإشعار العام (يظهر لجميع المرضى والعيادات)", "Platform-wide Broadcast Message")) },
+                                    maxLines = 3,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("admin_global_broadcast_input"),
+                                )
+                                Button(
+                                    onClick = {
+                                        onSendAdminGlobalBroadcast(globalBroadcastDraft) {
+                                            globalBroadcastDraft = ""
+                                        }
+                                    },
+                                    enabled = globalBroadcastDraft.isNotBlank(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("admin_global_broadcast_send"),
+                                ) {
+                                    Icon(Icons.Filled.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(bi(isEn, "📢 نشر الإشعار العام للجميع", "📢 Publish Global Broadcast"))
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = bi(isEn, "التحكم في محادثات وتنبيهات كل عيادة", "Per-Clinic Chat & Alert Controls"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    item {
+                                        FilterChip(
+                                            selected = selectedAlertDoctorId == null,
+                                            onClick = { selectedAlertDoctorId = null },
+                                            label = { Text(bi(isEn, "كل العيادات", "All Clinics")) },
+                                        )
+                                    }
+                                    items(state.doctors, key = { "alert_doc_${it.id}" }) { doc ->
+                                        FilterChip(
+                                            selected = selectedAlertDoctorId == doc.id,
+                                            onClick = { selectedAlertDoctorId = doc.id },
+                                            label = { Text(doc.clinicName) },
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = clinicAlertDraft,
+                                    onValueChange = { clinicAlertDraft = it },
+                                    label = { Text(bi(isEn, "تنبيه إداري موجه للعيادات المحددة", "Targeted Clinic Alert Message")) },
+                                    maxLines = 2,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("admin_clinic_alert_input"),
+                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        onSendAdminClinicAlert(selectedAlertDoctorId, clinicAlertDraft) {
+                                            clinicAlertDraft = ""
+                                        }
+                                    },
+                                    enabled = clinicAlertDraft.isNotBlank(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(46.dp)
+                                        .testTag("admin_all_clinics_alert_send"),
+                                ) {
+                                    Text(bi(isEn, "إرسال التنبيه الإداري للعيادة / العيادات", "Send Alert to Selected Clinic(s)"))
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                state.doctors.forEach { doc ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(doc.clinicName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                text = if (doc.chatEnabled) {
+                                                    bi(isEn, "${doc.doctorName} • الدردشة مفعلة", "${doc.doctorName} • Chat ON")
+                                                } else {
+                                                    bi(isEn, "${doc.doctorName} • الدردشة متوقفة", "${doc.doctorName} • Chat OFF")
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Switch(
+                                            checked = doc.chatEnabled,
+                                            onCheckedChange = { enabled -> onToggleClinicChat(doc.id, enabled) },
+                                            modifier = Modifier.testTag("admin_clinic_chat_switch_${doc.id}"),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    val supportThreads = state.directMessages
+                        .filter { it.threadType == ChatThreadType.PATIENT_ADMIN || it.threadType == ChatThreadType.CLINIC_ADMIN }
+                        .groupBy { "${it.threadType}:${it.patientAccountId}:${it.doctorId}" }
+                        .values
+                        .mapNotNull { list ->
+                            val latest = list.maxByOrNull { it.createdAtMillis } ?: return@mapNotNull null
+                            Triple(latest, list.count { !it.isReadByAdmin }, list.size)
+                        }
+                        .sortedByDescending { it.first.createdAtMillis }
+
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(Icons.Filled.SupportAgent, contentDescription = null, tint = TealPrimary)
+                            Text(
+                                text = bi(isEn, "صندوق رسائل الدعم والشكاوى (${supportThreads.size})", "Admin Support Inbox (${supportThreads.size})"),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TealPrimary,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+
+                    if (supportThreads.isEmpty()) {
+                        item {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = bi(isEn, "لا توجد رسائل دعم من المرضى أو العيادات حتى الآن.", "No support messages from patients or clinics yet."),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        items(supportThreads, key = { "adm_${it.first.id}" }) { (latest, unread, total) ->
+                            val isClinicThread = latest.threadType == ChatThreadType.CLINIC_ADMIN
+                            val threadTitle = if (isClinicThread) {
+                                "${latest.clinicName.ifBlank { latest.doctorName }} (${bi(isEn, "عيادة", "Clinic")})"
+                            } else {
+                                "${latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") }} (${bi(isEn, "مريض", "Patient")})"
+                            }
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = BorderStroke(1.2.dp, if (unread > 0) TealPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text(threadTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                            if (unread > 0) {
+                                                Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                                    Text(unread.toString())
+                                                }
+                                            }
+                                        }
+                                        if (latest.patientPhone.isNotBlank()) {
+                                            Text(
+                                                text = "${latest.patientPhone} • ($total ${bi(isEn, "رسالة", "msgs")})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Text(
+                                            text = "${latest.senderName}: ${latest.body}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            onOpenChatThread(
+                                                if (isClinicThread) {
+                                                    DirectChatTarget(
+                                                        threadType = ChatThreadType.CLINIC_ADMIN,
+                                                        viewerRole = MessageSenderRole.ADMIN,
+                                                        title = latest.clinicName.ifBlank { latest.doctorName },
+                                                        subtitle = latest.doctorName,
+                                                        doctorId = latest.doctorId,
+                                                    )
+                                                } else {
+                                                    DirectChatTarget(
+                                                        threadType = ChatThreadType.PATIENT_ADMIN,
+                                                        viewerRole = MessageSenderRole.ADMIN,
+                                                        title = latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") },
+                                                        subtitle = latest.patientPhone,
+                                                        patientAccountId = latest.patientAccountId,
+                                                        patientName = latest.patientName,
+                                                        patientPhone = latest.patientPhone,
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        modifier = Modifier.height(44.dp),
+                                    ) {
+                                        Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(bi(isEn, "فتح والرد", "Reply"))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
