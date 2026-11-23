@@ -31,12 +31,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -79,6 +81,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -97,6 +100,7 @@ import com.example.ui.components.AttachmentPreviewTarget
 import com.example.ui.components.DeleteFileConfirmationDialog
 import com.example.ui.components.EditPatientBioDialog
 import com.example.ui.components.PatientBioOverviewCard
+import com.example.ui.components.PermanentMedicalLogSection
 import com.example.ui.theme.TealPrimary
 import com.example.util.BilingualMedicalTranslator
 import com.example.util.ImageStorageHelper
@@ -158,6 +162,9 @@ fun MedicalFileScreen(
     val activeMember = state.activeMember
     val records = remember(state.medicalRecords, activeMember) {
         state.recordsForMember(activeMember)
+    }
+    val permanentLogs = remember(state.permanentLogs, activeMember) {
+        state.permanentLogsForMember(activeMember)
     }
 
     var showUploadDialog by remember { mutableStateOf(false) }
@@ -331,6 +338,15 @@ fun MedicalFileScreen(
                         member = activeMember,
                         isAnalyzing = activeMember.id in state.analyzingAiMemberIds,
                         onRefreshAiSummary = { onRefreshAiSummary(activeMember.id) },
+                        isEn = isEn,
+                    )
+                }
+
+                // Permanent Lifetime Medical Log section (auto-written & preserved independently forever)
+                item(key = "patient_permanent_log") {
+                    PermanentMedicalLogSection(
+                        patientName = activeMember.fullName,
+                        logs = permanentLogs,
                         isEn = isEn,
                     )
                 }
@@ -1004,6 +1020,7 @@ fun MedicalRecordTimelineCard(
     onShowMessage: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     var cardIsEn by remember(isEn, record.id) { mutableStateOf(isEn) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -1332,13 +1349,46 @@ fun MedicalRecordTimelineCard(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                             .testTag("delete_record_file_${record.id}"),
                     ) {
                         Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(bi(cardIsEn, "🗑️ حذف الملف", "🗑️ Delete File"), fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+
+            if (record.driveFileUrl.isNotBlank()) {
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            uriHandler.openUri(record.driveFileUrl)
+                        } catch (_: Exception) {
+                            onShowMessage(bi(cardIsEn, "تعذر فتح رابط Google Drive", "Could not open Google Drive link"))
+                        }
+                    },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TealPrimary),
+                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.45f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("open_drive_file_${record.id}"),
+                ) {
+                    Icon(Icons.Filled.CloudDone, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (record.attachmentPath.isBlank()) {
+                            bi(cardIsEn, "☁️ فتح الملف المؤرشف على Google Drive", "☁️ Open Archived File on Google Drive")
+                        } else {
+                            bi(cardIsEn, "☁️ النسخة السحابية (Google Drive)", "☁️ Cloud Copy (Google Drive)")
+                        },
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
             }
 

@@ -29,6 +29,8 @@ import com.example.data.local.MedicalRecordType
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
+import com.example.data.local.PermanentLogEventType
+import com.example.data.local.PermanentMedicalLogEntity
 import com.example.data.local.SlotStatus
 import com.example.data.local.TebDao
 import com.example.ai.GeminiMedicalAnalyzer
@@ -39,8 +41,10 @@ import com.example.util.BilingualMedicalTranslator
 import com.example.util.ChronicConditionsCatalog
 import com.example.util.ImageStorageHelper
 import com.example.util.MedicalSummaryAnalyzer
+import com.example.util.TebNotificationHelper
 import com.example.util.TimeUtils
 import com.example.data.remote.FirestoreCloudSyncService
+import com.example.data.remote.GoogleDriveStorageHelper
 import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +87,9 @@ class TebRepository(
     private val cloudScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val secureRandom = SecureRandom()
     private val geminiAnalyzer by lazy { GeminiMedicalAnalyzer() }
+    @Volatile
+    private var lastSyncedRemoteMessageIds: Set<String> = emptySet()
+    private val locallyDeletedMessageIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     private val activeAccountKey = stringPreferencesKey("active_account_id")
     private val activeMemberKey = stringPreferencesKey("active_member_id")
@@ -110,6 +117,8 @@ class TebRepository(
     private val cfgFbAppIdKey = stringPreferencesKey("cfg_fb_app_id")
     private val cfgFbVapidKey = stringPreferencesKey("cfg_fb_vapid_key")
     private val cfgWorkerUrlKey = stringPreferencesKey("cfg_worker_url")
+    private val cfgDefaultDriveUrlKey = stringPreferencesKey("cfg_default_drive_url")
+    private val cfgFileRetentionDaysKey = intPreferencesKey("cfg_file_retention_days")
     private val appLanguageKey = stringPreferencesKey("app_language")
     private val seededRealDoctorsKey = booleanPreferencesKey("seeded_real_doctors_v1")
 
@@ -159,6 +168,10 @@ class TebRepository(
                 firebaseAppId = prefs[cfgFbAppIdKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.firebaseAppId,
                 firebaseVapidKey = prefs[cfgFbVapidKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.firebaseVapidKey,
                 workerUrl = prefs[cfgWorkerUrlKey]?.takeIf { it.isNotBlank() } ?: AppConfig.defaultBrand.workerUrl,
+                defaultDriveWebAppUrl = prefs[cfgDefaultDriveUrlKey] ?: AppConfig.defaultBrand.defaultDriveWebAppUrl,
+                fileRetentionDays = FirestoreCloudSyncService.normalizeRetentionDays(
+                    prefs[cfgFileRetentionDaysKey] ?: AppConfig.defaultBrand.fileRetentionDays,
+                ),
             )
         }
 
@@ -173,6 +186,7 @@ class TebRepository(
     val allAccountsFlow: Flow<List<PatientAccountEntity>> = dao.observeAllAccounts()
     val allFamilyMembersFlow: Flow<List<FamilyMemberEntity>> = dao.observeAllFamilyMembers()
     val allMedicalRecordsFlow: Flow<List<MedicalRecordEntity>> = dao.observeAllMedicalRecords()
+    val allPermanentLogsFlow: Flow<List<PermanentMedicalLogEntity>> = dao.observeAllPermanentLogs()
     val notificationsFlow: Flow<List<DelayNotificationEntity>> = dao.observeNotifications()
     val directMessagesFlow: Flow<List<DirectMessageEntity>> = dao.observeAllDirectMessages()
     val allDoctorFavoritesFlow: Flow<List<DoctorFavoriteMedEntity>> = dao.observeAllDoctorFavorites()
@@ -268,6 +282,8 @@ class TebRepository(
         firebaseAppId: String? = null,
         firebaseVapidKey: String? = null,
         workerUrl: String? = null,
+        defaultDriveWebAppUrl: String? = null,
+        fileRetentionDays: Int? = null,
     ) {
         appContext.tebDataStore.edit { prefs ->
             prefs[cfgPlatformNameKey] = platformNameAr.trim().ifEmpty { AppConfig.defaultBrand.platformNameAr }
@@ -289,8 +305,13 @@ class TebRepository(
             if (firebaseAppId != null) prefs[cfgFbAppIdKey] = firebaseAppId.trim()
             if (firebaseVapidKey != null) prefs[cfgFbVapidKey] = firebaseVapidKey.trim()
             if (workerUrl != null) prefs[cfgWorkerUrlKey] = workerUrl.trim()
+            if (defaultDriveWebAppUrl != null) prefs[cfgDefaultDriveUrlKey] = defaultDriveWebAppUrl.trim()
+            if (fileRetentionDays != null) {
+                prefs[cfgFileRetentionDaysKey] = FirestoreCloudSyncService.normalizeRetentionDays(fileRetentionDays)
+            }
         }
         val latestBrand = brandConfigFlow.first()
+        pruneExpiredHeavyAttachments()
         cloudScope.launch {
             FirestoreCloudSyncService.pushSettings(latestBrand)
         }
@@ -317,6 +338,8 @@ class TebRepository(
             prefs.remove(cfgFbAppIdKey)
             prefs.remove(cfgFbVapidKey)
             prefs.remove(cfgWorkerUrlKey)
+            prefs.remove(cfgDefaultDriveUrlKey)
+            prefs.remove(cfgFileRetentionDaysKey)
         }
         cloudScope.launch {
             FirestoreCloudSyncService.pushSettings(AppConfig.defaultBrand)
@@ -334,6 +357,7 @@ class TebRepository(
         val activeBooked = dao.observeAllSlots().first()
             .filter { it.status == SlotStatus.BOOKED && it.patientPhone.trim() == cleanPhone }
         activeBooked.forEach { slot ->
+            TebNotificationHelper.cancelAppointmentReminders(appContext, slot.id)
             val clearedSlot = slot.copy(
                 status = SlotStatus.AVAILABLE,
                 patientName = "",
@@ -559,7 +583,7 @@ class TebRepository(
         if (conflict != null) {
             return Result.failure(IllegalArgumentException("رقم الهاتف مستخدم بالفعل لحساب عميل آخر"))
         }
-        val resolvedPass = newPassword?.trim()?.takeIf { it.isNotEmpty() } ?: existing.password
+        val resolvedPass = newPassword?.let { toAsciiDigits(it).trim() }?.takeIf { it.isNotEmpty() } ?: existing.password
         dao.updateAccountDetails(accountId, cleanName, cleanPhone, resolvedPass)
         dao.updateSelfMemberDetails(accountId, cleanName, cleanPhone)
         val updated = dao.getAccountById(accountId) ?: existing.copy(
@@ -885,6 +909,7 @@ class TebRepository(
         doctorNameEn: String = "",
         clinicNameEn: String = "",
         locationLabelEn: String = "",
+        driveWebAppUrl: String = "",
     ): Result<ClinicDoctorEntity> {
         val cleanUser = username.trim()
         val cleanName = doctorName.trim()
@@ -925,6 +950,7 @@ class TebRepository(
             clinicNameEn = clinicNameEn.trim(),
             locationLabelEn = locationLabelEn.trim(),
             additionalSpecialties = additionalSpecialties.trim(),
+            driveWebAppUrl = driveWebAppUrl.trim(),
         )
         dao.insertDoctor(doctor)
         val initialSlots = buildSlotsForDoctor(doctor)
@@ -955,6 +981,7 @@ class TebRepository(
         doctorNameEn: String = "",
         clinicNameEn: String = "",
         locationLabelEn: String = "",
+        driveWebAppUrl: String = "",
     ): Result<ClinicDoctorEntity> {
         val existingDoc = dao.getDoctorById(doctorId)
             ?: return Result.failure(IllegalStateException("الدكتور غير موجود"))
@@ -994,6 +1021,7 @@ class TebRepository(
             clinicNameEn = clinicNameEn.trim().ifEmpty { existingDoc.clinicNameEn },
             locationLabelEn = locationLabelEn.trim().ifEmpty { existingDoc.locationLabelEn },
             additionalSpecialties = additionalSpecialties.trim(),
+            driveWebAppUrl = driveWebAppUrl.trim(),
         )
         dao.updateDoctor(updated)
         pushDocAsync("doctors", updated.id) { FirestoreCloudSyncService.doctorToJson(updated) }
@@ -1133,6 +1161,7 @@ class TebRepository(
             if (dao.getAllActivationCodesOnce().isEmpty()) {
                 generateActivationCodeBatch(5, "SYSTEM")
             }
+            pruneExpiredHeavyAttachments()
         }
     }
 
@@ -1193,6 +1222,20 @@ class TebRepository(
         pushDocAsync("slots", bookedSlot.id) { FirestoreCloudSyncService.slotToJson(bookedSlot) }
         val doc = dao.getDoctorById(slot.doctorId)
         val formattedTime = TimeUtils.formatMinutesAr(slot.effectiveMinutes, false)
+        TebNotificationHelper.scheduleAppointmentReminders(
+            context = appContext,
+            slotId = bookedSlot.id,
+            doctorName = doc?.doctorName.orEmpty(),
+            clinicName = doc?.clinicName.orEmpty(),
+            effectiveMinutes = bookedSlot.effectiveMinutes,
+        )
+        if (source == BookingSource.APP) {
+            TebNotificationHelper.showHighPriorityNotification(
+                context = appContext,
+                title = "تم تأكيد حجزك — ${doc?.clinicName.orEmpty()}",
+                body = "الموعد: الساعة $formattedTime باسم ${patientName.trim()}. سيتم تذكيرك تلقائياً قبل الموعد.",
+            )
+        }
         dispatchWorkerPushAsync(
             eventType = "BOOKING_CONFIRMED",
             title = "تأكيد حجز جديد — ${doc?.clinicName.orEmpty()}",
@@ -1236,6 +1279,7 @@ class TebRepository(
             bookedAtMillis = 0L,
         )
         dao.updateSlot(freedSlot)
+        TebNotificationHelper.cancelAppointmentReminders(appContext, freedSlot.id)
         pushDocAsync("slots", freedSlot.id) { FirestoreCloudSyncService.slotToJson(freedSlot) }
         val notifMsg = "إلغاء حجز من المريض: قام $oldPatientName بإلغاء موعد الساعة $oldTime وإتاحته مجدداً."
         val notifEntity = DelayNotificationEntity(
@@ -1315,6 +1359,14 @@ class TebRepository(
         )
         dao.updateSlot(newBooked)
         dao.updateSlot(freedFrom)
+        TebNotificationHelper.cancelAppointmentReminders(appContext, freedFrom.id)
+        TebNotificationHelper.scheduleAppointmentReminders(
+            context = appContext,
+            slotId = newBooked.id,
+            doctorName = doctor?.doctorName.orEmpty(),
+            clinicName = doctor?.clinicName.orEmpty(),
+            effectiveMinutes = newBooked.effectiveMinutes,
+        )
         pushDocAsync("slots", newBooked.id) { FirestoreCloudSyncService.slotToJson(newBooked) }
         pushDocAsync("slots", freedFrom.id) { FirestoreCloudSyncService.slotToJson(freedFrom) }
         val notifMsg = "تعديل موعد من المريض: نقل $patientName حجزه من الساعة $oldTime إلى الساعة $newTime."
@@ -1363,6 +1415,7 @@ class TebRepository(
             bookedAtMillis = 0L,
         )
         dao.updateSlot(freedSlot)
+        TebNotificationHelper.cancelAppointmentReminders(appContext, freedSlot.id)
         pushDocAsync("slots", freedSlot.id) { FirestoreCloudSyncService.slotToJson(freedSlot) }
         if (targetPatientId.isNotBlank()) {
             val notifMsg = "إشعار من ${doctor?.clinicName ?: "العيادة"}: تم إلغاء حجز موعدك الساعة $oldTime ($oldPatientName). يمكنك الحجز في موعد آخر متاح."
@@ -1436,6 +1489,14 @@ class TebRepository(
         )
         dao.updateSlot(newBooked)
         dao.updateSlot(freedFrom)
+        TebNotificationHelper.cancelAppointmentReminders(appContext, freedFrom.id)
+        TebNotificationHelper.scheduleAppointmentReminders(
+            context = appContext,
+            slotId = newBooked.id,
+            doctorName = doctor?.doctorName.orEmpty(),
+            clinicName = doctor?.clinicName.orEmpty(),
+            effectiveMinutes = newBooked.effectiveMinutes,
+        )
         pushDocAsync("slots", newBooked.id) { FirestoreCloudSyncService.slotToJson(newBooked) }
         pushDocAsync("slots", freedFrom.id) { FirestoreCloudSyncService.slotToJson(freedFrom) }
         if (targetPatientId.isNotBlank()) {
@@ -1525,6 +1586,8 @@ class TebRepository(
                             prefs[cfgFbAppIdKey] = mergedBrand.firebaseAppId
                             prefs[cfgFbVapidKey] = mergedBrand.firebaseVapidKey
                             prefs[cfgWorkerUrlKey] = mergedBrand.workerUrl
+                            prefs[cfgDefaultDriveUrlKey] = mergedBrand.defaultDriveWebAppUrl
+                            prefs[cfgFileRetentionDaysKey] = FirestoreCloudSyncService.normalizeRetentionDays(mergedBrand.fileRetentionDays)
                         }
                         brand = mergedBrand
                     }
@@ -1631,12 +1694,25 @@ class TebRepository(
                 // 9) مزامنة المحادثات المباشرة (teb_alhajayzah/data/messages)
                 FirestoreCloudSyncService.listCollection(brand, "messages")?.let { remoteMsgs ->
                     val localMsgs = dao.observeAllDirectMessages().first()
-                    if (remoteMsgs.isEmpty() && localMsgs.isNotEmpty()) {
+                    if (remoteMsgs.isEmpty() && localMsgs.isNotEmpty() && lastSyncedRemoteMessageIds.isEmpty()) {
                         localMsgs.forEach { m ->
-                            FirestoreCloudSyncService.upsertDocument(brand, "messages", m.id, FirestoreCloudSyncService.messageToJson(m))
+                            if (m.id !in locallyDeletedMessageIds) {
+                                FirestoreCloudSyncService.upsertDocument(brand, "messages", m.id, FirestoreCloudSyncService.messageToJson(m))
+                            }
                         }
                     } else {
-                        remoteMsgs.mapNotNull { FirestoreCloudSyncService.messageFromJson(it) }.forEach { dao.insertDirectMessage(it) }
+                        val parsedRemote = remoteMsgs.mapNotNull { FirestoreCloudSyncService.messageFromJson(it) }
+                        val remoteIds = parsedRemote.map { it.id }.toSet()
+                        val deletedRemotely = lastSyncedRemoteMessageIds - remoteIds
+                        deletedRemotely.forEach { goneId ->
+                            dao.deleteDirectMessageById(goneId)
+                        }
+                        parsedRemote.forEach { rm ->
+                            if (rm.id !in locallyDeletedMessageIds) {
+                                dao.insertDirectMessage(rm)
+                            }
+                        }
+                        lastSyncedRemoteMessageIds = remoteIds
                     }
                 }
 
@@ -1660,6 +1736,19 @@ class TebRepository(
                     } else {
                         val parsed = remoteCodes.mapNotNull { FirestoreCloudSyncService.activationCodeFromJson(it) }
                         if (parsed.isNotEmpty()) dao.insertActivationCodes(parsed)
+                    }
+                }
+
+                // 11) مزامنة السجل الطبي التاريخي الدائم مدى الحياة (teb_alhajayzah/data/permanent_logs)
+                FirestoreCloudSyncService.listCollection(brand, "permanent_logs")?.let { remoteLogs ->
+                    val localLogs = dao.observeAllPermanentLogs().first()
+                    if (remoteLogs.isEmpty() && localLogs.isNotEmpty()) {
+                        localLogs.forEach { l ->
+                            FirestoreCloudSyncService.upsertDocument(brand, "permanent_logs", l.id, FirestoreCloudSyncService.permanentLogToJson(l))
+                        }
+                    } else {
+                        val parsed = remoteLogs.mapNotNull { FirestoreCloudSyncService.permanentLogFromJson(it) }
+                        if (parsed.isNotEmpty()) dao.insertPermanentLogs(parsed)
                     }
                 }
                 true
@@ -1735,7 +1824,10 @@ class TebRepository(
             pushDocAsync("doctors", d.id) { FirestoreCloudSyncService.doctorToJson(d) }
         }
         val newIds = newSlots.map { it.id }.toSet()
-        oldSlots.filter { it.id !in newIds }.forEach { deleteDocAsync("slots", it.id) }
+        oldSlots.filter { it.id !in newIds }.forEach {
+            TebNotificationHelper.cancelAppointmentReminders(appContext, it.id)
+            deleteDocAsync("slots", it.id)
+        }
         newSlots.forEach { slot -> pushDocAsync("slots", slot.id) { FirestoreCloudSyncService.slotToJson(slot) } }
         return Result.success(newSlots.size)
     }
@@ -1746,12 +1838,13 @@ class TebRepository(
         dao.addDoctorDelay(doctorId, additionalMinutes)
         dao.shiftUpcomingSlotsDelay(doctorId, additionalMinutes)
         val newTotalDelay = doctor.currentDelayMinutes + additionalMinutes
+        val notifMsg = "تنبيه عاجل: تم تأخير مواعيد ${doctor.doctorName} (${doctor.clinicName}) لمدة $additionalMinutes دقيقة (إجمالي التأخير: $newTotalDelay دقيقة). تم تحديث موعدك تلقائياً."
         val notifEntity = DelayNotificationEntity(
             doctorId = doctorId,
             doctorName = doctor.doctorName,
             clinicName = doctor.clinicName,
             delayMinutes = additionalMinutes,
-            message = "تنبيه عاجل: تم تأخير مواعيد ${doctor.doctorName} (${doctor.clinicName}) لمدة $additionalMinutes دقيقة (إجمالي التأخير: $newTotalDelay دقيقة). تم تحديث موعدك تلقائياً.",
+            message = notifMsg,
             targetAudience = NotificationAudience.ALL,
             targetId = "",
             senderLabel = doctor.clinicName,
@@ -1763,10 +1856,32 @@ class TebRepository(
         }
         dao.observeSlotsForDoctor(doctorId).first().forEach { s ->
             pushDocAsync("slots", s.id) { FirestoreCloudSyncService.slotToJson(s) }
+            if (s.status == SlotStatus.BOOKED) {
+                TebNotificationHelper.scheduleAppointmentReminders(
+                    context = appContext,
+                    slotId = s.id,
+                    doctorName = doctor.doctorName,
+                    clinicName = doctor.clinicName,
+                    effectiveMinutes = s.effectiveMinutes,
+                )
+            }
         }
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "تنبيه تأخير — ${doctor.clinicName}",
+            body = notifMsg,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "CLINIC_DELAY",
+            title = "تنبيه تأخير — ${doctor.clinicName}",
+            body = notifMsg,
+            targetAudience = NotificationAudience.ALL,
+            targetId = doctorId,
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
         return Result.success(Unit)
     }
 
@@ -1827,6 +1942,18 @@ class TebRepository(
         )
         dao.insertMedicalRecord(record)
         pushDocAsync("records", record.id) { FirestoreCloudSyncService.recordToJson(record) }
+        createAndSyncPermanentLog(
+            record = record,
+            eventType = PermanentLogEventType.CLINIC_VISIT,
+            providerLabel = "${doctor.doctorName} — ${doctor.clinicName}",
+        )
+        if (attachmentPath.isNotBlank()) {
+            uploadAttachmentToDriveAsync(
+                record = record,
+                clinicDriveUrl = doctor.driveWebAppUrl,
+                clinicName = doctor.clinicName,
+            )
+        }
         return Result.success(record)
     }
 
@@ -1860,6 +1987,18 @@ class TebRepository(
         )
         dao.insertMedicalRecord(record)
         pushDocAsync("records", record.id) { FirestoreCloudSyncService.recordToJson(record) }
+        createAndSyncPermanentLog(
+            record = record,
+            eventType = PermanentLogEventType.PATIENT_UPLOAD,
+            providerLabel = "رفع المريض / الأسرة",
+        )
+        if (attachmentPath.isNotBlank()) {
+            uploadAttachmentToDriveAsync(
+                record = record,
+                clinicDriveUrl = "",
+                clinicName = "ملف المريض الشخصي",
+            )
+        }
         return record
     }
 
@@ -2018,6 +2157,18 @@ class TebRepository(
         )
         dao.insertMedicalRecord(record)
         pushDocAsync("records", record.id) { FirestoreCloudSyncService.recordToJson(record) }
+        createAndSyncPermanentLog(
+            record = record,
+            eventType = PermanentLogEventType.EXTERNAL_VISIT,
+            providerLabel = record.doctorName,
+        )
+        if (attachmentPath.isNotBlank()) {
+            uploadAttachmentToDriveAsync(
+                record = record,
+                clinicDriveUrl = "",
+                clinicName = "زيارة طبية خارجية",
+            )
+        }
         return Result.success(record)
     }
 
@@ -2058,6 +2209,30 @@ class TebRepository(
         )
         dao.insertMedicalRecord(record)
         pushDocAsync("records", record.id) { FirestoreCloudSyncService.recordToJson(record) }
+        createAndSyncPermanentLog(
+            record = record,
+            eventType = PermanentLogEventType.LAB_REPORT,
+            providerLabel = lab.labName,
+        )
+        uploadAttachmentToDriveAsync(
+            record = record,
+            clinicDriveUrl = "",
+            clinicName = lab.labName,
+        )
+        val labMsg = "نتيجة تحليل جديدة من ${lab.labName} باسم ${member.fullName}: $cleanTitle"
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "نتيجة تحليل طبية جديدة",
+            body = labMsg,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "LAB_RESULT_UPLOADED",
+            title = "نتيجة تحليل جديدة — ${lab.labName}",
+            body = labMsg,
+            targetAudience = NotificationAudience.PATIENT,
+            targetId = member.accountId.ifBlank { member.id },
+            namespacePath = CloudNamespacePaths.RECORDS,
+        )
         return Result.success(record)
     }
 
@@ -2084,7 +2259,8 @@ class TebRepository(
 
     suspend fun loginPatient(identifier: String, password: String): Result<PatientAccountEntity> {
         val cleanId = toAsciiDigits(identifier).trim()
-        val cleanPass = password.trim()
+        val rawPass = password.trim()
+        val normalizedPass = toAsciiDigits(rawPass)
         if (dao.isPhoneBlocked(cleanId) > 0) {
             return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من استخدام المنصة"))
         }
@@ -2095,8 +2271,9 @@ class TebRepository(
         if (dao.isPhoneBlocked(account.phone) > 0) {
             return Result.failure(IllegalStateException("عذراً، هذا الرقم محظور من استخدام المنصة"))
         }
-        if (account.password != cleanPass && cleanPass.isNotEmpty()) {
-            return Result.failure(IllegalArgumentException("كلمة المرور غير صحيحة"))
+        val passMatches = account.password == rawPass || account.password == normalizedPass
+        if (!passMatches && rawPass.isNotEmpty()) {
+            return Result.failure(IllegalArgumentException("الرقم السري (PIN) غير صحيح"))
         }
         val members = dao.observeFamilyMembers(account.id).first()
         appContext.tebDataStore.edit { prefs ->
@@ -2130,12 +2307,13 @@ class TebRepository(
         }
         val accountId = "acc_${UUID.randomUUID()}"
         val generatedOtp = generateUniqueUserOtpCode()
+        val cleanPin = toAsciiDigits(password).trim().ifEmpty { "1234" }
         val account = PatientAccountEntity(
             id = accountId,
             fullName = fullName.trim(),
             phone = cleanPhone,
             nationalId = toAsciiDigits(nationalId).trim(),
-            password = password.trim().ifEmpty { "1234" },
+            password = cleanPin,
             isPhoneVerified = false,
             verifiedBy = "",
             verifiedAtMillis = 0L,
@@ -2464,7 +2642,47 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${saved.id}_${saved.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(saved)
         }
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "📢 إشعار عام — طب الحجايزة",
+            body = saved.message,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "GLOBAL_BROADCAST",
+            title = "📢 إشعار عام — طب الحجايزة",
+            body = saved.message,
+            targetAudience = NotificationAudience.ALL,
+            targetId = "",
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
         return Result.success(saved)
+    }
+
+    suspend fun deleteDirectMessageByAdmin(messageId: String): Result<Unit> {
+        val existing = dao.getDirectMessageById(messageId)
+            ?: return Result.failure(IllegalStateException("الرسالة غير موجودة أو تم حذفها بالفعل"))
+        locallyDeletedMessageIds.add(existing.id)
+        dao.deleteDirectMessageById(existing.id)
+        deleteDocAsync("messages", existing.id)
+        return Result.success(Unit)
+    }
+
+    suspend fun deleteChatThreadByAdmin(
+        threadType: String,
+        patientAccountId: String = "",
+        doctorId: String = "",
+    ): Result<Int> {
+        val msgs = dao.getDirectThreadMessagesOnce(threadType, patientAccountId, doctorId)
+        if (msgs.isEmpty()) return Result.success(0)
+        msgs.forEach { locallyDeletedMessageIds.add(it.id) }
+        dao.deleteDirectThread(threadType, patientAccountId, doctorId)
+        msgs.forEach { deleteDocAsync("messages", it.id) }
+        return Result.success(msgs.size)
+    }
+
+    fun isValidNumericPin(rawPin: String): Boolean {
+        val digits = toAsciiDigits(rawPin).trim()
+        return digits.length >= 4 && digits.all { it in '0'..'9' }
     }
 
     suspend fun markDirectThreadRead(
@@ -2569,11 +2787,135 @@ class TebRepository(
         }
     }
 
+    private suspend fun createAndSyncPermanentLog(
+        record: MedicalRecordEntity,
+        eventType: String,
+        providerLabel: String,
+    ) {
+        val member = record.familyMemberId.takeIf { it.isNotBlank() }?.let { dao.getFamilyMemberById(it) }
+        val (narAr, narEn) = MedicalSummaryAnalyzer.buildPermanentLogNarrative(
+            record = record,
+            member = member,
+            providerLabel = providerLabel,
+        )
+        val ts = record.createdAtMillis.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val initialLog = PermanentMedicalLogEntity(
+            id = "plog_${record.id}",
+            familyMemberId = record.familyMemberId,
+            patientName = record.patientName,
+            patientPhone = record.patientPhone,
+            sourceRecordId = record.id,
+            eventType = eventType,
+            eventTimestampMillis = ts,
+            eventDateTimeLabel = TimeUtils.formatActualDateTimeLabel(ts, isEn = false),
+            providerName = providerLabel.ifBlank { record.doctorName },
+            specialtyOrCategory = record.specialty,
+            title = record.diagnosis.ifBlank { record.attachmentName.ifBlank { "حدث طبي" } },
+            narrativeAr = narAr,
+            narrativeEn = narEn,
+            isAiGenerated = false,
+        )
+        dao.insertPermanentLog(initialLog)
+        pushDocAsync("permanent_logs", initialLog.id) { FirestoreCloudSyncService.permanentLogToJson(initialLog) }
+
+        val firebaseInitialized = runCatching { FirebaseApp.getApps(appContext).isNotEmpty() }.getOrDefault(false)
+        if (firebaseInitialized && FirestoreCloudSyncService.isCloudNetworkAllowed()) {
+            cloudScope.launch {
+                val aiRes = geminiAnalyzer.generatePermanentLogWithGemini(
+                    record = record,
+                    member = member,
+                    providerLabel = providerLabel,
+                )
+                aiRes.onSuccess { generated ->
+                    val upgraded = initialLog.copy(
+                        narrativeAr = generated.narrativeAr,
+                        narrativeEn = generated.narrativeEn,
+                        isAiGenerated = true,
+                    )
+                    dao.insertPermanentLog(upgraded)
+                    val brand = runCatching { brandConfigFlow.first() }.getOrNull() ?: AppConfig.defaultBrand
+                    FirestoreCloudSyncService.upsertDocument(
+                        brand = brand,
+                        subCollection = "permanent_logs",
+                        docId = upgraded.id,
+                        payloadJson = FirestoreCloudSyncService.permanentLogToJson(upgraded),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun uploadAttachmentToDriveAsync(
+        record: MedicalRecordEntity,
+        clinicDriveUrl: String,
+        clinicName: String,
+    ) {
+        if (record.attachmentPath.isBlank() || !FirestoreCloudSyncService.isCloudNetworkAllowed()) return
+        cloudScope.launch {
+            runCatching {
+                val brand = brandConfigFlow.first()
+                val targetUrl = GoogleDriveStorageHelper.resolveWebAppUrl(
+                    clinicDriveUrl = clinicDriveUrl,
+                    platformFallbackDriveUrl = brand.defaultDriveWebAppUrl,
+                )
+                if (targetUrl.isBlank()) return@launch
+                GoogleDriveStorageHelper.uploadAttachmentToDrive(
+                    webAppUrl = targetUrl,
+                    localFilePath = record.attachmentPath,
+                    fileName = record.attachmentName,
+                    mimeType = record.attachmentMimeType,
+                    clinicId = record.doctorId,
+                    clinicName = clinicName,
+                    patientName = record.patientName,
+                    familyMemberId = record.familyMemberId,
+                    recordId = record.id,
+                    recordType = record.recordType,
+                ).onSuccess { driveUrl ->
+                    dao.updateMedicalRecordDriveUrl(record.id, driveUrl)
+                    dao.getMedicalRecordById(record.id)?.let { updated ->
+                        FirestoreCloudSyncService.upsertDocument(
+                            brand = brand,
+                            subCollection = "records",
+                            docId = updated.id,
+                            payloadJson = FirestoreCloudSyncService.recordToJson(updated),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * تنظيف المرفقات الثقيلة (PDF / صور) التي تجاوزت مدة الاحتفاظ المعتمدة (90 / 180 / 360 يوماً)
+     * مع الحفاظ التام على روابط Drive (إن وجدت) وعلى السجل الطبي التاريخي الدائم مدى الحياة (permanent_medical_logs).
+     */
+    suspend fun pruneExpiredHeavyAttachments(nowMillis: Long = System.currentTimeMillis()): Int {
+        val brand = brandConfigFlow.first()
+        val retentionDays = FirestoreCloudSyncService.normalizeRetentionDays(brand.fileRetentionDays)
+        val cutoffMillis = nowMillis - (retentionDays.toLong() * ONE_DAY_MILLIS)
+        val expiredRecords = dao.getMedicalRecordsWithAttachmentsOlderThan(cutoffMillis)
+        if (expiredRecords.isEmpty()) return 0
+        var pruned = 0
+        expiredRecords.forEach { rec ->
+            val oldPath = rec.attachmentPath
+            dao.clearMedicalRecordAttachment(rec.id)
+            if (oldPath.isNotBlank() && dao.countRecordsUsingAttachmentPath(oldPath) == 0) {
+                ImageStorageHelper.deleteInternalFile(appContext, oldPath)
+            }
+            dao.getMedicalRecordById(rec.id)?.let { updatedRec ->
+                pushDocAsync("records", updatedRec.id) { FirestoreCloudSyncService.recordToJson(updatedRec) }
+            }
+            pruned++
+        }
+        return pruned
+    }
+
     companion object {
         const val MAX_ADMIN_PIN_ATTEMPTS = 3
         const val ADMIN_LOCKOUT_MILLIS = 15 * 60_000L
         const val MASTER_ADMIN_OTP = "999000"
         const val OTP_TTL_MILLIS = 24L * 60L * 60L * 1000L
         const val PATIENT_MODIFY_CUTOFF_MINUTES = 120
+        const val ONE_DAY_MILLIS = 24L * 60L * 60L * 1000L
     }
 }

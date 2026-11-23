@@ -4,8 +4,10 @@ import android.util.Base64
 import android.util.Log
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
+import com.example.data.local.MedicalRecordType
 import com.example.util.ChronicConditionsCatalog
 import com.example.util.ImageStorageHelper
+import com.example.util.TimeUtils
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
@@ -24,6 +26,11 @@ import java.io.File
 data class GeminiMedicalSummaryResult(
     val summaryAr: String,
     val summaryEn: String,
+)
+
+data class GeminiPermanentLogResult(
+    val narrativeAr: String,
+    val narrativeEn: String,
 )
 
 class GeminiMedicalAnalyzer {
@@ -47,6 +54,26 @@ class GeminiMedicalAnalyzer {
                         ),
                         "followUpPointsEn" to Schema.string(
                             "Part 2 in English (Points Requiring Physician Follow-Up): Numbered list ONLY formatted as 1. ...\\n2. ...\\n3. ... highlighting abnormal values, pus cells, RBCs, crystals, or chronic-condition/allergy alerts WITHOUT definitive diagnosis or prescribing medications.",
+                        ),
+                    ),
+                )
+            },
+        )
+    }
+
+    private val permanentLogModel by lazy {
+        Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                temperature = 0.2f
+                responseMimeType = "application/json"
+                responseSchema = Schema.obj(
+                    mapOf(
+                        "narrativeAr" to Schema.string(
+                            "Permanent chronological medical log entry in clear, simple, reassuring Arabic ONLY. Zero English lab terms or abbreviations (no Absent, Nil, Ref, Pus cells, RBCs, Oxalate, Hemoglobin, Hb, HbA1c, mg/dL). Ignore dates/reporting IDs/barcodes inside uploaded lab files as clinical metrics. Include date/time, provider/doctor or lab name, and for visits include diagnosis, prescribed medications with dosages, and clear reason/indication for prescribing (سبب الوصف ودواعي الاستخدام).",
+                        ),
+                        "narrativeEn" to Schema.string(
+                            "Permanent chronological medical log entry in clear clinical English with date/time, provider/doctor or lab name, key findings or diagnosis, prescribed medications with dosages, and clear indication/reason for prescribing.",
                         ),
                     ),
                 )
@@ -125,6 +152,93 @@ class GeminiMedicalAnalyzer {
         }
     }
 
+    suspend fun generatePermanentLogWithGemini(
+        record: MedicalRecordEntity,
+        member: FamilyMemberEntity?,
+        providerLabel: String,
+    ): Result<GeminiPermanentLogResult> = withContext(Dispatchers.IO) {
+        try {
+            val ts = record.createdAtMillis.takeIf { it > 0L } ?: System.currentTimeMillis()
+            val dtAr = TimeUtils.formatActualDateTimeLabel(ts, isEn = false)
+            val isLabOrUpload = record.recordType == MedicalRecordType.LAB_RESULT ||
+                record.recordType == MedicalRecordType.PATIENT_UPLOAD
+            val chronicLabels = member?.let {
+                ChronicConditionsCatalog.formatLabels(it.chronicConditions, it.otherChronicNotes, isEn = false)
+            }.orEmpty()
+            val promptText = buildString {
+                appendLine("أنت المساعد الطبي الذكي لمنصة \"طب الحجايزة\" ومهمتك تحويل الحدث الطبي التالي إلى تدوين تاريخي كتابي دائم ومقروء في ملف المريض مدى الحياة.")
+                appendLine("التاريخ والوقت الفعلي للحدث: $dtAr")
+                appendLine("نوع الحدث: ${record.recordType}")
+                appendLine("المريض: ${member?.fullName?.ifBlank { record.patientName } ?: record.patientName}")
+                if (chronicLabels.isNotBlank()) appendLine("الأمراض المزمنة: $chronicLabels")
+                if (!member?.drugAllergies.isNullOrBlank()) appendLine("حساسية الأدوية: ${member?.drugAllergies}")
+                appendLine("الجهة / الطبيب / المعمل: ${providerLabel.ifBlank { record.doctorName }} (${record.specialty})")
+                if (record.diagnosis.isNotBlank()) appendLine("العنوان / التشخيص: ${record.diagnosis}")
+                if (record.medications.isNotBlank()) appendLine("الأدوية والجرعات: ${record.medications.replace("\n", " | ")}")
+                if (record.notes.isNotBlank()) appendLine("ملاحظات التقرير: ${com.example.util.MedicalSummaryAnalyzer.stripMetadataLines(record.notes)}")
+                appendLine()
+                if (isLabOrUpload) {
+                    appendLine("التعليمات:")
+                    appendLine("- حوّل نتائج التحليل أو الأشعة المرفقة إلى فقرة عربية مبسطة ومطمئنة جداً للمريض (بدون أي كلمات إنجليزية أو اختصارات مثل Absent / Nil / Pus cells / RBCs / Oxalate / Hb / mg/dL).")
+                    appendLine("- تجاهل تماماً أي تواريخ طباعة أو أرقام باركود أو Request/Reporting/ID كقيم طبية.")
+                    appendLine("- أرفق في النهاية التنبيه الطبي القياسي: هذا التلخيص استرشادي ولا يغني عن الطبيب.")
+                } else {
+                    appendLine("التعليمات:")
+                    appendLine("- وثّق الكشف أو الزيارة بالتاريخ والوقت الفعلي، اسم الطبيب والتخصص، التشخيص، الأدوية الموصوفة وجرعاتها، مع ذكر سبب الوصف ودواعي الاستخدام بوضوح للمريض والطبيب مستقبلاً.")
+                }
+            }
+
+            val inlineFiles = mutableListOf<Triple<ByteArray, String, String>>()
+            val path = record.attachmentPath
+            if (path.isNotBlank()) {
+                val file = File(path)
+                if (file.exists() && file.isFile && file.length() in 1L..MAX_INLINE_FILE_BYTES) {
+                    val mime = when {
+                        ImageStorageHelper.isPdfAttachment(path, record.attachmentMimeType) -> "application/pdf"
+                        record.attachmentMimeType.startsWith("image/", ignoreCase = true) -> record.attachmentMimeType
+                        path.lowercase().endsWith(".png") -> "image/png"
+                        else -> "image/jpeg"
+                    }
+                    runCatching { file.readBytes() }.getOrNull()?.let { bytes ->
+                        inlineFiles += Triple(bytes, mime, record.attachmentName.ifBlank { file.name })
+                    }
+                }
+            }
+
+            val inputContent = content {
+                text(promptText)
+                inlineFiles.forEach { (bytes, mime, name) ->
+                    text("Attached document ($name) — ignore reporting dates/barcodes/IDs and read only actual clinical findings:")
+                    inlineData(bytes, mime)
+                }
+            }
+
+            val response = withTimeout(50_000L) { permanentLogModel.generateContent(inputContent) }
+            val rawJson = response.text?.trim().orEmpty()
+            if (rawJson.isBlank()) {
+                return@withContext Result.failure(IllegalStateException("Empty Gemini permanent log response"))
+            }
+            val cleaned = rawJson.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            val obj = JSONObject(cleaned)
+            val narAr = sanitizeArabicPlainLanguage(obj.optString("narrativeAr").trim())
+            val narEn = obj.optString("narrativeEn").trim()
+            if (narAr.isBlank() && narEn.isBlank()) {
+                return@withContext Result.failure(IllegalStateException("Blank permanent log narrative"))
+            }
+            Result.success(
+                GeminiPermanentLogResult(
+                    narrativeAr = narAr.ifBlank { narEn },
+                    narrativeEn = narEn.ifBlank { narAr },
+                ),
+            )
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (ex: Exception) {
+            Log.w(TAG, "Gemini permanent log generation failed", ex)
+            Result.failure(ex)
+        }
+    }
+
     /**
      * نقطة تكامل مباشرة لواجهة الويب داخل تطبيق الأندرويد (AndroidAiBridge):
      * تستقبل بيانات المريض الحيوية، الأمراض المزمنة، النصوص المستخرجة من PDF، والمرفقات (PDF / صور)
@@ -134,6 +248,109 @@ class GeminiMedicalAnalyzer {
         withContext(Dispatchers.IO) {
             try {
                 val root = JSONObject(payloadJson)
+                if (root.optString("mode").equals("PERMANENT_LOG", ignoreCase = true)) {
+                    val recObj = root.optJSONObject("record") ?: JSONObject()
+                    val memberObj = root.optJSONObject("member") ?: JSONObject()
+                    val tempMember = FamilyMemberEntity(
+                        id = memberObj.optString("id", ""),
+                        accountId = memberObj.optString("accountId", ""),
+                        fullName = memberObj.optString("fullName", recObj.optString("patientName", "")),
+                        relation = memberObj.optString("relation", ""),
+                        age = memberObj.optInt("age", 0),
+                        phone = memberObj.optString("phone", ""),
+                        chronicConditions = when (val c = memberObj.opt("chronicConditions")) {
+                            is JSONArray -> ChronicConditionsCatalog.encodeKeys((0 until c.length()).mapNotNull { c.optString(it).takeIf(String::isNotBlank) })
+                            is String -> c
+                            else -> ""
+                        },
+                        drugAllergies = memberObj.optString("drugAllergies", ""),
+                        otherChronicNotes = memberObj.optString("otherChronicNotes", ""),
+                    )
+                    val extracted = com.example.util.MedicalSummaryAnalyzer.stripMetadataLines(
+                        recObj.optString("extractedText", "").trim().take(4000),
+                    )
+                    val combinedNotes = listOf(recObj.optString("notes", ""), extracted)
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n")
+                    val tempRecord = MedicalRecordEntity(
+                        id = recObj.optString("id", "web_rec"),
+                        familyMemberId = recObj.optString("familyMemberId", ""),
+                        patientName = recObj.optString("patientName", tempMember.fullName),
+                        patientPhone = recObj.optString("patientPhone", tempMember.phone),
+                        doctorId = recObj.optString("doctorId", ""),
+                        doctorName = recObj.optString("doctorName", ""),
+                        specialty = recObj.optString("specialty", ""),
+                        visitDateLabel = recObj.optString("visitDateLabel", ""),
+                        diagnosis = recObj.optString("diagnosis", ""),
+                        medications = recObj.optString("medications", ""),
+                        notes = combinedNotes,
+                        attachmentName = recObj.optString("attachmentName", ""),
+                        attachmentMimeType = recObj.optString("attachmentMimeType", ""),
+                        recordType = recObj.optString("recordType", MedicalRecordType.LAB_RESULT),
+                        createdAtMillis = recObj.optLong("createdAtMillis", System.currentTimeMillis()),
+                    )
+                    val dataUrl = recObj.optString("attachmentDataUrl", "").trim()
+                    val inlineFiles = mutableListOf<Triple<ByteArray, String, String>>()
+                    if (dataUrl.isNotBlank()) {
+                        val commaIdx = dataUrl.indexOf(',')
+                        val pureB64 = if (commaIdx >= 0) dataUrl.substring(commaIdx + 1) else dataUrl
+                        val mimeFromPrefix = if (commaIdx > 5) dataUrl.substring(5, commaIdx).substringBefore(';').lowercase() else ""
+                        val rawMime = tempRecord.attachmentMimeType.lowercase()
+                        val fn = tempRecord.attachmentName.ifBlank { "medical_report" }
+                        val resolvedMime = when {
+                            mimeFromPrefix == "application/pdf" || rawMime == "application/pdf" || fn.lowercase().endsWith(".pdf") -> "application/pdf"
+                            mimeFromPrefix.startsWith("image/") -> mimeFromPrefix
+                            rawMime.startsWith("image/") -> rawMime
+                            fn.lowercase().endsWith(".png") -> "image/png"
+                            else -> "image/jpeg"
+                        }
+                        val bytes = runCatching { Base64.decode(pureB64, Base64.DEFAULT) }.getOrNull()
+                        if (bytes != null && bytes.isNotEmpty() && bytes.size <= MAX_INLINE_FILE_BYTES) {
+                            inlineFiles += Triple(bytes, resolvedMime, fn)
+                        }
+                    }
+                    val providerLabel = recObj.optString("providerName", tempRecord.doctorName)
+                    val dtAr = TimeUtils.formatActualDateTimeLabel(tempRecord.createdAtMillis, isEn = false)
+                    val isLabOrUpload = tempRecord.recordType == MedicalRecordType.LAB_RESULT ||
+                        tempRecord.recordType == MedicalRecordType.PATIENT_UPLOAD
+                    val promptText = buildString {
+                        appendLine("أنت المساعد الطبي الذكي لمنصة \"طب الحجايزة\". حوّل الحدث الطبي التالي إلى تدوين تاريخي دائم ومقروء في السجل الطبي مدى الحياة.")
+                        appendLine("التاريخ والوقت الفعلي: $dtAr")
+                        appendLine("النوع: ${tempRecord.recordType}")
+                        appendLine("المريض: ${tempMember.fullName}")
+                        appendLine("الجهة / الطبيب / المعمل: $providerLabel (${tempRecord.specialty})")
+                        if (tempRecord.diagnosis.isNotBlank()) appendLine("التشخيص / العنوان: ${tempRecord.diagnosis}")
+                        if (tempRecord.medications.isNotBlank()) appendLine("الأدوية والجرعات: ${tempRecord.medications.replace("\n", " | ")}")
+                        if (tempRecord.notes.isNotBlank()) appendLine("النص / الملاحظات:\n${tempRecord.notes}")
+                        if (isLabOrUpload) {
+                            appendLine("اكتب فقرة عربية مبسطة ومطمئنة خالية تماماً من المصطلحات الإنجليزية أو التواريخ أو أرقام الباركود، مع التنبيه الطبي القياسي.")
+                        } else {
+                            appendLine("اذكر التاريخ والوقت الفعلي، اسم الطبيب والتخصص، التشخيص، الأدوية وجرعاتها، وسبب الوصف ودواعي الاستخدام بوضوح.")
+                        }
+                    }
+                    val inputContent = content {
+                        text(promptText)
+                        inlineFiles.forEach { (bytes, mime, name) ->
+                            text("Attached document ($name):")
+                            inlineData(bytes, mime)
+                        }
+                    }
+                    val response = withTimeout(50_000L) { permanentLogModel.generateContent(inputContent) }
+                    val rawJson = response.text?.trim().orEmpty()
+                    val cleaned = rawJson.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                    val obj = JSONObject(cleaned)
+                    val narAr = sanitizeArabicPlainLanguage(obj.optString("narrativeAr").trim())
+                    val narEn = obj.optString("narrativeEn").trim()
+                    if (narAr.isBlank() && narEn.isBlank()) {
+                        return@withContext Result.failure(IllegalStateException("Empty Gemini permanent log response"))
+                    }
+                    return@withContext Result.success(
+                        GeminiMedicalSummaryResult(
+                            summaryAr = narAr.ifBlank { narEn },
+                            summaryEn = narEn.ifBlank { narAr },
+                        ),
+                    )
+                }
                 val memberObj = root.optJSONObject("member") ?: JSONObject()
                 val fullName = memberObj.optString("fullName").ifBlank { "المريض" }
                 val age = memberObj.optInt("age", 0)

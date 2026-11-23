@@ -1,11 +1,13 @@
 package com.example.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -20,6 +22,7 @@ import android.widget.Toast
 import com.example.BuildConfig
 import com.example.ai.GeminiMedicalAnalyzer
 import com.example.util.ImageStorageHelper
+import com.example.util.TebNotificationHelper
 import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -168,6 +171,20 @@ fun LiveWebPortalScreen(
     ) { uris ->
         pendingFileCallback?.onReceiveValue(uris.toTypedArray())
         pendingFileCallback = null
+    }
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val hasPerm = granted || TebNotificationHelper.hasNotificationPermission(context)
+        if (hasPerm) {
+            TebNotificationHelper.ensureNotificationChannel(context)
+        } else {
+            TebNotificationHelper.openAppNotificationSettings(context)
+        }
+        webViewRef?.evaluateJavascript(
+            "if (window.__onAndroidNotifPermissionUpdated) window.__onAndroidNotifPermissionUpdated($hasPerm);",
+            null,
+        )
     }
 
     val noCacheHeaders = remember {
@@ -405,6 +422,79 @@ fun LiveWebPortalScreen(
                                 }
                             },
                             "AndroidAiBridge",
+                        )
+                        addJavascriptInterface(
+                            object {
+                                @JavascriptInterface
+                                fun hasPermission(): Boolean {
+                                    return TebNotificationHelper.hasNotificationPermission(ctx)
+                                }
+
+                                @JavascriptInterface
+                                fun requestPermission() {
+                                    bridgeScope.launch(Dispatchers.Main) {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                            TebNotificationHelper.isRuntimeNotificationPermissionRequired(ctx)
+                                        ) {
+                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            TebNotificationHelper.openAppNotificationSettings(ctx)
+                                            val grantedNow = TebNotificationHelper.hasNotificationPermission(ctx)
+                                            webViewRef?.evaluateJavascript(
+                                                "if (window.__onAndroidNotifPermissionUpdated) window.__onAndroidNotifPermissionUpdated($grantedNow);",
+                                                null,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                @JavascriptInterface
+                                fun showNotification(title: String, body: String): Boolean {
+                                    return TebNotificationHelper.showHighPriorityNotification(
+                                        context = ctx,
+                                        title = title,
+                                        body = body,
+                                    )
+                                }
+
+                                @JavascriptInterface
+                                fun scheduleAppointmentReminders(
+                                    slotId: String,
+                                    doctorName: String,
+                                    clinicName: String,
+                                    effectiveMinutes: Int,
+                                ) {
+                                    TebNotificationHelper.scheduleAppointmentReminders(
+                                        context = ctx,
+                                        slotId = slotId,
+                                        doctorName = doctorName,
+                                        clinicName = clinicName,
+                                        effectiveMinutes = effectiveMinutes,
+                                    )
+                                }
+
+                                @JavascriptInterface
+                                fun scheduleReminderAt(
+                                    slotId: String,
+                                    title: String,
+                                    body: String,
+                                    triggerAtMillis: Long,
+                                ) {
+                                    TebNotificationHelper.scheduleCustomReminder(
+                                        context = ctx,
+                                        slotId = slotId,
+                                        title = title,
+                                        body = body,
+                                        triggerAtMillis = triggerAtMillis,
+                                    )
+                                }
+
+                                @JavascriptInterface
+                                fun cancelReminder(slotId: String) {
+                                    TebNotificationHelper.cancelAppointmentReminders(ctx, slotId)
+                                }
+                            },
+                            "AndroidNotifBridge",
                         )
                         setDownloadListener { url, _, contentDisposition, mimeType, _ ->
                             if (!url.isNullOrBlank()) {

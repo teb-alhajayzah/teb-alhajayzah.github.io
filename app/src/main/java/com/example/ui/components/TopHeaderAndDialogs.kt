@@ -463,6 +463,19 @@ private fun RoleModePillButton(
     }
 }
 
+private fun filterDigitsOnly(raw: String): String {
+    if (raw.isBlank()) return ""
+    return buildString(raw.length) {
+        for (ch in raw) {
+            when (ch) {
+                in '0'..'9' -> append(ch)
+                in '\u0660'..'\u0669' -> append(('0'.code + (ch.code - 0x0660)).toChar())
+                in '\u06F0'..'\u06F9' -> append(('0'.code + (ch.code - 0x06F0)).toChar())
+            }
+        }
+    }
+}
+
 @Composable
 fun AccountAndFamilyDialog(
     activeAccount: PatientAccountEntity?,
@@ -481,6 +494,7 @@ fun AccountAndFamilyDialog(
     onRegenerateOtp: () -> Unit = {},
     onOpenSupportChat: () -> Unit = {},
     onTriggerHiddenAdmin: () -> Unit,
+    onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -996,8 +1010,9 @@ fun AccountAndFamilyDialog(
                             )
                             PasswordOutlinedTextField(
                                 value = loginPassword,
-                                onValueChange = { loginPassword = it },
-                                label = bi(isEn, "كلمة المرور", "Password"),
+                                onValueChange = { loginPassword = filterDigitsOnly(it) },
+                                label = bi(isEn, "الرقم السري (أرقام فقط - PIN)", "Numeric PIN (digits only)"),
+                                keyboardType = KeyboardType.NumberPassword,
                                 toggleTestTag = "login_password_toggle",
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1038,7 +1053,7 @@ fun AccountAndFamilyDialog(
                             )
                             OutlinedTextField(
                                 value = regPhone,
-                                onValueChange = { regPhone = it },
+                                onValueChange = { regPhone = filterDigitsOnly(it) },
                                 label = { Text(bi(isEn, "رقم الهاتف", "Phone Number")) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 singleLine = true,
@@ -1048,7 +1063,7 @@ fun AccountAndFamilyDialog(
                             )
                             OutlinedTextField(
                                 value = regNationalId,
-                                onValueChange = { regNationalId = it },
+                                onValueChange = { regNationalId = filterDigitsOnly(it) },
                                 label = { Text(bi(isEn, "الرقم القومي (اختياري)", "National ID (Optional)")) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
@@ -1056,8 +1071,9 @@ fun AccountAndFamilyDialog(
                             )
                             PasswordOutlinedTextField(
                                 value = regPassword,
-                                onValueChange = { regPassword = it },
-                                label = bi(isEn, "كلمة المرور", "Password"),
+                                onValueChange = { regPassword = filterDigitsOnly(it) },
+                                label = bi(isEn, "الرقم السري (أرقام فقط - PIN) *", "Numeric PIN (digits only) *"),
+                                keyboardType = KeyboardType.NumberPassword,
                                 toggleTestTag = "reg_password_toggle",
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1065,8 +1081,18 @@ fun AccountAndFamilyDialog(
                             )
                             Button(
                                 onClick = {
-                                    onRegister(regName, regPhone, regNationalId, regPassword)
-                                    selectedTab = 0
+                                    if (regPassword.length < 4) {
+                                        onShowMessage(
+                                            bi(
+                                                isEn,
+                                                "الرقم السري يجب أن يتكون من 4 أرقام على الأقل",
+                                                "Numeric PIN must be at least 4 digits",
+                                            )
+                                        )
+                                    } else {
+                                        onRegister(regName, regPhone, regNationalId, regPassword)
+                                        selectedTab = 0
+                                    }
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1078,6 +1104,12 @@ fun AccountAndFamilyDialog(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(6.dp))
+                    NotificationStatusCard(
+                        isEn = isEn,
+                        tagPrefix = "account_notif",
+                        onShowMessage = onShowMessage,
+                    )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = bi(isEn, "إصدار التطبيق: $appVersionLabel", "App Version: $appVersionLabel"),
@@ -1530,6 +1562,9 @@ fun DirectChatDialog(
     target: DirectChatTarget,
     messages: List<DirectMessageEntity>,
     isEn: Boolean = false,
+    canDeleteMessages: Boolean = false,
+    onDeleteMessage: (messageId: String) -> Unit = {},
+    onClearThread: (() -> Unit)? = null,
     onMarkThreadRead: () -> Unit,
     onSendMessage: (body: String, onDone: () -> Unit) -> Unit,
     onDismiss: () -> Unit,
@@ -1602,7 +1637,23 @@ fun DirectChatDialog(
                             }
                         }
                     }
-                    IconButton(onClick = onDismiss) {
+                    if (canDeleteMessages && onClearThread != null && threadMessages.isNotEmpty()) {
+                        TextButton(
+                            onClick = onClearThread,
+                            colors = ButtonDefaults.textButtonColors(contentColor = SlotBookedBorder),
+                            modifier = Modifier
+                                .height(48.dp)
+                                .testTag("direct_chat_clear_all"),
+                        ) {
+                            Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(bi(isEn, "مسح الكل", "Clear All"), maxLines = 1)
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(48.dp),
+                    ) {
                         Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
@@ -1641,15 +1692,31 @@ fun DirectChatDialog(
                         ) {
                             items(threadMessages, key = { it.id }) { msg ->
                                 val isMine = msg.senderRole == target.viewerRole
-                                Column(
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+                                    horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    if (canDeleteMessages && isMine) {
+                                        IconButton(
+                                            onClick = { onDeleteMessage(msg.id) },
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .testTag("direct_chat_delete_msg_${msg.id}"),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Delete,
+                                                contentDescription = bi(isEn, "حذف الرسالة", "Delete message"),
+                                                tint = SlotBookedBorder,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
+                                    }
                                     Surface(
                                         color = if (isMine) TealPrimary else Color.White,
                                         shape = RoundedCornerShape(14.dp),
                                         border = if (isMine) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
-                                        modifier = Modifier.fillMaxWidth(0.84f),
+                                        modifier = Modifier.fillMaxWidth(0.82f),
                                     ) {
                                         Column(
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1670,6 +1737,21 @@ fun DirectChatDialog(
                                                 text = timeFmt.format(Date(msg.createdAtMillis)),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = if (isMine) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                    if (canDeleteMessages && !isMine) {
+                                        IconButton(
+                                            onClick = { onDeleteMessage(msg.id) },
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .testTag("direct_chat_delete_msg_${msg.id}"),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Delete,
+                                                contentDescription = bi(isEn, "حذف الرسالة", "Delete message"),
+                                                tint = SlotBookedBorder,
+                                                modifier = Modifier.size(18.dp),
                                             )
                                         }
                                     }

@@ -44,6 +44,9 @@ data class PlatformBrandConfig(
     val firebaseAppId: String = "1:588431549120:web:c10278b3df39d11a668325",
     val firebaseVapidKey: String = "BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw",
     val workerUrl: String = "https://masarik-otp.masarik-tourism.workers.dev",
+    // إعدادات التخزين السحابي الاحتياطي على Google Drive وسياسة الاحتفاظ بالملفات الثقيلة (أيام: 90 / 180 / 360)
+    val defaultDriveWebAppUrl: String = "",
+    val fileRetentionDays: Int = 360,
     @param:DrawableRes val logoRes: Int = R.drawable.app_icon_fg,
     @param:DrawableRes val heroBannerRes: Int = R.drawable.img_hospital_banner,
     @param:DrawableRes val medicalRecordIllustRes: Int = R.drawable.img_medical_record,
@@ -66,6 +69,7 @@ object CloudNamespacePaths {
     const val LABS = "$DATA_ROOT/labs"
     const val APPOINTMENTS = "$DATA_ROOT/slots"
     const val RECORDS = "$DATA_ROOT/records"
+    const val PERMANENT_LOGS = "$DATA_ROOT/permanent_logs"
     const val MESSAGES = "$DATA_ROOT/messages"
     const val NOTIFICATIONS = "$DATA_ROOT/notifications"
     const val BLOCKED_PHONES = "$DATA_ROOT/blocked_phones"

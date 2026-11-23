@@ -28,4 +28,25 @@ object TimeUtils {
         val sdf = SimpleDateFormat(pattern, locale)
         return sdf.format(Date())
     }
+
+    fun formatActualDateTimeLabel(
+        millis: Long = System.currentTimeMillis(),
+        isEn: Boolean = false,
+    ): String {
+        val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+        val hour24 = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = cal.get(java.util.Calendar.MINUTE)
+        val period = if (hour24 >= 12) {
+            if (isEn) "PM" else "م"
+        } else {
+            if (isEn) "AM" else "ص"
+        }
+        val hour12 = when {
+            hour24 == 0 -> 12
+            hour24 > 12 -> hour24 - 12
+            else -> hour24
+        }
+        return String.format(Locale.US, "%s - %02d:%02d %s", dateSdf.format(Date(millis)), hour12, minute, period)
+    }
 }

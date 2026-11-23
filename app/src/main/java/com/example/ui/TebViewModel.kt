@@ -21,6 +21,7 @@ import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
+import com.example.data.local.PermanentMedicalLogEntity
 import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
 import com.example.data.repository.LabPatientSearchResult
@@ -83,6 +84,7 @@ data class TebUiState(
     val labs: List<MedicalLabEntity> = emptyList(),
     val allSlots: List<AppointmentSlotEntity> = emptyList(),
     val medicalRecords: List<MedicalRecordEntity> = emptyList(),
+    val permanentLogs: List<PermanentMedicalLogEntity> = emptyList(),
     val notifications: List<DelayNotificationEntity> = emptyList(),
     val directMessages: List<DirectMessageEntity> = emptyList(),
     val blockedPhones: List<BlockedPhoneEntity> = emptyList(),
@@ -242,6 +244,26 @@ data class TebUiState(
                 (patientPhone.isNotBlank() && rec.patientPhone == patientPhone && rec.patientName == patientName)
         }.sortedByDescending { it.createdAtMillis }
     }
+
+    fun permanentLogsForMember(member: FamilyMemberEntity?): List<PermanentMedicalLogEntity> {
+        if (member == null) return emptyList()
+        return permanentLogs.filter { log ->
+            log.familyMemberId == member.id ||
+                (log.patientName.isNotBlank() && log.patientName == member.fullName)
+        }.sortedByDescending { it.eventTimestampMillis }
+    }
+
+    fun permanentLogsForPatient(
+        familyMemberId: String,
+        patientName: String,
+        patientPhone: String,
+    ): List<PermanentMedicalLogEntity> {
+        return permanentLogs.filter { log ->
+            (familyMemberId.isNotBlank() && log.familyMemberId == familyMemberId) ||
+                (patientName.isNotBlank() && log.patientName == patientName) ||
+                (patientPhone.isNotBlank() && log.patientPhone == patientPhone && log.patientName == patientName)
+        }.sortedByDescending { it.eventTimestampMillis }
+    }
 }
 
 class TebViewModel(
@@ -338,6 +360,7 @@ class TebViewModel(
         val notifications: List<DelayNotificationEntity>,
         val blockedPhones: List<BlockedPhoneEntity>,
         val directMessages: List<DirectMessageEntity>,
+        val permanentLogs: List<PermanentMedicalLogEntity>,
     )
 
     private data class MedicationBundle(
@@ -413,6 +436,7 @@ class TebViewModel(
         repository.notificationsFlow,
         repository.blockedPhonesFlow,
         repository.directMessagesFlow,
+        repository.allPermanentLogsFlow,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         ClinicDataBundle(
@@ -423,6 +447,7 @@ class TebViewModel(
             notifications = values[4] as List<DelayNotificationEntity>,
             blockedPhones = values[5] as List<BlockedPhoneEntity>,
             directMessages = values[6] as List<DirectMessageEntity>,
+            permanentLogs = values[7] as List<PermanentMedicalLogEntity>,
         )
     }
 
@@ -494,6 +519,7 @@ class TebViewModel(
             labs = clinic.labs,
             allSlots = clinic.slots,
             medicalRecords = clinic.records,
+            permanentLogs = clinic.permanentLogs,
             notifications = clinic.notifications,
             directMessages = clinic.directMessages,
             blockedPhones = clinic.blockedPhones,
@@ -704,6 +730,8 @@ class TebViewModel(
         firebaseAppId: String = "",
         firebaseVapidKey: String = "",
         workerUrl: String = "",
+        defaultDriveWebAppUrl: String = "",
+        fileRetentionDays: Int = 360,
     ) {
         viewModelScope.launch {
             repository.updateFullPlatformConfig(
@@ -723,6 +751,8 @@ class TebViewModel(
                 firebaseAppId = firebaseAppId,
                 firebaseVapidKey = firebaseVapidKey,
                 workerUrl = workerUrl,
+                defaultDriveWebAppUrl = defaultDriveWebAppUrl,
+                fileRetentionDays = fileRetentionDays,
             )
             refreshEgyptianMedications(medsApiUrl)
             _snackbarMessages.tryEmit("تم تحديث إعدادات المنصة والربط السحابي بنجاح")
@@ -887,6 +917,7 @@ class TebViewModel(
         doctorNameEn: String = "",
         clinicNameEn: String = "",
         locationLabelEn: String = "",
+        driveWebAppUrl: String = "",
     ) {
         viewModelScope.launch {
             val res = repository.addDoctorByAdmin(
@@ -907,6 +938,7 @@ class TebViewModel(
                 doctorNameEn = doctorNameEn,
                 clinicNameEn = clinicNameEn,
                 locationLabelEn = locationLabelEn,
+                driveWebAppUrl = driveWebAppUrl,
             )
             res.onSuccess { doc ->
                 _snackbarMessages.tryEmit("تمت إضافة ${doc.doctorName} ونشر عيادته في المنصة فوراً")
@@ -935,6 +967,7 @@ class TebViewModel(
         doctorNameEn: String = "",
         clinicNameEn: String = "",
         locationLabelEn: String = "",
+        driveWebAppUrl: String = "",
     ) {
         viewModelScope.launch {
             val res = repository.updateDoctorByAdmin(
@@ -956,6 +989,7 @@ class TebViewModel(
                 doctorNameEn = doctorNameEn,
                 clinicNameEn = clinicNameEn,
                 locationLabelEn = locationLabelEn,
+                driveWebAppUrl = driveWebAppUrl,
             )
             res.onSuccess { doc ->
                 _snackbarMessages.tryEmit("تم تحديث بيانات ${doc.doctorName} فوراً")
@@ -1147,7 +1181,7 @@ class TebViewModel(
         }
         if (!account.isPhoneVerified) {
             _openAccountForOtpEvents.tryEmit(Unit)
-            _snackbarMessages.tryEmit("الحساب غير مفعّل: يرجى إدخال كود التفعيل (OTP) المكون من 6 أرقام أولاً.")
+            _snackbarMessages.tryEmit("الحساب غير مفعّل: فعّل حسابك مرة واحدة عبر كود واتساب أو من العيادة أو الإدارة.")
             return
         }
         viewModelScope.launch {
@@ -1722,6 +1756,42 @@ class TebViewModel(
     ) {
         viewModelScope.launch {
             repository.markDirectThreadRead(threadType, viewerRole, patientAccountId, doctorId)
+        }
+    }
+
+    fun deleteDirectMessageByAdmin(messageId: String) {
+        viewModelScope.launch {
+            repository.deleteDirectMessageByAdmin(messageId)
+                .onSuccess {
+                    _snackbarMessages.tryEmit(
+                        bi(uiState.value.isEn, "🗑️ تم حذف الرسالة نهائياً", "🗑️ Message deleted permanently")
+                    )
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر حذف الرسالة")
+                }
+        }
+    }
+
+    fun deleteChatThreadByAdmin(
+        threadType: String,
+        patientAccountId: String = "",
+        doctorId: String = "",
+    ) {
+        viewModelScope.launch {
+            repository.deleteChatThreadByAdmin(threadType, patientAccountId, doctorId)
+                .onSuccess { count ->
+                    _snackbarMessages.tryEmit(
+                        bi(
+                            uiState.value.isEn,
+                            "🗑️ تم مسح المحادثة بالكامل ($count رسالة)",
+                            "🗑️ Conversation cleared ($count messages)",
+                        )
+                    )
+                }
+                .onFailure { err ->
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر مسح المحادثة")
+                }
         }
     }
 

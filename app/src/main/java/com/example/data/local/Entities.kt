@@ -27,6 +27,13 @@ object MedicalRecordType {
     const val LAB_RESULT = "LAB_RESULT"
 }
 
+object PermanentLogEventType {
+    const val LAB_REPORT = "LAB_REPORT"
+    const val PATIENT_UPLOAD = "PATIENT_UPLOAD"
+    const val CLINIC_VISIT = "CLINIC_VISIT"
+    const val EXTERNAL_VISIT = "EXTERNAL_VISIT"
+}
+
 object ChatThreadType {
     const val PATIENT_CLINIC = "PATIENT_CLINIC"
     const val PATIENT_ADMIN = "PATIENT_ADMIN"
@@ -106,6 +113,7 @@ data class ClinicDoctorEntity(
     val locationLabelEn: String = "",
     val additionalSpecialties: String = "",
     val chatEnabled: Boolean = true,
+    val driveWebAppUrl: String = "",
 )
 
 @Entity(tableName = "appointment_slots")
@@ -149,6 +157,25 @@ data class MedicalRecordEntity(
     val notesEn: String = "",
     val aiReportAr: String = "",
     val aiReportEn: String = "",
+    val driveFileUrl: String = "",
+)
+
+@Entity(tableName = "permanent_medical_logs")
+data class PermanentMedicalLogEntity(
+    @PrimaryKey val id: String,
+    val familyMemberId: String,
+    val patientName: String,
+    val patientPhone: String,
+    val sourceRecordId: String,
+    val eventType: String,
+    val eventTimestampMillis: Long = System.currentTimeMillis(),
+    val eventDateTimeLabel: String = "",
+    val providerName: String = "",
+    val specialtyOrCategory: String = "",
+    val title: String = "",
+    val narrativeAr: String = "",
+    val narrativeEn: String = "",
+    val isAiGenerated: Boolean = false,
 )
 
 @Entity(tableName = "delay_notifications")

@@ -1,12 +1,16 @@
 package com.example
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,6 +92,7 @@ import com.example.ui.patient.MedicalFileScreen
 import com.example.ui.patient.PatientHomeScreen
 import com.example.ui.theme.TebAlHajayzahTheme
 import com.example.util.FirebaseAppCheckHelper
+import com.example.util.TebNotificationHelper
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -101,9 +106,20 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         FirebaseAppCheckHelper.configureAppCheck(this, intent)
+        TebNotificationHelper.ensureNotificationChannel(this)
         enableEdgeToEdge()
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
+            val notifPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission(),
+            ) {}
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    TebNotificationHelper.isRuntimeNotificationPermissionRequired(this@MainActivity)
+                ) {
+                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
             var useLiveWebMode by remember {
                 mutableStateOf(
                     state.brandConfig.liveWebUrl.isNotBlank() && isDeviceOnline(this@MainActivity),
@@ -575,7 +591,7 @@ fun TebAlHajayzahAppRoot(
                                 if (state.isAdminLoggedIn) {
                                     SuperAdminDashboardScreen(
                                         state = state,
-                                        onAddDoctor = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn ->
+                                        onAddDoctor = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl ->
                                             viewModel.addDoctorByAdmin(
                                                 doctorName = name,
                                                 specialty = spec,
@@ -594,9 +610,10 @@ fun TebAlHajayzahAppRoot(
                                                 doctorNameEn = nameEn,
                                                 clinicNameEn = clinicEn,
                                                 locationLabelEn = locEn,
+                                                driveWebAppUrl = driveUrl,
                                             )
                                         },
-                                        onUpdateDoctor = { docId, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn ->
+                                        onUpdateDoctor = { docId, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl ->
                                             viewModel.updateDoctorByAdmin(
                                                 doctorId = docId,
                                                 doctorName = name,
@@ -616,6 +633,7 @@ fun TebAlHajayzahAppRoot(
                                                 doctorNameEn = nameEn,
                                                 clinicNameEn = clinicEn,
                                                 locationLabelEn = locEn,
+                                                driveWebAppUrl = driveUrl,
                                             )
                                         },
                                         onDeleteDoctor = viewModel::deleteDoctorByAdmin,
@@ -641,6 +659,8 @@ fun TebAlHajayzahAppRoot(
                                             viewModel.sendAdminClinicAlert(docId, msg, onSent)
                                         },
                                         onOpenChatThread = { target -> activeChatTarget = target },
+                                        onDeleteMessage = viewModel::deleteDirectMessageByAdmin,
+                                        onDeleteThread = viewModel::deleteChatThreadByAdmin,
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
@@ -682,6 +702,7 @@ fun TebAlHajayzahAppRoot(
                     showAdminPinDialog = true
                 }
             },
+            onShowMessage = showMessage,
             onDismiss = { showAccountDialog = false },
         )
     }
@@ -722,6 +743,15 @@ fun TebAlHajayzahAppRoot(
             target = chatTarget,
             messages = state.directMessages,
             isEn = isEn,
+            canDeleteMessages = (chatTarget.viewerRole == MessageSenderRole.ADMIN),
+            onDeleteMessage = viewModel::deleteDirectMessageByAdmin,
+            onClearThread = {
+                viewModel.deleteChatThreadByAdmin(
+                    threadType = chatTarget.threadType,
+                    patientAccountId = chatTarget.patientAccountId,
+                    doctorId = chatTarget.doctorId,
+                )
+            },
             onMarkThreadRead = {
                 viewModel.markDirectThreadRead(
                     threadType = chatTarget.threadType,

@@ -20,8 +20,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ActivationOtpCodeEntity::class,
         MedicalLabEntity::class,
         DirectMessageEntity::class,
+        PermanentMedicalLogEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -186,6 +187,34 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `driveWebAppUrl` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `driveFileUrl` TEXT NOT NULL DEFAULT ''")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `permanent_medical_logs` (
+                        `id` TEXT NOT NULL,
+                        `familyMemberId` TEXT NOT NULL,
+                        `patientName` TEXT NOT NULL,
+                        `patientPhone` TEXT NOT NULL,
+                        `sourceRecordId` TEXT NOT NULL,
+                        `eventType` TEXT NOT NULL,
+                        `eventTimestampMillis` INTEGER NOT NULL DEFAULT 0,
+                        `eventDateTimeLabel` TEXT NOT NULL DEFAULT '',
+                        `providerName` TEXT NOT NULL DEFAULT '',
+                        `specialtyOrCategory` TEXT NOT NULL DEFAULT '',
+                        `title` TEXT NOT NULL DEFAULT '',
+                        `narrativeAr` TEXT NOT NULL DEFAULT '',
+                        `narrativeEn` TEXT NOT NULL DEFAULT '',
+                        `isAiGenerated` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -208,6 +237,7 @@ abstract class TebDatabase : RoomDatabase() {
                             MIGRATION_8_9,
                             MIGRATION_9_10,
                             MIGRATION_10_11,
+                            MIGRATION_11_12,
                         )
                         .build()
                 }.also { INSTANCE = it }

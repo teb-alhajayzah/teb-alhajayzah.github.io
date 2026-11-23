@@ -1043,6 +1043,285 @@ class ExampleRobolectricTest {
         assertTrue(okPatientCancel.isSuccess)
         assertEquals(SlotStatus.AVAILABLE, repository.observeSlotsForDoctor(doc.id).first().first { it.id == slotA.id }.status)
     }
+
+    @Test
+    fun appointmentReminderTriggersNumericPinAndAdminMessageDeletionWork() = runBlocking {
+        repository.ensureSeeded()
+
+        // 1. Appointment reminders: -2h + -30m when >= 2h away; -1h + -30m when ~90m away; empty when past
+        val baseCal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 10)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val t10am = baseCal.timeInMillis
+        val twoHourCase = com.example.util.TebNotificationHelper.computeReminderTriggersMillis(
+            slotId = "slot_2h",
+            doctorName = "د. علي",
+            clinicName = "عيادة الباطنة",
+            effectiveMinutes = 14 * 60,
+            nowMillis = t10am,
+        )
+        assertEquals(2, twoHourCase.size)
+        assertEquals("REMIND_2H", twoHourCase[0].kind)
+        assertEquals("REMIND_30M", twoHourCase[1].kind)
+
+        val oneHourCase = com.example.util.TebNotificationHelper.computeReminderTriggersMillis(
+            slotId = "slot_1h",
+            doctorName = "د. علي",
+            clinicName = "عيادة الباطنة",
+            effectiveMinutes = 11 * 60 + 30,
+            nowMillis = t10am,
+        )
+        assertEquals(2, oneHourCase.size)
+        assertEquals("REMIND_1H", oneHourCase[0].kind)
+        assertEquals("REMIND_30M", oneHourCase[1].kind)
+
+        val pastCase = com.example.util.TebNotificationHelper.computeReminderTriggersMillis(
+            slotId = "slot_past",
+            doctorName = "د. علي",
+            clinicName = "عيادة الباطنة",
+            effectiveMinutes = 9 * 60,
+            nowMillis = t10am,
+        )
+        assertTrue(pastCase.isEmpty())
+
+        // 2. Numeric PIN validation & Arabic-Indic digit normalization across registration & login
+        assertTrue(repository.isValidNumericPin("1234"))
+        assertTrue(repository.isValidNumericPin("١٢٣٤٥٦"))
+        assertFalse(repository.isValidNumericPin("123"))
+        assertFalse(repository.isValidNumericPin("abc123"))
+        assertFalse(repository.isValidNumericPin("12@45"))
+
+        val regRes = repository.registerPatientAccount(
+            fullName = "محمود حسن",
+            phone = "٠١٠٩٩٨٨٧٧٦٦",
+            nationalId = "",
+            password = "٢٥٨٠",
+        )
+        assertTrue(regRes.isSuccess)
+        val loginRes = repository.loginPatient("01099887766", "2580")
+        assertTrue(loginRes.isSuccess)
+        assertEquals("محمود حسن", loginRes.getOrThrow().fullName)
+
+        // 3. Admin single message delete & full conversation thread deletion
+        val doc = repository.doctorsFlow.first().first()
+        val msg1 = com.example.data.local.DirectMessageEntity(
+            id = "msg_adm_del_1",
+            threadType = com.example.data.local.ChatThreadType.CLINIC_ADMIN,
+            doctorId = doc.id,
+            doctorName = doc.doctorName,
+            clinicName = doc.clinicName,
+            senderRole = com.example.data.local.MessageSenderRole.ADMIN,
+            senderName = "الإدارة",
+            body = "رسالة أولى",
+            createdAtMillis = 1000L,
+        )
+        val msg2 = msg1.copy(id = "msg_adm_del_2", body = "رسالة ثانية", createdAtMillis = 2000L)
+        val msg3 = com.example.data.local.DirectMessageEntity(
+            id = "msg_adm_keep_3",
+            threadType = com.example.data.local.ChatThreadType.PATIENT_ADMIN,
+            patientAccountId = "acc_other",
+            patientName = "مريض آخر",
+            senderRole = com.example.data.local.MessageSenderRole.PATIENT,
+            senderName = "مريض آخر",
+            body = "رسالة أخرى",
+            createdAtMillis = 3000L,
+        )
+        db.tebDao().insertDirectMessage(msg1)
+        db.tebDao().insertDirectMessage(msg2)
+        db.tebDao().insertDirectMessage(msg3)
+
+        assertTrue(repository.deleteDirectMessageByAdmin("msg_adm_del_1").isSuccess)
+        val afterSingle = repository.directMessagesFlow.first()
+        assertFalse(afterSingle.any { it.id == "msg_adm_del_1" })
+        assertTrue(afterSingle.any { it.id == "msg_adm_del_2" })
+
+        val clearedCount = repository.deleteChatThreadByAdmin(
+            threadType = com.example.data.local.ChatThreadType.CLINIC_ADMIN,
+            doctorId = doc.id,
+        ).getOrThrow()
+        assertEquals(1, clearedCount)
+        val afterThread = repository.directMessagesFlow.first()
+        assertFalse(afterThread.any { it.threadType == com.example.data.local.ChatThreadType.CLINIC_ADMIN && it.doctorId == doc.id })
+        assertTrue(afterThread.any { it.id == "msg_adm_keep_3" })
+    }
+
+    @Test
+    fun permanentMedicalLogGoogleDrivePerClinicAndRetentionPruningWork() = runBlocking {
+        repository.ensureSeeded()
+        assertEquals("1.0.0", BuildConfig.VERSION_NAME)
+        assertEquals(1, BuildConfig.VERSION_CODE)
+        assertEquals("teb_alhajayzah/data/permanent_logs", com.example.config.CloudNamespacePaths.PERMANENT_LOGS)
+
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
+        // 1. Google Drive Web App URL priority: clinic URL overrides platform fallback; otherwise falls back to platform URL
+        assertEquals(
+            "https://script.google.com/macros/s/clinic123/exec",
+            com.example.data.remote.GoogleDriveStorageHelper.resolveWebAppUrl(
+                clinicDriveUrl = "https://script.google.com/macros/s/clinic123/exec",
+                platformFallbackDriveUrl = "https://script.google.com/macros/s/fallback999/exec",
+            ),
+        )
+        assertEquals(
+            "https://script.google.com/macros/s/fallback999/exec",
+            com.example.data.remote.GoogleDriveStorageHelper.resolveWebAppUrl(
+                clinicDriveUrl = "",
+                platformFallbackDriveUrl = "https://script.google.com/macros/s/fallback999/exec",
+            ),
+        )
+        assertEquals(360, com.example.data.remote.FirestoreCloudSyncService.normalizeRetentionDays(45))
+        assertEquals(90, com.example.data.remote.FirestoreCloudSyncService.normalizeRetentionDays(90))
+        assertEquals(180, com.example.data.remote.FirestoreCloudSyncService.normalizeRetentionDays(180))
+        assertEquals(360, com.example.data.remote.FirestoreCloudSyncService.normalizeRetentionDays(360))
+
+        // 2. Super Admin saves clinic Drive URL & platform fallback + retention policy (90 days)
+        val clinicDriveUrl = "https://script.google.com/macros/s/clinic_obgyn/exec"
+        val doc = repository.addDoctorByAdmin(
+            doctorName = "د. هدى سالم",
+            specialty = "النساء والتوليد وتأخر الإنجاب",
+            clinicName = "عيادة د. هدى",
+            clinicType = ClinicType.PRIVATE,
+            locationLabel = "الحجايزة",
+            bio = "",
+            mapsUrl = "",
+            feeEgp = 180,
+            workStartMinutes = 17 * 60,
+            workEndMinutes = 19 * 60,
+            slotDurationMinutes = 20,
+            username = "dr_hoda",
+            password = "123",
+            driveWebAppUrl = clinicDriveUrl,
+        ).getOrThrow()
+        assertEquals(clinicDriveUrl, doc.driveWebAppUrl)
+
+        repository.updateFullPlatformConfig(
+            platformNameAr = "طب الحجايزة",
+            villageNameAr = "قرية الحجايزة والقرى المجاورة",
+            hospitalNameAr = "مستشفى الحجايزة التخصصي",
+            supportPhone = "01125002428",
+            homeAnnouncementAr = "",
+            apkUrl = AppConfig.defaultBrand.apkDownloadUrl,
+            medsApiUrl = "",
+            adminPin = "202600",
+            defaultDriveWebAppUrl = "https://script.google.com/macros/s/platform_default/exec",
+            fileRetentionDays = 90,
+        )
+        val savedCfg = repository.brandConfigFlow.first()
+        assertEquals("https://script.google.com/macros/s/platform_default/exec", savedCfg.defaultDriveWebAppUrl)
+        assertEquals(90, savedCfg.fileRetentionDays)
+
+        // 3. Register patient & create: (a) patient lab upload, (b) clinic visit Rx, (c) external visit
+        val acc = repository.registerPatientAccount(
+            fullName = "فاطمة عبد الله حسن",
+            phone = "01033445566",
+            nationalId = "",
+            password = "2468",
+        ).getOrThrow()
+        val member = repository.observeFamilyMembers(acc.id).first().first()
+
+        val attachmentsDir = java.io.File(context.filesDir, "medical_images").apply { mkdirs() }
+        val oldLabFile = java.io.File(attachmentsDir, "old_cbc.pdf").apply { writeText("%PDF-1.4 old lab") }
+        val recentLabFile = java.io.File(attachmentsDir, "recent_xray.jpg").apply { writeText("recent image bytes") }
+
+        val uploadRec = repository.addPatientUploadedAttachment(
+            familyMemberId = member.id,
+            patientName = member.fullName,
+            patientPhone = acc.phone,
+            title = "تحليل بول شامل Urine Analysis",
+            notes = "Pus cells: 12-15 /HPF",
+            attachmentPath = oldLabFile.absolutePath,
+            attachmentMimeType = "application/pdf",
+            attachmentName = "old_cbc.pdf",
+        )
+
+        val recentRec = repository.addPatientUploadedAttachment(
+            familyMemberId = member.id,
+            patientName = member.fullName,
+            patientPhone = acc.phone,
+            title = "أشعة صدر",
+            notes = "سليمة وضمن الطبيعي",
+            attachmentPath = recentLabFile.absolutePath,
+            attachmentMimeType = "image/jpeg",
+            attachmentName = "recent_xray.jpg",
+        )
+
+        val slot = repository.observeSlotsForDoctor(doc.id).first().first { it.status == SlotStatus.AVAILABLE }
+        assertTrue(repository.bookSlot(slot.id, member.fullName, acc.phone, member.id, BookingSource.APP).isSuccess)
+        val rxRec = repository.completeVisitAndSavePrescription(
+            slotId = slot.id,
+            diagnosis = "أنيميا الحمل البسيطة",
+            medications = "• حمض الفوليك 5 مجم — قرص يومياً\n• أوستيوكير أقراص — قرص بعد الغداء",
+            notes = "المتابعة بعد أسبوعين",
+            attachmentPath = "",
+        ).getOrThrow()
+
+        val extRec = repository.addExternalDoctorVisitRecord(
+            familyMemberId = member.id,
+            patientName = member.fullName,
+            patientPhone = acc.phone,
+            doctorName = "أحمد شريف",
+            specialty = "الباطنة العامة والجهاز الهضمي والكبد",
+            visitDateLabel = "20/11/2026",
+            diagnosis = "التهاب بالمعدة",
+            medicationsText = "• كونترولوك 40 مجم — قرص قبل الإفطار لمدة 14 يوم",
+            notes = "تجنب الأطعمة الحارة",
+            attachmentPath = "",
+        ).getOrThrow()
+
+        // Verify all 4 events auto-created entries in permanent_medical_logs immediately
+        val allLogsBefore = repository.allPermanentLogsFlow.first().filter { it.familyMemberId == member.id }
+        assertEquals(4, allLogsBefore.size)
+
+        val uploadLog = allLogsBefore.first { it.sourceRecordId == uploadRec.id }
+        assertEquals(com.example.data.local.PermanentLogEventType.PATIENT_UPLOAD, uploadLog.eventType)
+        assertTrue(uploadLog.narrativeAr.contains("خلايا الصديد"))
+        assertTrue(uploadLog.narrativeAr.contains("استرشادي") || uploadLog.narrativeAr.contains("لا يغني"))
+        assertFalse(uploadLog.narrativeAr.contains("Pus cells", ignoreCase = true))
+
+        val rxLog = allLogsBefore.first { it.sourceRecordId == rxRec.id }
+        assertEquals(com.example.data.local.PermanentLogEventType.CLINIC_VISIT, rxLog.eventType)
+        assertTrue(rxLog.narrativeAr.contains("د. هدى سالم"))
+        assertTrue(rxLog.narrativeAr.contains("أنيميا الحمل البسيطة"))
+        assertTrue(rxLog.narrativeAr.contains("حمض الفوليك"))
+        assertTrue(rxLog.narrativeAr.contains("سبب الوصف ودواعي الاستخدام"))
+
+        val extLog = allLogsBefore.first { it.sourceRecordId == extRec.id }
+        assertEquals(com.example.data.local.PermanentLogEventType.EXTERNAL_VISIT, extLog.eventType)
+        assertTrue(extLog.narrativeAr.contains("كونترولوك"))
+        assertTrue(extLog.narrativeAr.contains("حماية المعدة"))
+
+        // 4. Simulate Drive backup URL + old timestamp (120 days ago > 90 days retention) on uploadRec
+        val nowMs = System.currentTimeMillis()
+        val expiredTimestamp = nowMs - (120L * TebRepository.ONE_DAY_MILLIS)
+        db.tebDao().insertMedicalRecord(
+            uploadRec.copy(
+                createdAtMillis = expiredTimestamp,
+                driveFileUrl = "https://drive.google.com/file/d/fake_drive_id/view",
+            )
+        )
+        val prunedCount = repository.pruneExpiredHeavyAttachments(nowMillis = nowMs)
+        assertEquals(1, prunedCount)
+        assertFalse(oldLabFile.exists())
+        assertTrue(recentLabFile.exists())
+
+        val prunedRec = db.tebDao().getMedicalRecordById(uploadRec.id)!!
+        assertEquals("", prunedRec.attachmentPath)
+        assertEquals("https://drive.google.com/file/d/fake_drive_id/view", prunedRec.driveFileUrl)
+
+        // Manual deletion of recent attachment file removes the physical file & record, NEVER the permanent log!
+        assertTrue(repository.deleteMedicalRecordOrAttachment(recentRec.id).isSuccess)
+        assertFalse(recentLabFile.exists())
+
+        val allLogsAfterCleanupAndDelete = repository.allPermanentLogsFlow.first().filter { it.familyMemberId == member.id }
+        assertEquals(4, allLogsAfterCleanupAndDelete.size)
+        assertTrue(allLogsAfterCleanupAndDelete.any { it.sourceRecordId == uploadRec.id && it.narrativeAr.contains("خلايا الصديد") })
+        assertTrue(allLogsAfterCleanupAndDelete.any { it.sourceRecordId == recentRec.id })
+    }
 }
+
+
 
 

@@ -1,7 +1,9 @@
 package com.example.ui.admin
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +37,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Notifications
@@ -58,6 +62,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
@@ -98,8 +103,8 @@ import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.DirectChatTarget
+import com.example.ui.components.NotificationStatusCard
 import com.example.ui.components.PasswordOutlinedTextField
-import com.example.ui.components.otpCodeGeneratorItems
 import com.example.ui.theme.SlotAvailableBg
 import com.example.ui.theme.SlotAvailableBorder
 import com.example.ui.theme.SlotAvailableText
@@ -132,6 +137,7 @@ fun SuperAdminDashboardScreen(
         doctorNameEn: String,
         clinicNameEn: String,
         locationLabelEn: String,
+        driveWebAppUrl: String,
     ) -> Unit,
     onUpdateDoctor: (
         doctorId: String,
@@ -152,6 +158,7 @@ fun SuperAdminDashboardScreen(
         doctorNameEn: String,
         clinicNameEn: String,
         locationLabelEn: String,
+        driveWebAppUrl: String,
     ) -> Unit,
     onDeleteDoctor: (String) -> Unit,
     onCancelBooking: (slotId: String) -> Unit,
@@ -174,9 +181,11 @@ fun SuperAdminDashboardScreen(
         firebaseAppId: String,
         firebaseVapidKey: String,
         workerUrl: String,
+        defaultDriveWebAppUrl: String,
+        fileRetentionDays: Int,
     ) -> Unit,
     onResetPlatformSettings: () -> Unit,
-    onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit,
+    onGenerateOtpBatch: (count: Int, generatedBy: String) -> Unit = { _, _ -> },
     onAddLab: (labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
     onUpdateLab: (labId: String, labName: String, phone: String, locationLabel: String, username: String, password: String) -> Unit,
     onDeleteLab: (labId: String) -> Unit,
@@ -189,6 +198,8 @@ fun SuperAdminDashboardScreen(
     onSendAdminGlobalBroadcast: (message: String, onSent: () -> Unit) -> Unit = { _, _ -> },
     onSendAdminClinicAlert: (doctorId: String?, message: String, onSent: () -> Unit) -> Unit = { _, _, _ -> },
     onOpenChatThread: (DirectChatTarget) -> Unit = {},
+    onDeleteMessage: (messageId: String) -> Unit = {},
+    onDeleteThread: (threadType: String, patientAccountId: String, doctorId: String) -> Unit = { _, _, _ -> },
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -204,6 +215,8 @@ fun SuperAdminDashboardScreen(
     var globalBroadcastDraft by remember { mutableStateOf("") }
     var clinicAlertDraft by remember { mutableStateOf("") }
     var selectedAlertDoctorId by remember { mutableStateOf<String?>(null) }
+    var cloudSettingsExpanded by remember { mutableStateOf(false) }
+    var expandedThreadKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var defaultFormClinicType by remember { mutableStateOf(ClinicType.PRIVATE) }
     var showAddForm by remember { mutableStateOf(false) }
     var doctorToEdit by remember { mutableStateOf<ClinicDoctorEntity?>(null) }
@@ -236,6 +249,15 @@ fun SuperAdminDashboardScreen(
     var cfgFbAppId by remember(state.brandConfig.firebaseAppId) { mutableStateOf(state.brandConfig.firebaseAppId) }
     var cfgFbVapidKey by remember(state.brandConfig.firebaseVapidKey) { mutableStateOf(state.brandConfig.firebaseVapidKey) }
     var cfgWorkerUrl by remember(state.brandConfig.workerUrl) { mutableStateOf(state.brandConfig.workerUrl) }
+    var cfgDefaultDriveUrl by remember(state.brandConfig.defaultDriveWebAppUrl) { mutableStateOf(state.brandConfig.defaultDriveWebAppUrl) }
+    var cfgRetentionDays by remember(state.brandConfig.fileRetentionDays) {
+        mutableIntStateOf(
+            when (state.brandConfig.fileRetentionDays) {
+                90, 180, 360 -> state.brandConfig.fileRetentionDays
+                else -> 360
+            },
+        )
+    }
 
     val q = searchQuery.trim()
     val privateDoctors = remember(state.doctors, q) {
@@ -361,24 +383,18 @@ fun SuperAdminDashboardScreen(
                     Tab(
                         selected = selectedTab == 4,
                         onClick = { selectedTab = 4 },
-                        text = { Text(bi(isEn, "أكواد التفعيل (OTP)", "OTP Codes")) },
-                        modifier = Modifier.testTag("admin_otp_codes_tab"),
-                    )
-                    Tab(
-                        selected = selectedTab == 5,
-                        onClick = { selectedTab = 5 },
                         text = { Text(bi(isEn, "إدارة معامل التحاليل", "Medical Labs")) },
                         modifier = Modifier.testTag("admin_labs_tab"),
                     )
                     Tab(
-                        selected = selectedTab == 6,
-                        onClick = { selectedTab = 6 },
+                        selected = selectedTab == 5,
+                        onClick = { selectedTab = 5 },
                         text = { Text(bi(isEn, "قائمة العملاء والمشتركين (Users)", "Users & Subscribers")) },
                         modifier = Modifier.testTag("admin_users_tab"),
                     )
                     Tab(
-                        selected = selectedTab == 7,
-                        onClick = { selectedTab = 7 },
+                        selected = selectedTab == 6,
+                        onClick = { selectedTab = 6 },
                         text = {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -622,6 +638,14 @@ fun SuperAdminDashboardScreen(
 
                 3 -> {
                     item {
+                        NotificationStatusCard(
+                            isEn = isEn,
+                            tagPrefix = "admin_notif",
+                            onShowMessage = onShowMessage,
+                        )
+                    }
+
+                    item {
                         Card(
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -687,6 +711,68 @@ fun SuperAdminDashboardScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                Text(
+                                    text = bi(
+                                        isEn,
+                                        "☁️ مساحة التخزين الاحتياطية (Google Drive) والاحتفاظ بالملفات الثقيلة",
+                                        "☁️ Platform Fallback Google Drive & File Retention Policy",
+                                    ),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = TealPrimaryDark,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                OutlinedTextField(
+                                    value = cfgDefaultDriveUrl,
+                                    onValueChange = { cfgDefaultDriveUrl = it },
+                                    label = {
+                                        Text(
+                                            bi(
+                                                isEn,
+                                                "رابط تخزين Google Drive الاحتياطي العام للمنصة (Apps Script URL)",
+                                                "Platform Fallback Google Drive Apps Script URL",
+                                            ),
+                                        )
+                                    },
+                                    placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("admin_default_drive_url_input"),
+                                )
+                                Text(
+                                    text = bi(
+                                        isEn,
+                                        "مدة الاحتفاظ بالملفات الثقيلة (PDF والأشعة) قبل التنظيف التلقائي — مع بقاء السجل الكتابي الدائم مدى الحياة:",
+                                        "Heavy attachment retention (PDF/Images) — Permanent medical text logs remain forever:",
+                                    ),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf(
+                                        90 to bi(isEn, "90 يوماً", "90 Days"),
+                                        180 to bi(isEn, "180 يوماً", "180 Days"),
+                                        360 to bi(
+                                            isEn,
+                                            "360 يوماً — سنة كاملة لمتابعات الحمل والأمراض المزمنة",
+                                            "360 Days — Full Year for Pregnancy & Chronic Care",
+                                        ),
+                                    ).forEach { (daysOpt, labelOpt) ->
+                                        FilterChip(
+                                            selected = cfgRetentionDays == daysOpt,
+                                            onClick = { cfgRetentionDays = daysOpt },
+                                            label = { Text(labelOpt) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = TealPrimary,
+                                                selectedLabelColor = Color.White,
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("admin_retention_$daysOpt"),
+                                        )
+                                    }
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                 PasswordOutlinedTextField(
                                     value = cfgAdminPin,
                                     onValueChange = { cfgAdminPin = it },
@@ -712,148 +798,180 @@ fun SuperAdminDashboardScreen(
                                 modifier = Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Icon(Icons.Filled.Notifications, contentDescription = null, tint = TealPrimary)
-                                    Text(
-                                        text = bi(isEn, "إعدادات الربط السحابي والإشعارات (FCM & Worker)", "Cloud Integration & Push Settings"),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TealPrimary,
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { cloudSettingsExpanded = !cloudSettingsExpanded }
+                                        .padding(vertical = 4.dp)
+                                        .testTag("admin_cloud_settings_toggle"),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(Icons.Filled.Notifications, contentDescription = null, tint = SlotAvailableBorder)
+                                        Column {
+                                            Text(
+                                                text = bi(
+                                                    isEn,
+                                                    "🟢 المزامنة السحابية والإشعارات نشطة (اضغط للتعديل)",
+                                                    "🟢 Cloud Sync & Push Active (Tap to Edit)",
+                                                ),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SlotAvailableText,
+                                            )
+                                            Text(
+                                                text = "teb_alhajayzah/settings • Worker & Firebase FCM",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                    Icon(
+                                        imageVector = if (cloudSettingsExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                        contentDescription = bi(isEn, "إظهار أو إخفاء إعدادات الربط السحابي", "Toggle Cloud Settings"),
+                                        tint = TealPrimary,
                                     )
                                 }
-                                Surface(
-                                    color = SlotAvailableBg.copy(alpha = 0.7f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, SlotAvailableBorder.copy(alpha = 0.5f)),
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Text(
-                                            text = bi(
-                                                isEn,
-                                                "🟢 Auto-Synced Cloud Paths (teb_alhajayzah/settings & teb_alhajayzah/data/*):",
-                                                "🟢 متصل تلقائياً بالسحابة تحت مسار العزل (teb_alhajayzah/settings):",
-                                            ),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = SlotAvailableText,
+
+                                AnimatedVisibility(visible = cloudSettingsExpanded) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Surface(
+                                            color = SlotAvailableBg.copy(alpha = 0.7f),
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = BorderStroke(1.dp, SlotAvailableBorder.copy(alpha = 0.5f)),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                Text(
+                                                    text = bi(
+                                                        isEn,
+                                                        "🟢 Auto-Synced Cloud Paths (teb_alhajayzah/settings & teb_alhajayzah/data/*):",
+                                                        "🟢 متصل تلقائياً بالسحابة تحت مسار العزل (teb_alhajayzah/settings):",
+                                                    ),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SlotAvailableText,
+                                                )
+                                                Text(
+                                                    text = "teb_alhajayzah/settings • teb_alhajayzah/data/doctors • accounts • slots • records • messages • notifications",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = SlotAvailableText,
+                                                )
+                                            }
+                                        }
+                                        OutlinedTextField(
+                                            value = cfgWorkerUrl,
+                                            onValueChange = { cfgWorkerUrl = it },
+                                            label = { Text(bi(isEn, "رابط الخادم الوسيط (Cloudflare Worker URL)", "Cloudflare Worker URL (Push & WhatsApp)")) },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth().testTag("admin_worker_url_input"),
                                         )
-                                        Text(
-                                            text = "teb_alhajayzah/settings • teb_alhajayzah/data/doctors • accounts • slots • records • messages • notifications",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = SlotAvailableText,
+                                        OutlinedTextField(
+                                            value = cfgFbApiKey,
+                                            onValueChange = { cfgFbApiKey = it },
+                                            label = { Text("Firebase apiKey") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth().testTag("admin_fb_api_key_input"),
+                                        )
+                                        OutlinedTextField(
+                                            value = cfgFbAuthDomain,
+                                            onValueChange = { cfgFbAuthDomain = it },
+                                            label = { Text("Firebase authDomain") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        OutlinedTextField(
+                                            value = cfgFbProjectId,
+                                            onValueChange = { cfgFbProjectId = it },
+                                            label = { Text("Firebase projectId") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth().testTag("admin_fb_project_id_input"),
+                                        )
+                                        OutlinedTextField(
+                                            value = cfgFbStorageBucket,
+                                            onValueChange = { cfgFbStorageBucket = it },
+                                            label = { Text("Firebase storageBucket") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        OutlinedTextField(
+                                            value = cfgFbMessagingSenderId,
+                                            onValueChange = { cfgFbMessagingSenderId = it },
+                                            label = { Text("Firebase messagingSenderId") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        OutlinedTextField(
+                                            value = cfgFbAppId,
+                                            onValueChange = { cfgFbAppId = it },
+                                            label = { Text("Firebase appId") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        OutlinedTextField(
+                                            value = cfgFbVapidKey,
+                                            onValueChange = { cfgFbVapidKey = it },
+                                            label = { Text("Firebase FCM vapidKey") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
                                         )
                                     }
                                 }
-                                OutlinedTextField(
-                                    value = cfgWorkerUrl,
-                                    onValueChange = { cfgWorkerUrl = it },
-                                    label = { Text(bi(isEn, "رابط الخادم الوسيط (Cloudflare Worker URL)", "Cloudflare Worker URL (Push & WhatsApp)")) },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().testTag("admin_worker_url_input"),
-                                )
-                                OutlinedTextField(
-                                    value = cfgFbApiKey,
-                                    onValueChange = { cfgFbApiKey = it },
-                                    label = { Text("Firebase apiKey") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().testTag("admin_fb_api_key_input"),
-                                )
-                                OutlinedTextField(
-                                    value = cfgFbAuthDomain,
-                                    onValueChange = { cfgFbAuthDomain = it },
-                                    label = { Text("Firebase authDomain") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                OutlinedTextField(
-                                    value = cfgFbProjectId,
-                                    onValueChange = { cfgFbProjectId = it },
-                                    label = { Text("Firebase projectId") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().testTag("admin_fb_project_id_input"),
-                                )
-                                OutlinedTextField(
-                                    value = cfgFbStorageBucket,
-                                    onValueChange = { cfgFbStorageBucket = it },
-                                    label = { Text("Firebase storageBucket") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                OutlinedTextField(
-                                    value = cfgFbMessagingSenderId,
-                                    onValueChange = { cfgFbMessagingSenderId = it },
-                                    label = { Text("Firebase messagingSenderId") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                OutlinedTextField(
-                                    value = cfgFbAppId,
-                                    onValueChange = { cfgFbAppId = it },
-                                    label = { Text("Firebase appId") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                OutlinedTextField(
-                                    value = cfgFbVapidKey,
-                                    onValueChange = { cfgFbVapidKey = it },
-                                    label = { Text("Firebase FCM vapidKey") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = onResetPlatformSettings,
-                                        modifier = Modifier.weight(1f).height(48.dp),
-                                    ) {
-                                        Text(bi(isEn, "استعادة الافتراضي", "Reset Default"))
-                                    }
-                                    Button(
-                                        onClick = {
-                                            onSavePlatformSettings(
-                                                cfgPlatformName,
-                                                cfgVillageName,
-                                                cfgHospitalName,
-                                                cfgSupportPhone,
-                                                cfgAnnouncement,
-                                                cfgApkUrl,
-                                                cfgMedsApi,
-                                                cfgAdminPin,
-                                                cfgFbApiKey,
-                                                cfgFbAuthDomain,
-                                                cfgFbProjectId,
-                                                cfgFbStorageBucket,
-                                                cfgFbMessagingSenderId,
-                                                cfgFbAppId,
-                                                cfgFbVapidKey,
-                                                cfgWorkerUrl,
-                                            )
-                                        },
-                                        modifier = Modifier
-                                            .weight(1.4f)
-                                            .height(48.dp)
-                                            .testTag("admin_save_platform_settings"),
-                                    ) {
-                                        Text(bi(isEn, "حفظ وتطبيق فوراً", "Save & Apply"))
-                                    }
-                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            OutlinedButton(
+                                onClick = onResetPlatformSettings,
+                                modifier = Modifier.weight(1f).height(50.dp),
+                            ) {
+                                Text(bi(isEn, "استعادة الافتراضي", "Reset Default"))
+                            }
+                            Button(
+                                onClick = {
+                                    onSavePlatformSettings(
+                                        cfgPlatformName,
+                                        cfgVillageName,
+                                        cfgHospitalName,
+                                        cfgSupportPhone,
+                                        cfgAnnouncement,
+                                        cfgApkUrl,
+                                        cfgMedsApi,
+                                        cfgAdminPin,
+                                        cfgFbApiKey,
+                                        cfgFbAuthDomain,
+                                        cfgFbProjectId,
+                                        cfgFbStorageBucket,
+                                        cfgFbMessagingSenderId,
+                                        cfgFbAppId,
+                                        cfgFbVapidKey,
+                                        cfgWorkerUrl,
+                                        cfgDefaultDriveUrl,
+                                        cfgRetentionDays,
+                                    )
+                                },
+                                modifier = Modifier
+                                    .weight(1.4f)
+                                    .height(50.dp)
+                                    .testTag("admin_save_platform_settings"),
+                            ) {
+                                Text(bi(isEn, "حفظ وتطبيق فوراً", "Save & Apply"))
                             }
                         }
                     }
                 }
 
                 4 -> {
-                    otpCodeGeneratorItems(
-                        context = context,
-                        brandConfig = state.brandConfig,
-                        activationCodes = state.activationCodes,
-                        isEn = isEn,
-                        onGenerateBatch = { count -> onGenerateOtpBatch(count, "ADMIN") },
-                        onShowMessage = onShowMessage,
-                    )
-                }
-
-                5 -> {
                     item {
                         Button(
                             onClick = { showAddLabForm = true },
@@ -900,7 +1018,7 @@ fun SuperAdminDashboardScreen(
                     }
                 }
 
-                6 -> {
+                5 -> {
                     item {
                         Card(
                             shape = RoundedCornerShape(18.dp),
@@ -1020,7 +1138,7 @@ fun SuperAdminDashboardScreen(
                     }
                 }
 
-                7 -> {
+                6 -> {
                     item {
                         Card(
                             shape = RoundedCornerShape(18.dp),
@@ -1157,7 +1275,7 @@ fun SuperAdminDashboardScreen(
                                     enabled = clinicAlertDraft.isNotBlank(),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(46.dp)
+                                        .height(48.dp)
                                         .testTag("admin_all_clinics_alert_send"),
                                 ) {
                                     Text(bi(isEn, "إرسال التنبيه الإداري للعيادة / العيادات", "Send Alert to Selected Clinic(s)"))
@@ -1192,15 +1310,16 @@ fun SuperAdminDashboardScreen(
                         }
                     }
 
-                    val supportThreads = state.directMessages
-                        .filter { it.threadType == ChatThreadType.PATIENT_ADMIN || it.threadType == ChatThreadType.CLINIC_ADMIN }
+                    val allThreads = state.directMessages
                         .groupBy { "${it.threadType}:${it.patientAccountId}:${it.doctorId}" }
-                        .values
-                        .mapNotNull { list ->
-                            val latest = list.maxByOrNull { it.createdAtMillis } ?: return@mapNotNull null
-                            Triple(latest, list.count { !it.isReadByAdmin }, list.size)
+                        .entries
+                        .mapNotNull { (threadKey, list) ->
+                            val sorted = list.sortedBy { it.createdAtMillis }
+                            val latest = sorted.lastOrNull() ?: return@mapNotNull null
+                            val unread = if (latest.threadType == ChatThreadType.PATIENT_CLINIC) 0 else list.count { !it.isReadByAdmin }
+                            Triple(threadKey, sorted, Pair(latest, unread))
                         }
-                        .sortedByDescending { it.first.createdAtMillis }
+                        .sortedByDescending { it.third.first.createdAtMillis }
 
                     item {
                         Row(
@@ -1209,7 +1328,11 @@ fun SuperAdminDashboardScreen(
                         ) {
                             Icon(Icons.Filled.SupportAgent, contentDescription = null, tint = TealPrimary)
                             Text(
-                                text = bi(isEn, "صندوق رسائل الدعم والشكاوى (${supportThreads.size})", "Admin Support Inbox (${supportThreads.size})"),
+                                text = bi(
+                                    isEn,
+                                    "إدارة ومراقبة كافة المحادثات والرسائل (${allThreads.size})",
+                                    "All Conversations & Message Moderation (${allThreads.size})",
+                                ),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TealPrimary,
                                 fontWeight = FontWeight.Bold,
@@ -1217,7 +1340,7 @@ fun SuperAdminDashboardScreen(
                         }
                     }
 
-                    if (supportThreads.isEmpty()) {
+                    if (allThreads.isEmpty()) {
                         item {
                             Surface(
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -1225,7 +1348,7 @@ fun SuperAdminDashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    text = bi(isEn, "لا توجد رسائل دعم من المرضى أو العيادات حتى الآن.", "No support messages from patients or clinics yet."),
+                                    text = bi(isEn, "لا توجد محادثات أو رسائل على المنصة حتى الآن.", "No conversations or messages on the platform yet."),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(16.dp),
@@ -1233,12 +1356,21 @@ fun SuperAdminDashboardScreen(
                             }
                         }
                     } else {
-                        items(supportThreads, key = { "adm_${it.first.id}" }) { (latest, unread, total) ->
-                            val isClinicThread = latest.threadType == ChatThreadType.CLINIC_ADMIN
-                            val threadTitle = if (isClinicThread) {
-                                "${latest.clinicName.ifBlank { latest.doctorName }} (${bi(isEn, "عيادة", "Clinic")})"
-                            } else {
-                                "${latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") }} (${bi(isEn, "مريض", "Patient")})"
+                        items(allThreads, key = { "adm_thread_${it.first}" }) { (threadKey, threadMessages, latestPair) ->
+                            val latest = latestPair.first
+                            val unread = latestPair.second
+                            val isExpanded = threadKey in expandedThreadKeys
+                            val isClinicAdmin = latest.threadType == ChatThreadType.CLINIC_ADMIN
+                            val isPatientClinic = latest.threadType == ChatThreadType.PATIENT_CLINIC
+                            val badgeText = when (latest.threadType) {
+                                ChatThreadType.PATIENT_CLINIC -> bi(isEn, "مريض ↔ عيادة", "Patient ↔ Clinic")
+                                ChatThreadType.CLINIC_ADMIN -> bi(isEn, "عيادة ↔ إدارة", "Clinic ↔ Admin")
+                                else -> bi(isEn, "مريض ↔ إدارة", "Patient ↔ Admin")
+                            }
+                            val threadTitle = when (latest.threadType) {
+                                ChatThreadType.CLINIC_ADMIN -> latest.clinicName.ifBlank { latest.doctorName }
+                                ChatThreadType.PATIENT_CLINIC -> "${latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") }} ⇄ ${latest.clinicName.ifBlank { latest.doctorName }}"
+                                else -> latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") }
                             }
                             Card(
                                 shape = RoundedCornerShape(16.dp),
@@ -1246,62 +1378,174 @@ fun SuperAdminDashboardScreen(
                                 border = BorderStroke(1.2.dp, if (unread > 0) TealPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Row(
+                                Column(
                                     modifier = Modifier.padding(14.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Text(threadTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                            if (unread > 0) {
-                                                Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
-                                                    Text(unread.toString())
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Top,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Surface(
+                                                    color = TealPrimary.copy(alpha = 0.12f),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                ) {
+                                                    Text(
+                                                        text = badgeText,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = TealPrimary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    )
+                                                }
+                                                if (unread > 0) {
+                                                    Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                                        Text(unread.toString())
+                                                    }
                                                 }
                                             }
-                                        }
-                                        if (latest.patientPhone.isNotBlank()) {
+                                            Text(threadTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                             Text(
-                                                text = "${latest.patientPhone} • ($total ${bi(isEn, "رسالة", "msgs")})",
+                                                text = listOfNotNull(
+                                                    latest.patientPhone.takeIf { it.isNotBlank() },
+                                                    "(${threadMessages.size} ${bi(isEn, "رسالة", "msgs")})",
+                                                ).joinToString(" • "),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
-                                        }
-                                        Text(
-                                            text = "${latest.senderName}: ${latest.body}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Button(
-                                        onClick = {
-                                            onOpenChatThread(
-                                                if (isClinicThread) {
-                                                    DirectChatTarget(
-                                                        threadType = ChatThreadType.CLINIC_ADMIN,
-                                                        viewerRole = MessageSenderRole.ADMIN,
-                                                        title = latest.clinicName.ifBlank { latest.doctorName },
-                                                        subtitle = latest.doctorName,
-                                                        doctorId = latest.doctorId,
-                                                    )
-                                                } else {
-                                                    DirectChatTarget(
-                                                        threadType = ChatThreadType.PATIENT_ADMIN,
-                                                        viewerRole = MessageSenderRole.ADMIN,
-                                                        title = latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") },
-                                                        subtitle = latest.patientPhone,
-                                                        patientAccountId = latest.patientAccountId,
-                                                        patientName = latest.patientName,
-                                                        patientPhone = latest.patientPhone,
-                                                    )
-                                                }
+                                            Text(
+                                                text = "${latest.senderName}: ${latest.body}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                maxLines = 2,
                                             )
-                                        },
-                                        modifier = Modifier.height(44.dp),
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
-                                        Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(bi(isEn, "فتح والرد", "Reply"))
+                                        OutlinedButton(
+                                            onClick = {
+                                                expandedThreadKeys = if (isExpanded) {
+                                                    expandedThreadKeys - threadKey
+                                                } else {
+                                                    expandedThreadKeys + threadKey
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(48.dp)
+                                                .testTag("admin_expand_thread_$threadKey"),
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                if (isExpanded) bi(isEn, "إخفاء الرسائل", "Hide Msgs")
+                                                else bi(isEn, "عرض الرسائل", "View Msgs"),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                        if (!isPatientClinic) {
+                                            Button(
+                                                onClick = {
+                                                    onOpenChatThread(
+                                                        if (isClinicAdmin) {
+                                                            DirectChatTarget(
+                                                                threadType = ChatThreadType.CLINIC_ADMIN,
+                                                                viewerRole = MessageSenderRole.ADMIN,
+                                                                title = latest.clinicName.ifBlank { latest.doctorName },
+                                                                subtitle = latest.doctorName,
+                                                                doctorId = latest.doctorId,
+                                                            )
+                                                        } else {
+                                                            DirectChatTarget(
+                                                                threadType = ChatThreadType.PATIENT_ADMIN,
+                                                                viewerRole = MessageSenderRole.ADMIN,
+                                                                title = latest.patientName.ifBlank { bi(isEn, "مريض", "Patient") },
+                                                                subtitle = latest.patientPhone,
+                                                                patientAccountId = latest.patientAccountId,
+                                                                patientName = latest.patientName,
+                                                                patientPhone = latest.patientPhone,
+                                                            )
+                                                        }
+                                                    )
+                                                },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(48.dp),
+                                            ) {
+                                                Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(bi(isEn, "فتح والرد", "Reply"), maxLines = 1)
+                                            }
+                                        }
+                                        OutlinedButton(
+                                            onClick = {
+                                                onDeleteThread(latest.threadType, latest.patientAccountId, latest.doctorId)
+                                            },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SlotBookedBorder),
+                                            border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
+                                            modifier = Modifier
+                                                .height(48.dp)
+                                                .testTag("admin_delete_thread_$threadKey"),
+                                        ) {
+                                            Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(bi(isEn, "مسح المحادثة", "Clear Chat"), maxLines = 1)
+                                        }
+                                    }
+
+                                    AnimatedVisibility(visible = isExpanded) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                                            threadMessages.forEach { msg ->
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                            Text(
+                                                                text = msg.senderName,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = TealPrimary,
+                                                            )
+                                                            Text(
+                                                                text = msg.body,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                            )
+                                                        }
+                                                        IconButton(
+                                                            onClick = { onDeleteMessage(msg.id) },
+                                                            modifier = Modifier
+                                                                .size(48.dp)
+                                                                .testTag("admin_delete_msg_${msg.id}"),
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.Delete,
+                                                                contentDescription = bi(isEn, "حذف الرسالة", "Delete message"),
+                                                                tint = SlotBookedBorder,
+                                                                modifier = Modifier.size(18.dp),
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1319,8 +1563,8 @@ fun SuperAdminDashboardScreen(
             hospitalName = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn),
             isEn = isEn,
             currencyLabel = currencyLabel,
-            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn ->
-                onAddDoctor(name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn)
+            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl ->
+                onAddDoctor(name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl)
                 showAddForm = false
             },
             onDismiss = { showAddForm = false },
@@ -1335,8 +1579,8 @@ fun SuperAdminDashboardScreen(
             hospitalName = bi(isEn, state.brandConfig.hospitalNameAr, state.brandConfig.hospitalNameEn),
             isEn = isEn,
             currencyLabel = currencyLabel,
-            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn ->
-                onUpdateDoctor(editingDoc.id, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn)
+            onSave = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl ->
+                onUpdateDoctor(editingDoc.id, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl)
                 doctorToEdit = null
             },
             onDismiss = { doctorToEdit = null },
@@ -1580,15 +1824,14 @@ private fun AdminUserManageCard(
                                 fontWeight = FontWeight.Bold,
                                 color = if (isOtpExpired) SlotBookedText else SlotAvailableText,
                             )
-                            if (isOtpExpired) {
-                                TextButton(
-                                    onClick = onRegenerateOtp,
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                ) {
-                                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(bi(isEn, "تجديد 24س", "Renew 24h"), style = MaterialTheme.typography.labelSmall)
-                                }
+                            TextButton(
+                                onClick = onRegenerateOtp,
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                modifier = Modifier.testTag("admin_user_regen_otp_${account.id}"),
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(bi(isEn, "توليد كود 24س", "Regen 24h"), style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
@@ -1745,6 +1988,18 @@ private fun UserEditDialog(
     var fullName by remember { mutableStateOf(account.fullName) }
     var phone by remember { mutableStateOf(account.phone) }
     var newPassword by remember { mutableStateOf("") }
+    val digitsOnly = { raw: String ->
+        buildString(raw.length) {
+            for (ch in raw) {
+                when (ch) {
+                    in '0'..'9' -> append(ch)
+                    in '\u0660'..'\u0669' -> append(('0'.code + (ch.code - 0x0660)).toChar())
+                    in '\u06F0'..'\u06F9' -> append(('0'.code + (ch.code - 0x06F0)).toChar())
+                }
+            }
+        }
+    }
+    val pinValid = newPassword.isEmpty() || newPassword.length >= 4
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1760,7 +2015,7 @@ private fun UserEditDialog(
                 )
                 OutlinedTextField(
                     value = phone,
-                    onValueChange = { phone = it },
+                    onValueChange = { phone = digitsOnly(it) },
                     label = { Text(bi(isEn, "رقم الهاتف *", "Phone Number *")) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     singleLine = true,
@@ -1768,16 +2023,25 @@ private fun UserEditDialog(
                 )
                 PasswordOutlinedTextField(
                     value = newPassword,
-                    onValueChange = { newPassword = it },
-                    label = bi(isEn, "كلمة مرور جديدة (اتركها فارغة للإبقاء)", "New Password (blank keeps current)"),
+                    onValueChange = { newPassword = digitsOnly(it) },
+                    label = bi(isEn, "رقم سري جديد (أرقام فقط - اختياري)", "New Numeric PIN (optional)"),
+                    keyboardType = KeyboardType.NumberPassword,
                     toggleTestTag = "admin_edit_user_pass_toggle",
                     modifier = Modifier.fillMaxWidth().testTag("admin_edit_user_pass"),
                 )
+                if (!pinValid) {
+                    Text(
+                        text = bi(isEn, "الرقم السري يجب أن يكون 4 أرقام على الأقل", "PIN must be at least 4 digits"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SlotBookedText,
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = { onSave(fullName, phone, newPassword.takeIf { it.isNotBlank() }) },
+                enabled = pinValid,
                 modifier = Modifier.testTag("admin_edit_user_save"),
             ) {
                 Text(bi(isEn, "حفظ التعديلات", "Save Changes"))
@@ -1945,6 +2209,7 @@ private fun DoctorFormDialog(
         doctorNameEn: String,
         clinicNameEn: String,
         locationLabelEn: String,
+        driveWebAppUrl: String,
     ) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1969,6 +2234,7 @@ private fun DoctorFormDialog(
     var locationLabelEn by remember { mutableStateOf(initialDoctor?.locationLabelEn ?: "Al-Hajayzah Village") }
     var feeText by remember { mutableStateOf((initialDoctor?.feeEgp ?: 150).toString()) }
     var mapsUrl by remember { mutableStateOf(initialDoctor?.mapsUrl ?: "") }
+    var driveWebAppUrl by remember { mutableStateOf(initialDoctor?.driveWebAppUrl ?: "") }
     var startHour by remember { mutableIntStateOf((initialDoctor?.workStartMinutes ?: (17 * 60)) / 60) }
     var endHour by remember { mutableIntStateOf((initialDoctor?.workEndMinutes ?: (21 * 60)) / 60) }
     var slotDuration by remember { mutableIntStateOf(initialDoctor?.slotDurationMinutes ?: 20) }
@@ -2146,6 +2412,24 @@ private fun DoctorFormDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedTextField(
+                    value = driveWebAppUrl,
+                    onValueChange = { driveWebAppUrl = it },
+                    label = {
+                        Text(
+                            bi(
+                                isEn,
+                                "رابط تخزين Google Drive الخاص بالعيادة (Apps Script URL - اختياري)",
+                                "Clinic Google Drive Apps Script URL (optional)",
+                            ),
+                        )
+                    },
+                    placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("admin_doc_drive_url_input"),
+                )
 
                 Text(
                     text = bi(isEn, "بداية العمل: ${TimeUtils.formatMinutesAr(startHour * 60, false)}", "Start: ${TimeUtils.formatMinutesAr(startHour * 60, true)}"),
@@ -2228,6 +2512,7 @@ private fun DoctorFormDialog(
                         doctorNameEn,
                         clinicNameEn,
                         locationLabelEn,
+                        driveWebAppUrl,
                     )
                 }
             ) {

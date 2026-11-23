@@ -199,6 +199,27 @@ interface TebDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMedicalRecords(records: List<MedicalRecordEntity>)
 
+    @Query("UPDATE medical_records SET driveFileUrl = :driveFileUrl WHERE id = :recordId")
+    suspend fun updateMedicalRecordDriveUrl(recordId: String, driveFileUrl: String)
+
+    @Query("SELECT * FROM medical_records WHERE attachmentPath != '' AND createdAtMillis < :cutoffMillis")
+    suspend fun getMedicalRecordsWithAttachmentsOlderThan(cutoffMillis: Long): List<MedicalRecordEntity>
+
+    @Query("SELECT * FROM permanent_medical_logs ORDER BY eventTimestampMillis DESC")
+    fun observeAllPermanentLogs(): Flow<List<PermanentMedicalLogEntity>>
+
+    @Query("SELECT * FROM permanent_medical_logs WHERE familyMemberId = :memberId OR (:patientName != '' AND patientName = :patientName) ORDER BY eventTimestampMillis DESC")
+    suspend fun getPermanentLogsForMemberOnce(memberId: String, patientName: String): List<PermanentMedicalLogEntity>
+
+    @Query("SELECT * FROM permanent_medical_logs WHERE sourceRecordId = :sourceRecordId LIMIT 1")
+    suspend fun getPermanentLogBySourceRecordId(sourceRecordId: String): PermanentMedicalLogEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPermanentLog(log: PermanentMedicalLogEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPermanentLogs(logs: List<PermanentMedicalLogEntity>)
+
     @Query("UPDATE clinic_doctors SET chatEnabled = :chatEnabled WHERE id = :doctorId")
     suspend fun updateDoctorChatEnabled(doctorId: String, chatEnabled: Boolean)
 
@@ -246,6 +267,32 @@ interface TebDao {
 
     @Query("UPDATE direct_messages SET isReadByAdmin = 1 WHERE threadType = 'PATIENT_ADMIN' OR threadType = 'CLINIC_ADMIN'")
     suspend fun markAllAdminMessagesRead()
+
+    @Query("SELECT * FROM direct_messages WHERE id = :messageId LIMIT 1")
+    suspend fun getDirectMessageById(messageId: String): DirectMessageEntity?
+
+    @Query("DELETE FROM direct_messages WHERE id = :messageId")
+    suspend fun deleteDirectMessageById(messageId: String)
+
+    @Query(
+        "SELECT * FROM direct_messages " +
+            "WHERE threadType = :threadType AND patientAccountId = :patientAccountId AND doctorId = :doctorId"
+    )
+    suspend fun getDirectThreadMessagesOnce(
+        threadType: String,
+        patientAccountId: String,
+        doctorId: String,
+    ): List<DirectMessageEntity>
+
+    @Query(
+        "DELETE FROM direct_messages " +
+            "WHERE threadType = :threadType AND patientAccountId = :patientAccountId AND doctorId = :doctorId"
+    )
+    suspend fun deleteDirectThread(
+        threadType: String,
+        patientAccountId: String,
+        doctorId: String,
+    )
 
     @Query("SELECT * FROM doctor_favorite_meds")
     fun observeAllDoctorFavorites(): Flow<List<DoctorFavoriteMedEntity>>

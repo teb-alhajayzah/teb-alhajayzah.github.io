@@ -1049,4 +1049,200 @@ object MedicalSummaryAnalyzer {
             }
         }.trim()
     }
+
+    /**
+     * يُنشئ فوراً التدوين الكتابي الدائم (بالعربية المبسطة والإنجليزية) لأي حدث طبي:
+     * - التحاليل والأشعة المرفوعة (LAB_RESULT / PATIENT_UPLOAD)
+     * - الكشوفات والروشتات والزيارات الخارجية (PRESCRIPTION / EXTERNAL_VISIT) مع سبب الوصف ودواعي الاستخدام
+     */
+    fun buildPermanentLogNarrative(
+        record: MedicalRecordEntity,
+        member: FamilyMemberEntity?,
+        providerLabel: String,
+    ): Pair<String, String> {
+        val ts = record.createdAtMillis.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val dateTimeAr = TimeUtils.formatActualDateTimeLabel(ts, isEn = false)
+        val dateTimeEn = TimeUtils.formatActualDateTimeLabel(ts, isEn = true)
+        val resolvedProviderAr = providerLabel.ifBlank {
+            record.doctorName.ifBlank {
+                if (record.recordType == MedicalRecordType.PATIENT_UPLOAD) "رفع المريض / الأسرة" else "منصة طب الحجايزة"
+            }
+        }
+        val resolvedProviderEn = providerLabel.ifBlank {
+            record.doctorName.ifBlank {
+                if (record.recordType == MedicalRecordType.PATIENT_UPLOAD) "Patient / Family Upload" else "Teb Al-Hajayzah"
+            }
+        }
+
+        val isLabOrUpload = record.recordType == MedicalRecordType.LAB_RESULT ||
+            record.recordType == MedicalRecordType.PATIENT_UPLOAD
+
+        if (isLabOrUpload) {
+            val sources = buildList {
+                if (record.notes.isNotBlank()) add(record.notes)
+                if (record.diagnosis.isNotBlank()) add(record.diagnosis)
+                if (record.attachmentPath.isNotBlank() && ImageStorageHelper.isPdfAttachment(record.attachmentPath, record.attachmentMimeType)) {
+                    val extracted = extractReadablePdfText(record.attachmentPath)
+                    if (extracted.isNotBlank()) add(extracted)
+                }
+            }
+            val parsedAr = parseClinicalLabText(sources, member, isEn = false)
+            val parsedEn = parseClinicalLabText(sources, member, isEn = true)
+            val fileTitle = record.diagnosis.trim().ifBlank {
+                record.attachmentName.trim().ifBlank { "تحليل / أشعة طبية" }
+            }
+            val cleanTitleAr = translateFileTitleToPlainAr(fileTitle)
+            val normalsAr = parsedAr.normalHighlights.take(4).joinToString("، ")
+            val followUpsAr = parsedAr.followUpPoints.take(5).joinToString("؛ ")
+            val narrativeAr = buildString {
+                append("بتاريخ $dateTimeAr، تم تسجيل وتوثيق ($cleanTitleAr) عبر ($resolvedProviderAr).")
+                when {
+                    parsedAr.normalCount > 0 && parsedAr.followUpPoints.isEmpty() -> {
+                        append(" تُظهر القيم المقروءة حالة مطمئنة وضمن المعدل الطبيعي ($normalsAr).")
+                    }
+                    parsedAr.followUpPoints.isNotEmpty() -> {
+                        if (normalsAr.isNotBlank()) {
+                            append(" مؤشرات ضمن الطبيعي: $normalsAr.")
+                        }
+                        append(" نقاط تستدعي مراجعة الطبيب: $followUpsAr.")
+                    }
+                    else -> {
+                        val safeNotes = stripMetadataLines(record.notes).trim()
+                        if (safeNotes.isNotBlank() && !Regex("[A-Za-z]{4,}").containsMatchIn(safeNotes)) {
+                            append(" تفاصيل التقرير المرفق: $safeNotes.")
+                        } else {
+                            append(" تم حفظ التقرير في السجل الطبي الدائم لمراجعته مع الطبيب المختص.")
+                        }
+                    }
+                }
+                append(" (${PatientMedicalSummary.STANDARD_DISCLAIMER})")
+            }.trim()
+
+            val normalsEn = parsedEn.normalHighlights.take(4).joinToString(", ")
+            val followUpsEn = parsedEn.followUpPoints.take(5).joinToString("; ")
+            val narrativeEn = buildString {
+                append("On $dateTimeEn, ($fileTitle) was documented via ($resolvedProviderEn).")
+                when {
+                    parsedEn.normalCount > 0 && parsedEn.followUpPoints.isEmpty() -> {
+                        append(" Readable clinical values appear reassuring and within normal limits ($normalsEn).")
+                    }
+                    parsedEn.followUpPoints.isNotEmpty() -> {
+                        if (normalsEn.isNotBlank()) append(" Normal indicators: $normalsEn.")
+                        append(" Points for physician follow-up: $followUpsEn.")
+                    }
+                    else -> {
+                        append(" Archived permanently in the medical record for treating physician review.")
+                    }
+                }
+                append(" (${PatientMedicalSummary.STANDARD_DISCLAIMER_EN})")
+            }.trim()
+
+            return narrativeAr to narrativeEn
+        }
+
+        // PRESCRIPTION or EXTERNAL_VISIT
+        val localizedAr = BilingualMedicalTranslator.resolveForDisplay(record, showEnglish = false)
+        val localizedEn = BilingualMedicalTranslator.resolveForDisplay(record, showEnglish = true)
+        val specialtyAr = record.specialty.ifBlank { "كشف طبي" }
+        val specialtyEn = SpecialtyCatalog.displaySpecialty(specialtyAr, isEn = true)
+        val diagAr = localizedAr.diagnosis.trim().ifBlank { "متابعة طبية عامة" }
+        val diagEn = localizedEn.diagnosis.trim().ifBlank { diagAr }
+        val medsListAr = localizedAr.medications.lines().map { it.trim().removePrefix("•").trim() }.filter { it.isNotBlank() }
+        val medsListEn = localizedEn.medications.lines().map { it.trim().removePrefix("•").trim() }.filter { it.isNotBlank() }
+        val notesAr = stripMetadataLines(localizedAr.notes).trim()
+        val notesEn = stripMetadataLines(localizedEn.notes).trim()
+
+        val indicationAr = buildMedicationIndicationSummary(diagAr, specialtyAr, medsListAr, notesAr, isEn = false)
+        val indicationEn = buildMedicationIndicationSummary(diagEn, specialtyEn, medsListEn, notesEn, isEn = true)
+
+        val narrativeAr = buildString {
+            append("📅 التاريخ والوقت الفعلي: $dateTimeAr\n")
+            append("👨‍⚕️ الطبيب / الجهة: $resolvedProviderAr ($specialtyAr)\n")
+            append("🩺 التشخيص: $diagAr\n")
+            append("💊 الأدوية والجرعات الموصوفة: ")
+            if (medsListAr.isNotEmpty()) {
+                append(medsListAr.joinToString(" • "))
+            } else {
+                append("لم تُدرج أدوية في هذه الزيارة")
+            }
+            append("\n🎯 سبب الوصف ودواعي الاستخدام: $indicationAr")
+            if (notesAr.isNotBlank()) {
+                append("\n📝 توصيات الطبيب: $notesAr")
+            }
+        }.trim()
+
+        val narrativeEn = buildString {
+            append("📅 Date & Time: $dateTimeEn\n")
+            append("👨‍⚕️ Physician / Provider: $resolvedProviderEn ($specialtyEn)\n")
+            append("🩺 Diagnosis: $diagEn\n")
+            append("💊 Prescribed Medications & Dosages: ")
+            if (medsListEn.isNotEmpty()) {
+                append(medsListEn.joinToString(" • "))
+            } else {
+                append("No medications listed for this visit")
+            }
+            append("\n🎯 Indication / Reason for Prescribing: $indicationEn")
+            if (notesEn.isNotBlank()) {
+                append("\n📝 Doctor Notes: $notesEn")
+            }
+        }.trim()
+
+        return narrativeAr to narrativeEn
+    }
+
+    private fun translateFileTitleToPlainAr(raw: String): String {
+        val lower = raw.lowercase()
+        return when {
+            lower.contains("urine") || lower.contains("بول") -> "تحليل بول شامل"
+            lower.contains("cbc") || lower.contains("صورة دم") || lower.contains("blood") -> "تحليل صورة دم كاملة"
+            lower.contains("hba1c") || lower.contains("sugar") || lower.contains("glucose") || lower.contains("سكر") -> "تحليل السكر"
+            lower.contains("x-ray") || lower.contains("xray") || lower.contains("أشعة") || lower.contains("ct") || lower.contains("mri") || lower.contains("sonar") || lower.contains("سونا") -> "تقرير أشعة وفحص تصويري"
+            Regex("[A-Za-z]{4,}").containsMatchIn(raw) && !raw.any { it in '\u0600'..'\u06FF' } -> "تقرير تحليل أو أشعة طبية"
+            else -> raw
+        }
+    }
+
+    private fun buildMedicationIndicationSummary(
+        diagnosis: String,
+        specialty: String,
+        meds: List<String>,
+        notes: String,
+        isEn: Boolean,
+    ): String {
+        if (isEn) {
+            return buildString {
+                append("Prescribed to manage $diagnosis within $specialty care")
+                if (meds.isNotEmpty()) {
+                    append(" (${meds.size} medication(s) aligned with the documented diagnosis")
+                    if (notes.isNotBlank()) append(" and follow-up plan")
+                    append(")")
+                }
+                append(".")
+            }
+        }
+        val medHints = meds.mapNotNull { medLine ->
+            val lower = medLine.lowercase()
+            when {
+                lower.contains("augmentin") || lower.contains("hibiotic") || lower.contains("أموكسيسيلين") || lower.contains("أوجمنتين") || lower.contains("هايبوتيك") || lower.contains("مضاد") -> "مضاد حيوي لعلاج العدوى البكتيرية"
+                lower.contains("controloc") || lower.contains("nexium") || lower.contains("كونترولوك") || lower.contains("نيكسيوم") || lower.contains("جافيسكون") -> "حماية المعدة وتقليل الحموضة والارتجاع"
+                lower.contains("cetal") || lower.contains("brufen") || lower.contains("cataflam") || lower.contains("سيتال") || lower.contains("بروفين") || lower.contains("كتافلام") || lower.contains("مسكن") -> "تسكين الألم وخفض الحرارة والالتهاب"
+                lower.contains("dimra") || lower.contains("myolgin") || lower.contains("ديمرا") || lower.contains("ميولجين") -> "باسط للعضلات ومسكن لآلام العظام"
+                lower.contains("glucophage") || lower.contains("amaryl") || lower.contains("جلوكوفاج") || lower.contains("أماريل") -> "تنظيم مستوى السكر في الدم"
+                lower.contains("concor") || lower.contains("norvasc") || lower.contains("كونكور") || lower.contains("نورفاسك") -> "تنظيم ضغط الدم ودعم القلب"
+                lower.contains("folic") || lower.contains("osteocare") || lower.contains("vidrop") || lower.contains("فوليك") || lower.contains("أوستيوكير") || lower.contains("فيتامين") -> "دعم التغذية والفيتامينات والمعادن الأساسية"
+                lower.contains("zyrtec") || lower.contains("farcolin") || lower.contains("زيرتك") || lower.contains("فاركولين") -> "تخفيف الحساسية وتحسين التنفس"
+                else -> null
+            }
+        }.distinct()
+
+        return buildString {
+            append("علاج ومتابعة ($diagnosis) في تخصص ($specialty)")
+            if (medHints.isNotEmpty()) {
+                append(" — يشمل: ${medHints.joinToString("، ")}")
+            }
+            if (notes.isNotBlank()) {
+                append(" وفق خطة الطبيب ($notes)")
+            }
+        }.trim()
+    }
 }

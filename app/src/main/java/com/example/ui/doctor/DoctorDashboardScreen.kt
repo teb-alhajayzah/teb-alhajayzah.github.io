@@ -78,6 +78,7 @@ import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.NotificationAudience
+import com.example.data.local.PermanentMedicalLogEntity
 import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.bi
@@ -86,7 +87,9 @@ import com.example.ui.components.AttachmentPreviewTarget
 import com.example.ui.patient.RescheduleSlotPickerDialog
 import com.example.ui.components.DirectChatTarget
 import com.example.ui.components.DoctorPatientMedicalAlertBanner
+import com.example.ui.components.NotificationStatusCard
 import com.example.ui.components.PasswordOutlinedTextField
+import com.example.ui.components.PermanentMedicalLogSection
 import com.example.ui.patient.MedicalRecordTimelineCard
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
@@ -312,6 +315,14 @@ fun DoctorDashboardScreen(
                         Text(bi(isEn, "خروج", "Sign Out"))
                     }
                 }
+            }
+
+            item {
+                NotificationStatusCard(
+                    isEn = isEn,
+                    tagPrefix = "doctor_notif",
+                    onShowMessage = onShowMessage,
+                )
             }
 
             item {
@@ -1014,12 +1025,18 @@ fun DoctorDashboardScreen(
                     (emrSlot.patientName.isNotBlank() && it.fullName == emrSlot.patientName)
             }
         }
+        val patientPermanentLogs = state.permanentLogsForPatient(
+            familyMemberId = emrSlot.familyMemberId,
+            patientName = emrSlot.patientName,
+            patientPhone = emrSlot.patientPhone,
+        )
         PatientEmrViewerDialog(
             patientName = emrSlot.patientName,
             patientMember = emrPatientMember,
             isAnalyzingAi = emrPatientMember?.id?.let { it in state.analyzingAiMemberIds } == true,
             brandConfig = state.brandConfig,
             records = patientRecords,
+            permanentLogs = patientPermanentLogs,
             isEn = isEn,
             onRefreshAiSummary = { emrPatientMember?.id?.let(onRefreshAiSummary) },
             onPreviewAttachment = onPreviewAttachment,
@@ -1388,6 +1405,7 @@ private fun PatientEmrViewerDialog(
     isAnalyzingAi: Boolean,
     brandConfig: com.example.config.PlatformBrandConfig,
     records: List<MedicalRecordEntity>,
+    permanentLogs: List<PermanentMedicalLogEntity>,
     isEn: Boolean = false,
     onRefreshAiSummary: () -> Unit,
     onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
@@ -1447,6 +1465,13 @@ private fun PatientEmrViewerDialog(
                             member = patientMember,
                             isAnalyzing = isAnalyzingAi,
                             onRefreshAiSummary = if (patientMember != null) onRefreshAiSummary else null,
+                            isEn = isEn,
+                        )
+                    }
+                    item(key = "emr_permanent_log") {
+                        PermanentMedicalLogSection(
+                            patientName = patientName,
+                            logs = permanentLogs,
                             isEn = isEn,
                         )
                     }

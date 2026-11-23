@@ -18,6 +18,8 @@ import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
 import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
+import com.example.data.local.PermanentLogEventType
+import com.example.data.local.PermanentMedicalLogEntity
 import com.example.data.local.SlotStatus
 import com.example.util.ChronicConditionsCatalog
 import kotlinx.coroutines.Dispatchers
@@ -312,12 +314,24 @@ object FirestoreCloudSyncService {
         put("firebaseAppId", brand.firebaseAppId.ifBlank { AppConfig.defaultBrand.firebaseAppId })
         put("firebaseVapidKey", brand.firebaseVapidKey.ifBlank { AppConfig.defaultBrand.firebaseVapidKey })
         put("workerUrl", brand.workerUrl.ifBlank { AppConfig.defaultBrand.workerUrl })
+        put("defaultDriveWebAppUrl", brand.defaultDriveWebAppUrl)
+        put("fileRetentionDays", normalizeRetentionDays(brand.fileRetentionDays))
+    }
+
+    fun normalizeRetentionDays(raw: Int): Int = when (raw) {
+        90, 180, 360 -> raw
+        else -> 360
     }
 
     fun settingsFromJson(remote: JSONObject, current: PlatformBrandConfig): PlatformBrandConfig {
         val def = AppConfig.defaultBrand
         fun str(key: String, fallback: String): String =
             remote.optString(key, "").trim().ifEmpty { fallback }
+        val remoteRetention = if (remote.has("fileRetentionDays")) {
+            normalizeRetentionDays(remote.optInt("fileRetentionDays", current.fileRetentionDays))
+        } else {
+            normalizeRetentionDays(current.fileRetentionDays)
+        }
         return current.copy(
             platformNameAr = str("platformNameAr", current.platformNameAr),
             villageNameAr = str("villageNameAr", current.villageNameAr),
@@ -339,6 +353,8 @@ object FirestoreCloudSyncService {
             firebaseAppId = str("firebaseAppId", def.firebaseAppId),
             firebaseVapidKey = str("firebaseVapidKey", def.firebaseVapidKey),
             workerUrl = str("workerUrl", def.workerUrl),
+            defaultDriveWebAppUrl = if (remote.has("defaultDriveWebAppUrl")) remote.optString("defaultDriveWebAppUrl", "").trim() else current.defaultDriveWebAppUrl,
+            fileRetentionDays = remoteRetention,
         )
     }
 
@@ -365,6 +381,7 @@ object FirestoreCloudSyncService {
         put("username", d.username)
         put("password", d.password)
         put("chatEnabled", d.chatEnabled)
+        put("driveWebAppUrl", d.driveWebAppUrl)
     }
 
     fun doctorFromJson(j: JSONObject): ClinicDoctorEntity? {
@@ -400,6 +417,7 @@ object FirestoreCloudSyncService {
             locationLabelEn = j.optString("locationLabelEn", ""),
             additionalSpecialties = addSpec,
             chatEnabled = if (j.has("chatEnabled")) j.optBoolean("chatEnabled", true) else true,
+            driveWebAppUrl = j.optString("driveWebAppUrl", "").trim(),
         )
     }
 
@@ -568,6 +586,7 @@ object FirestoreCloudSyncService {
         put("notesEn", r.notesEn)
         put("aiReportAr", r.aiReportAr)
         put("aiReportEn", r.aiReportEn)
+        put("driveFileUrl", r.driveFileUrl)
     }
 
     fun recordFromJson(j: JSONObject, existingLocalAttachmentPath: String = ""): MedicalRecordEntity? {
@@ -596,6 +615,47 @@ object FirestoreCloudSyncService {
             notesEn = j.optString("notesEn", ""),
             aiReportAr = j.optString("aiReportAr", ""),
             aiReportEn = j.optString("aiReportEn", ""),
+            driveFileUrl = j.optString("driveFileUrl", "").trim(),
+        )
+    }
+
+    fun permanentLogToJson(l: PermanentMedicalLogEntity): JSONObject = JSONObject().apply {
+        put("id", l.id)
+        put("familyMemberId", l.familyMemberId)
+        put("patientName", l.patientName)
+        put("patientPhone", l.patientPhone)
+        put("sourceRecordId", l.sourceRecordId)
+        put("eventType", l.eventType)
+        put("eventTimestampMillis", l.eventTimestampMillis)
+        put("eventDateTimeLabel", l.eventDateTimeLabel)
+        put("providerName", l.providerName)
+        put("specialtyOrCategory", l.specialtyOrCategory)
+        put("title", l.title)
+        put("narrativeAr", l.narrativeAr)
+        put("narrativeEn", l.narrativeEn)
+        put("isAiGenerated", l.isAiGenerated)
+    }
+
+    fun permanentLogFromJson(j: JSONObject): PermanentMedicalLogEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val narrativeAr = j.optString("narrativeAr", "").trim()
+        val narrativeEn = j.optString("narrativeEn", "").trim()
+        if (id.isEmpty() || (narrativeAr.isEmpty() && narrativeEn.isEmpty())) return null
+        return PermanentMedicalLogEntity(
+            id = id,
+            familyMemberId = j.optString("familyMemberId", ""),
+            patientName = j.optString("patientName", ""),
+            patientPhone = j.optString("patientPhone", ""),
+            sourceRecordId = j.optString("sourceRecordId", ""),
+            eventType = j.optString("eventType", PermanentLogEventType.CLINIC_VISIT).ifBlank { PermanentLogEventType.CLINIC_VISIT },
+            eventTimestampMillis = j.optLong("eventTimestampMillis", System.currentTimeMillis()),
+            eventDateTimeLabel = j.optString("eventDateTimeLabel", ""),
+            providerName = j.optString("providerName", ""),
+            specialtyOrCategory = j.optString("specialtyOrCategory", ""),
+            title = j.optString("title", ""),
+            narrativeAr = narrativeAr,
+            narrativeEn = narrativeEn,
+            isAiGenerated = j.optBoolean("isAiGenerated", false),
         )
     }
 
