@@ -138,6 +138,7 @@ class TebRepository(
     private val appLanguageKey = stringPreferencesKey("app_language")
     private val seededRealDoctorsKey = booleanPreferencesKey("seeded_real_doctors_v1")
     private val adminLoggedInKey = booleanPreferencesKey("admin_logged_in_v1")
+    private val migratedAdminPin132027Key = booleanPreferencesKey("migrated_admin_pin_132027_v1")
 
     val isAdminLoggedInFlow: Flow<Boolean> = appContext.tebDataStore.data
         .map { prefs -> prefs[adminLoggedInKey] ?: false }
@@ -965,6 +966,7 @@ class TebRepository(
         clinicNameEn: String = "",
         locationLabelEn: String = "",
         driveWebAppUrl: String = "",
+        secondaryDriveWebAppUrl: String = "",
     ): Result<ClinicDoctorEntity> {
         val cleanUser = username.trim()
         val cleanName = doctorName.trim()
@@ -1006,6 +1008,7 @@ class TebRepository(
             locationLabelEn = locationLabelEn.trim(),
             additionalSpecialties = additionalSpecialties.trim(),
             driveWebAppUrl = driveWebAppUrl.trim(),
+            secondaryDriveWebAppUrl = secondaryDriveWebAppUrl.trim(),
         )
         dao.insertDoctor(doctor)
         val initialSlots = buildSlotsForDoctor(doctor)
@@ -1037,6 +1040,7 @@ class TebRepository(
         clinicNameEn: String = "",
         locationLabelEn: String = "",
         driveWebAppUrl: String = "",
+        secondaryDriveWebAppUrl: String = "",
     ): Result<ClinicDoctorEntity> {
         val existingDoc = dao.getDoctorById(doctorId)
             ?: return Result.failure(IllegalStateException("الدكتور غير موجود"))
@@ -1077,6 +1081,7 @@ class TebRepository(
             locationLabelEn = locationLabelEn.trim().ifEmpty { existingDoc.locationLabelEn },
             additionalSpecialties = additionalSpecialties.trim(),
             driveWebAppUrl = driveWebAppUrl.trim(),
+            secondaryDriveWebAppUrl = secondaryDriveWebAppUrl.trim(),
         )
         dao.updateDoctor(updated)
         pushDocAsync("doctors", updated.id) { FirestoreCloudSyncService.doctorToJson(updated) }
@@ -1132,6 +1137,15 @@ class TebRepository(
         seedMutex.withLock {
             val existingAccounts = dao.getAllAccountsOnce()
             val prefs = appContext.tebDataStore.data.first()
+            if (prefs[migratedAdminPin132027Key] != true) {
+                appContext.tebDataStore.edit { editPrefs ->
+                    val cachedPin = editPrefs[adminPinKey]?.trim().orEmpty()
+                    if (cachedPin.isEmpty() || cachedPin == "202600") {
+                        editPrefs.remove(adminPinKey)
+                    }
+                    editPrefs[migratedAdminPin132027Key] = true
+                }
+            }
             if (prefs[seededRealDoctorsKey] != true) {
                 val baselineDoctors = listOf(
                     ClinicDoctorEntity(
@@ -2085,9 +2099,12 @@ class TebRepository(
         chronicConditions: List<String>,
         drugAllergies: String,
         otherChronicNotes: String,
+        nationalId: String? = null,
     ): Result<FamilyMemberEntity> {
         val existing = dao.getFamilyMemberById(memberId)
             ?: return Result.failure(IllegalStateException("الملف الشخصي غير موجود"))
+        val cleanNationalId = nationalId?.let { toAsciiDigits(it).filter { c -> c in '0'..'9' }.take(14) }
+            ?: existing.nationalId
         val updated = existing.copy(
             age = age.coerceIn(0, 120),
             weightKg = weightKg.coerceIn(0.0, 400.0),
@@ -2096,6 +2113,7 @@ class TebRepository(
             chronicConditions = ChronicConditionsCatalog.encodeKeys(chronicConditions),
             drugAllergies = drugAllergies.trim(),
             otherChronicNotes = otherChronicNotes.trim(),
+            nationalId = cleanNationalId,
         )
         dao.updateFamilyMember(updated)
         pushDocAsync("family_members", updated.id) { FirestoreCloudSyncService.familyMemberToJson(updated) }
@@ -2407,6 +2425,7 @@ class TebRepository(
             relation = "نفسي (صاحب الحساب)",
             age = 30,
             phone = account.phone,
+            nationalId = account.nationalId,
         )
         dao.insertFamilyMember(selfMember)
         pushDocAsync("accounts", account.id) { FirestoreCloudSyncService.accountToJson(account) }
@@ -3048,9 +3067,9 @@ class TebRepository(
             )
         }
         val updatedReq = dao.getAccountById(requester.id)
-        if (updatedReq != null) pushDocAsync("patient_accounts", updatedReq.id) { FirestoreCloudSyncService.accountToJson(updatedReq) }
+        if (updatedReq != null) pushDocAsync("accounts", updatedReq.id) { FirestoreCloudSyncService.accountToJson(updatedReq) }
         val updatedTarget = dao.getAccountById(target.id)
-        if (updatedTarget != null) pushDocAsync("patient_accounts", updatedTarget.id) { FirestoreCloudSyncService.accountToJson(updatedTarget) }
+        if (updatedTarget != null) pushDocAsync("accounts", updatedTarget.id) { FirestoreCloudSyncService.accountToJson(updatedTarget) }
         return Result.success(Unit)
     }
 
@@ -3075,7 +3094,7 @@ class TebRepository(
         dao.setSpouseViewPermission(accountId, allow)
         val updated = dao.getAccountById(accountId)
         if (updated != null) {
-            pushDocAsync("patient_accounts", updated.id) { FirestoreCloudSyncService.accountToJson(updated) }
+            pushDocAsync("accounts", updated.id) { FirestoreCloudSyncService.accountToJson(updated) }
         }
         return Result.success(Unit)
     }
@@ -3118,15 +3137,15 @@ class TebRepository(
         val monthWeb = dao.countVisitorHitsByPlatformSince("WEB", startOfMonth)
 
         return VisitorStats(
-            todayTotal = todayTotal.coerceAtLeast(1),
-            todayApk = todayApk.coerceAtLeast(1),
+            todayTotal = todayTotal,
+            todayApk = todayApk,
             todayWeb = todayWeb,
-            weekTotal = weekTotal.coerceAtLeast(todayTotal.coerceAtLeast(1)),
-            weekApk = weekApk.coerceAtLeast(todayApk.coerceAtLeast(1)),
-            weekWeb = weekWeb,
-            monthTotal = monthTotal.coerceAtLeast(weekTotal.coerceAtLeast(1)),
-            monthApk = monthApk.coerceAtLeast(weekApk.coerceAtLeast(1)),
-            monthWeb = monthWeb,
+            weekTotal = weekTotal.coerceAtLeast(todayTotal),
+            weekApk = weekApk.coerceAtLeast(todayApk),
+            weekWeb = weekWeb.coerceAtLeast(todayWeb),
+            monthTotal = monthTotal.coerceAtLeast(weekTotal),
+            monthApk = monthApk.coerceAtLeast(weekApk),
+            monthWeb = monthWeb.coerceAtLeast(weekWeb),
         )
     }
 

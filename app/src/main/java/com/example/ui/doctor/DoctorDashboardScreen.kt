@@ -1,5 +1,9 @@
 package com.example.ui.doctor
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -245,12 +249,20 @@ fun DoctorDashboardScreen(
     onToggleFavoriteMed: (doctorId: String, medicationId: String) -> Unit,
     onSearchPatientsForActivation: (phoneQuery: String) -> Unit,
     onActivatePatientByClinic: (accountId: String) -> Unit,
+    onSubmitFamilyLinkRequest: (
+        requesterAccountId: String,
+        targetPhone: String,
+        marriageUrl: String,
+        idFrontUrl: String,
+        idBackUrl: String,
+    ) -> Unit = { _, _, _, _, _ -> },
     onRefreshAiSummary: (memberId: String) -> Unit = {},
     onOpenChatThread: (DirectChatTarget) -> Unit = {},
     onSendPatientAlert: (patientAccountId: String, patientName: String, message: String, onSent: () -> Unit) -> Unit = { _, _, _, _ -> },
     onPreviewAttachment: (AttachmentPreviewTarget) -> Unit,
     onShowMessage: (String) -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val isEn = state.isEn
     val activeDoctor = state.loggedInDoctor ?: return
     val slots = remember(state.allSlots, activeDoctor.id) {
@@ -272,6 +284,7 @@ fun DoctorDashboardScreen(
     var slotForPrescription by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForEmrView by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var showScheduleDialog by remember { mutableStateOf(false) }
+    var linkRequestAccount by remember { mutableStateOf<com.example.data.local.PatientAccountEntity?>(null) }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -806,6 +819,22 @@ fun DoctorDashboardScreen(
                                         Text(bi(isEn, "✓ تفعيل حساب المريض فوراً", "✓ Activate Patient Account Now"))
                                     }
                                 }
+                                if (acc.linkedSpouseAccountId.isBlank()) {
+                                    OutlinedButton(
+                                        onClick = { linkRequestAccount = acc },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(44.dp),
+                                    ) {
+                                        Text(bi(isEn, "👨‍👩‍👧‍👦 رفع طلب ربط أسرة للإدارة", "👨‍👩‍👧‍👦 Submit Family Link Request to Admin"))
+                                    }
+                                } else {
+                                    Text(
+                                        text = bi(isEn, "✓ مرتبط عائلياً مع: ${acc.linkedSpouseName}", "✓ Linked with: ${acc.linkedSpouseName}"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = SlotAvailableText,
+                                    )
+                                }
                             }
                         }
                     }
@@ -1058,6 +1087,97 @@ fun DoctorDashboardScreen(
                 slotForReschedule = null
             },
             onDismiss = { slotForReschedule = null },
+        )
+    }
+
+    val linkTargetAcc = linkRequestAccount
+    if (linkTargetAcc != null) {
+        var clinicSpousePhone by remember(linkTargetAcc.id) { mutableStateOf("") }
+        var clinicProofMarriage by remember(linkTargetAcc.id) { mutableStateOf("") }
+        var clinicProofFront by remember(linkTargetAcc.id) { mutableStateOf("") }
+        var clinicProofSlot by remember { mutableIntStateOf(0) }
+
+        val clinicProofPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.PickVisualMedia(),
+        ) { uri ->
+            if (uri != null) {
+                val saved = com.example.util.ImageStorageHelper.persistDocumentOrImageUri(context, uri)
+                val encoded = saved?.path?.let { com.example.util.ImageStorageHelper.encodeImageFileToCompactDataUri(it) }.orEmpty()
+                val res = encoded.ifBlank { saved?.path.orEmpty() }
+                if (res.isNotBlank()) {
+                    if (clinicProofSlot == 0) clinicProofMarriage = res else clinicProofFront = res
+                }
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { linkRequestAccount = null },
+            title = { Text(bi(isEn, "رفع طلب ربط أسرة للإدارة", "Submit Family Link Request")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = bi(
+                            isEn,
+                            "الحساب: ${linkTargetAcc.fullName} (${linkTargetAcc.phone}). المراجعة والاعتماد النهائي تتم من المدير العام.",
+                            "Account: ${linkTargetAcc.fullName} (${linkTargetAcc.phone}). Final approval is done by Super Admin.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = clinicSpousePhone,
+                        onValueChange = { clinicSpousePhone = it.filter { ch -> ch.isDigit() } },
+                        label = { Text(bi(isEn, "رقم هاتف الزوج / الزوجة *", "Spouse Phone *")) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                clinicProofSlot = 0
+                                clinicProofPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(if (clinicProofMarriage.isNotBlank()) "✓ القسيمة" else "قسيمة الزواج")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                clinicProofSlot = 1
+                                clinicProofPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(if (clinicProofFront.isNotBlank()) "✓ البطاقة" else "صورة البطاقة")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (clinicSpousePhone.length < 6) {
+                            onShowMessage(bi(isEn, "يرجى إدخال رقم هاتف الزوج/الزوجة", "Enter spouse phone"))
+                        } else {
+                            onSubmitFamilyLinkRequest(
+                                linkTargetAcc.id,
+                                clinicSpousePhone,
+                                clinicProofMarriage,
+                                clinicProofFront,
+                                "",
+                            )
+                            linkRequestAccount = null
+                        }
+                    },
+                ) {
+                    Text(bi(isEn, "إرسال للإدارة", "Send to Admin"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { linkRequestAccount = null }) {
+                    Text(bi(isEn, "إلغاء", "Cancel"))
+                }
+            },
         )
     }
 }

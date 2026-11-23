@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -85,6 +86,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -120,6 +122,13 @@ private data class ExternalMedDraft(
 fun MedicalFileScreen(
     state: TebUiState,
     onSelectFamilyMember: (String) -> Unit,
+    onAddFamilyMember: (
+        name: String,
+        relation: String,
+        age: Int,
+        phone: String,
+        nationalId: String,
+    ) -> Unit = { _, _, _, _, _ -> },
     onOpenAccountDialog: () -> Unit,
     onSaveBioAndChronics: (
         memberId: String,
@@ -130,6 +139,7 @@ fun MedicalFileScreen(
         chronicKeys: List<String>,
         drugAllergies: String,
         otherChronicNotes: String,
+        nationalId: String,
         onSaved: () -> Unit,
     ) -> Unit,
     onRefreshAiSummary: (memberId: String) -> Unit,
@@ -170,6 +180,7 @@ fun MedicalFileScreen(
     var showUploadDialog by remember { mutableStateOf(false) }
     var showExternalVisitDialog by remember { mutableStateOf(false) }
     var showEditBioDialog by remember { mutableStateOf(false) }
+    var showAddFamilyMemberDialog by remember { mutableStateOf(false) }
     var pendingFilePath by remember { mutableStateOf("") }
     var pendingFileMime by remember { mutableStateOf("image/jpeg") }
     var pendingFileName by remember { mutableStateOf("") }
@@ -305,18 +316,55 @@ fun MedicalFileScreen(
                 }
             } else {
                 item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(state.familyMembers, key = { it.id }) { member ->
-                            val selected = member.id == activeMember.id
-                            FilterChip(
-                                selected = selected,
-                                onClick = { onSelectFamilyMember(member.id) },
-                                label = { Text("${member.fullName} (${member.relation.substringBefore(" ")})") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                ),
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = bi(isEn, "ملفات أفراد الأسرة:", "Family Profiles:"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary,
                             )
+                            Button(
+                                onClick = { showAddFamilyMemberDialog = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF059669),
+                                    contentColor = Color.White,
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier.testTag("medical_file_add_child_button"),
+                            ) {
+                                Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = bi(isEn, "➕ إضافة ابن / فرد من الأسرة", "➕ Add Child / Family Member"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(state.familyMembers, key = { it.id }) { member ->
+                                val selected = member.id == activeMember.id
+                                val isShared = member.accountId != state.activeAccount.id
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { onSelectFamilyMember(member.id) },
+                                    label = {
+                                        Text(
+                                            "${member.fullName} (${member.relation.substringBefore(" ")})${if (isShared) " 👨‍👩‍👧‍👦" else ""}"
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = Color.White,
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -326,6 +374,7 @@ fun MedicalFileScreen(
                     PatientBioOverviewCard(
                         member = activeMember,
                         isEn = isEn,
+                        isSharedFamilyMember = activeMember.accountId != state.activeAccount.id,
                         onEditClick = { showEditBioDialog = true },
                     )
                 }
@@ -625,7 +674,7 @@ fun MedicalFileScreen(
         EditPatientBioDialog(
             member = activeMember,
             isEn = isEn,
-            onSave = { age, weightKg, heightCm, bloodType, chronicKeys, drugAllergies, otherNotes ->
+            onSave = { age, weightKg, heightCm, bloodType, chronicKeys, drugAllergies, otherNotes, nationalId ->
                 onSaveBioAndChronics(
                     activeMember.id,
                     age,
@@ -635,11 +684,123 @@ fun MedicalFileScreen(
                     chronicKeys,
                     drugAllergies,
                     otherNotes,
+                    nationalId,
                 ) {
                     showEditBioDialog = false
                 }
             },
             onDismiss = { showEditBioDialog = false },
+        )
+    }
+
+    if (showAddFamilyMemberDialog && state.activeAccount != null) {
+        var childName by remember { mutableStateOf("") }
+        var childRelation by remember { mutableStateOf(bi(isEn, "الابن", "Son")) }
+        var childAge by remember { mutableStateOf("") }
+        var childNationalId by remember { mutableStateOf("") }
+        var childPhone by remember { mutableStateOf(state.activeAccount.phone) }
+
+        AlertDialog(
+            onDismissRequest = { showAddFamilyMemberDialog = false },
+            title = {
+                Text(bi(isEn, "➕ إضافة ابن / فرد من الأسرة", "➕ Add Child / Family Member"))
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = childName,
+                        onValueChange = { childName = it },
+                        label = { Text(bi(isEn, "الاسم الكامل *", "Full Name *")) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("quick_add_member_name"),
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(
+                            listOf(
+                                bi(isEn, "الابن", "Son"),
+                                bi(isEn, "الابنة", "Daughter"),
+                                bi(isEn, "الوالد", "Father"),
+                                bi(isEn, "الوالدة", "Mother"),
+                            )
+                        ) { relOpt ->
+                            FilterChip(
+                                selected = childRelation == relOpt,
+                                onClick = { childRelation = relOpt },
+                                label = { Text(relOpt) },
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = childRelation,
+                            onValueChange = { childRelation = it },
+                            label = { Text(bi(isEn, "صلة القرابة", "Relation")) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1.3f),
+                        )
+                        OutlinedTextField(
+                            value = childAge,
+                            onValueChange = { childAge = it.filter { ch -> ch.isDigit() }.take(3) },
+                            label = { Text(bi(isEn, "العمر", "Age")) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(0.8f),
+                        )
+                    }
+                    OutlinedTextField(
+                        value = childNationalId,
+                        onValueChange = { childNationalId = it.filter { ch -> ch.isDigit() }.take(14) },
+                        label = { Text(bi(isEn, "الرقم القومي / رقم شهادة الميلاد (14 رقم)", "National ID (14 digits)")) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("quick_add_member_national_id"),
+                    )
+                    OutlinedTextField(
+                        value = childPhone,
+                        onValueChange = { childPhone = it.filter { ch -> ch.isDigit() } },
+                        label = { Text(bi(isEn, "رقم الهاتف (اختياري)", "Phone (optional)")) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (childName.isBlank()) {
+                            onShowMessage(bi(isEn, "يرجى كتابة اسم الابن أو فرد الأسرة", "Please enter full name"))
+                        } else {
+                            onAddFamilyMember(
+                                childName,
+                                childRelation.ifBlank { bi(isEn, "الابن", "Son") },
+                                childAge.toIntOrNull() ?: 5,
+                                childPhone.ifBlank { state.activeAccount.phone },
+                                childNationalId,
+                            )
+                            showAddFamilyMemberDialog = false
+                        }
+                    },
+                    modifier = Modifier.testTag("quick_add_member_submit"),
+                ) {
+                    Text(bi(isEn, "إضافة للملف الطبي", "Add to Medical File"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddFamilyMemberDialog = false }) {
+                    Text(bi(isEn, "إلغاء", "Cancel"))
+                }
+            },
         )
     }
 }

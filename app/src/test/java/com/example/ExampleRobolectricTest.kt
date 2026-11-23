@@ -372,8 +372,12 @@ class ExampleRobolectricTest {
         assertTrue(repository.verifyAdminPin("111111", t0).isFailure)
         assertTrue(repository.verifyAdminPin("222222", t0 + 1000).isFailure)
         assertTrue(repository.verifyAdminPin("333333", t0 + 2000).isFailure)
-        assertTrue(repository.verifyAdminPin("202600", t0 + 5 * 60_000L).isFailure)
-        assertTrue(repository.verifyAdminPin("202600", t0 + 16 * 60_000L).isSuccess)
+        assertTrue(repository.verifyAdminPin("132027", t0 + 5 * 60_000L).isFailure)
+        assertTrue(repository.verifyAdminPin("202600", t0 + 16 * 60_000L).isFailure)
+        assertTrue(repository.verifyAdminPin("132027", t0 + 16 * 60_000L).isSuccess)
+        assertTrue(repository.isAdminLoggedInFlow.first())
+        repository.setAdminLoggedIn(false)
+        assertFalse(repository.isAdminLoggedInFlow.first())
 
         // Phone blocking cancels existing booking and blocks new bookings
         val doc = repository.addDoctorByAdmin(
@@ -1205,7 +1209,7 @@ class ExampleRobolectricTest {
             homeAnnouncementAr = "",
             apkUrl = AppConfig.defaultBrand.apkDownloadUrl,
             medsApiUrl = "",
-            adminPin = "202600",
+            adminPin = "132027",
             defaultDriveWebAppUrl = "https://script.google.com/macros/s/platform_default/exec",
             fileRetentionDays = 90,
         )
@@ -1319,6 +1323,104 @@ class ExampleRobolectricTest {
         assertEquals(4, allLogsAfterCleanupAndDelete.size)
         assertTrue(allLogsAfterCleanupAndDelete.any { it.sourceRecordId == uploadRec.id && it.narrativeAr.contains("خلايا الصديد") })
         assertTrue(allLogsAfterCleanupAndDelete.any { it.sourceRecordId == recentRec.id })
+    }
+
+    @Test
+    fun adminPin132027SessionPersistenceDualDriveFamilyLinkingAndRealVisitorStatsWork() = runBlocking {
+        repository.ensureSeeded()
+
+        // 1. Default PIN 132027 + Persistent Session + Manual Logout
+        assertFalse(repository.isAdminLoggedInFlow.first())
+        assertTrue(repository.verifyAdminPin("202600").isFailure)
+        assertTrue(repository.verifyAdminPin("132027").isSuccess)
+        assertTrue(repository.isAdminLoggedInFlow.first())
+        repository.setAdminLoggedIn(false)
+        assertFalse(repository.isAdminLoggedInFlow.first())
+
+        // 2. Dual Google Drive URL resolution order (Primary -> Secondary -> Platform Fallback)
+        val candidates = com.example.data.remote.GoogleDriveStorageHelper.resolveCandidateUrls(
+            primaryClinicUrl = "https://script.google.com/macros/s/clinic_1/exec",
+            secondaryClinicUrl = "https://script.google.com/macros/s/clinic_2/exec",
+            platformFallbackUrl = "https://script.google.com/macros/s/platform_fb/exec",
+        )
+        assertEquals(
+            listOf(
+                "https://script.google.com/macros/s/clinic_1/exec",
+                "https://script.google.com/macros/s/clinic_2/exec",
+                "https://script.google.com/macros/s/platform_fb/exec",
+            ),
+            candidates
+        )
+        val firstDoc = repository.doctorsFlow.first().first()
+        assertTrue(
+            repository.updateDoctorDriveAccounts(
+                doctorId = firstDoc.id,
+                primaryUrl = "https://script.google.com/macros/s/clinic_p/exec",
+                secondaryUrl = "https://script.google.com/macros/s/clinic_s/exec",
+            ).isSuccess
+        )
+        val updatedDoc = repository.doctorsFlow.first().first { it.id == firstDoc.id }
+        assertEquals("https://script.google.com/macros/s/clinic_p/exec", updatedDoc.driveWebAppUrl)
+        assertEquals("https://script.google.com/macros/s/clinic_s/exec", updatedDoc.secondaryDriveWebAppUrl)
+
+        // 3. Family Spouse Linking, Proof Approval & Strict Personal Record Privacy Switch
+        val husband = repository.registerPatientAccount(
+            fullName = "أحمد محمود علي",
+            phone = "01011223344",
+            nationalId = "29001011234567",
+            password = "1234",
+        ).getOrThrow()
+        val wife = repository.registerPatientAccount(
+            fullName = "منى حسن إبراهيم",
+            phone = "01099887766",
+            nationalId = "29202021234567",
+            password = "5678",
+        ).getOrThrow()
+        val child = repository.addFamilyMember(
+            accountId = husband.id,
+            fullName = "يوسف أحمد محمود",
+            relation = "الابن",
+            age = 7,
+            phone = husband.phone,
+            nationalId = "31905051234567",
+        )
+        assertEquals("31905051234567", child.nationalId)
+
+        val linkReq = repository.submitFamilyLinkRequest(
+            requesterAccountId = wife.id,
+            targetPhone = husband.phone,
+            relation = "SPOUSE",
+            proofMarriageContractUrl = "data:image/jpeg;base64,marriage",
+            proofNationalIdFrontUrl = "data:image/jpeg;base64,front",
+            proofNationalIdBackUrl = "data:image/jpeg;base64,back",
+        ).getOrThrow()
+        assertEquals(com.example.data.local.FamilyLinkStatus.PENDING, linkReq.status)
+
+        assertTrue(repository.approveFamilyLinkRequest(linkReq.id).isSuccess)
+
+        val wifeVisibleBeforeOptIn = repository.observeFamilyMembers(wife.id).first()
+        assertTrue(wifeVisibleBeforeOptIn.any { it.id == child.id })
+        assertFalse(wifeVisibleBeforeOptIn.any { it.accountId == husband.id && it.relation.contains("نفسي") })
+
+        assertTrue(repository.setSpouseViewPermission(husband.id, true).isSuccess)
+        val wifeVisibleAfterOptIn = repository.observeFamilyMembers(wife.id).first()
+        assertTrue(wifeVisibleAfterOptIn.any { it.accountId == husband.id && it.relation.contains("نفسي") })
+
+        // 4. Real Visitor Stats (APK vs Web, 0 when empty)
+        val emptyStats = repository.getVisitorStats()
+        assertEquals(0, emptyStats.todayTotal)
+        assertEquals(0, emptyStats.todayApk)
+        assertEquals(0, emptyStats.todayWeb)
+
+        repository.recordVisitorHit("APK")
+        repository.recordVisitorHit("APK")
+        repository.recordVisitorHit("WEB")
+        val populatedStats = repository.getVisitorStats()
+        assertEquals(3, populatedStats.todayTotal)
+        assertEquals(2, populatedStats.todayApk)
+        assertEquals(1, populatedStats.todayWeb)
+        assertEquals(2, populatedStats.weekApk)
+        assertEquals(1, populatedStats.monthWeb)
     }
 }
 

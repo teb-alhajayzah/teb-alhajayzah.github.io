@@ -419,4 +419,53 @@ object ImageStorageHelper {
             0
         }
     }
+
+    fun encodeImageFileToCompactDataUri(filePath: String, maxSidePx: Int = 720): String {
+        return try {
+            val file = File(filePath)
+            if (!file.exists() || !file.isFile) return ""
+            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, opts)
+            if (opts.outWidth <= 0 || opts.outHeight <= 0) return ""
+            var sampleSize = 1
+            val maxRaw = maxOf(opts.outWidth, opts.outHeight)
+            while ((maxRaw / sampleSize) > maxSidePx * 2) sampleSize *= 2
+            val bmp = BitmapFactory.decodeFile(
+                file.absolutePath,
+                BitmapFactory.Options().apply { inSampleSize = sampleSize },
+            ) ?: return ""
+            val curMax = maxOf(bmp.width, bmp.height)
+            val scaled = if (curMax > maxSidePx) {
+                val scale = maxSidePx.toFloat() / curMax.toFloat()
+                Bitmap.createScaledBitmap(
+                    bmp,
+                    (bmp.width * scale).toInt().coerceAtLeast(1),
+                    (bmp.height * scale).toInt().coerceAtLeast(1),
+                    true,
+                )
+            } else {
+                bmp
+            }
+            val baos = java.io.ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 65, baos)
+            if (scaled !== bmp) scaled.recycle()
+            bmp.recycle()
+            val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+            "data:image/jpeg;base64,$b64"
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    fun decodeDataUriToBitmap(dataUri: String): Bitmap? {
+        return try {
+            if (!dataUri.startsWith("data:image", ignoreCase = true)) return null
+            val b64Part = dataUri.substringAfter("base64,", "")
+            if (b64Part.isBlank()) return null
+            val bytes = Base64.decode(b64Part, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

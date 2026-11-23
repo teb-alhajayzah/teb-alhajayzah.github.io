@@ -126,6 +126,8 @@ fun PatientHomeScreen(
     onOpenOtpAccountDialog: () -> Unit,
     onChatWithClinic: (String) -> Unit = {},
     onCheckAppUpdate: () -> Unit = {},
+    onOpenPrivacyPolicy: () -> Unit = {},
+    onOpenTermsOfUse: () -> Unit = {},
     onShowMessage: (String) -> Unit,
 ) {
     var slotToReschedule by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
@@ -758,6 +760,8 @@ fun PatientHomeScreen(
                         }
                     },
                     onCheckAppUpdate = onCheckAppUpdate,
+                    onOpenPrivacyPolicy = onOpenPrivacyPolicy,
+                    onOpenTermsOfUse = onOpenTermsOfUse,
                     onSharePlatform = {
                         val shareText = bi(
                             isEn,
@@ -883,6 +887,8 @@ private fun FooterContactAndRightsSection(
     onWhatsAppClick: () -> Unit,
     onCallClick: () -> Unit,
     onCheckAppUpdate: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit = {},
+    onOpenTermsOfUse: () -> Unit = {},
     onSharePlatform: () -> Unit = {},
 ) {
     Column(
@@ -1037,6 +1043,36 @@ private fun FooterContactAndRightsSection(
                         fontWeight = FontWeight.Bold,
                     )
                 }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(
+                onClick = onOpenPrivacyPolicy,
+                modifier = Modifier.testTag("footer_privacy_policy_button"),
+            ) {
+                Text(
+                    text = bi(isEn, "📜 سياسة الخصوصية", "📜 Privacy Policy"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TealPrimary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(
+                onClick = onOpenTermsOfUse,
+                modifier = Modifier.testTag("footer_terms_button"),
+            ) {
+                Text(
+                    text = bi(isEn, "⚖️ اتفاقية وشروط الاستخدام", "⚖️ Terms of Use"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TealPrimary,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
 

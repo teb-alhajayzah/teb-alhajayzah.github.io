@@ -335,6 +335,13 @@ object FirestoreCloudSyncService {
         } else {
             normalizeRetentionDays(current.fileRetentionDays)
         }
+        val rawRemotePin = remote.optString("adminPin", "").trim()
+        val resolvedAdminPin = when {
+            rawRemotePin.isEmpty() || rawRemotePin == "202600" -> {
+                if (current.adminPin.isBlank() || current.adminPin == "202600") def.adminPin else current.adminPin
+            }
+            else -> rawRemotePin
+        }
         return current.copy(
             platformNameAr = str("platformNameAr", current.platformNameAr),
             villageNameAr = str("villageNameAr", current.villageNameAr),
@@ -343,7 +350,7 @@ object FirestoreCloudSyncService {
             homeAnnouncementAr = if (remote.has("homeAnnouncementAr")) remote.optString("homeAnnouncementAr", "") else current.homeAnnouncementAr,
             apkDownloadUrl = str("apkDownloadUrl", current.apkDownloadUrl),
             medicationsApiUrl = if (remote.has("medicationsApiUrl")) remote.optString("medicationsApiUrl", "") else current.medicationsApiUrl,
-            adminPin = str("adminPin", current.adminPin),
+            adminPin = resolvedAdminPin,
             adminUsername = str("adminUsername", current.adminUsername),
             adminPassword = str("adminPassword", current.adminPassword),
             globalChatEnabled = if (remote.has("globalChatEnabled")) remote.optBoolean("globalChatEnabled", current.globalChatEnabled) else current.globalChatEnabled,

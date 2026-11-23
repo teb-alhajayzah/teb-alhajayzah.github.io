@@ -80,7 +80,9 @@ import com.example.ui.components.AttachmentPreviewTarget
 import com.example.ui.components.DirectChatDialog
 import com.example.ui.components.DirectChatTarget
 import com.example.ui.components.FullImagePreviewDialog
+import com.example.ui.components.LegalModalType
 import com.example.ui.components.NotificationsDialog
+import com.example.ui.components.PrivacyAndTermsDialog
 import com.example.ui.components.TebTopHeader
 import com.example.ui.doctor.DoctorDashboardScreen
 import com.example.ui.doctor.DoctorLoginGateScreen
@@ -389,6 +391,8 @@ fun TebAlHajayzahAppRoot(
                                                         }
                                                     }
                                                 },
+                                                onOpenPrivacyPolicy = viewModel::openPrivacyPolicyModal,
+                                                onOpenTermsOfUse = viewModel::openTermsOfUseModal,
                                                 onShowMessage = showMessage,
                                             )
                                         }
@@ -436,8 +440,14 @@ fun TebAlHajayzahAppRoot(
                                             MedicalFileScreen(
                                                 state = state,
                                                 onSelectFamilyMember = viewModel::selectActiveFamilyMember,
+                                                onAddFamilyMember = { name, relation, age, phone, natId ->
+                                                    val activeAcc = state.activeAccount
+                                                    if (activeAcc != null) {
+                                                        viewModel.addFamilyMember(activeAcc.id, name, relation, age, phone, natId)
+                                                    }
+                                                },
                                                 onOpenAccountDialog = { showAccountDialog = true },
-                                                onSaveBioAndChronics = { memberId, age, weightKg, heightCm, bloodType, chronicKeys, drugAllergies, otherNotes, onDone ->
+                                                onSaveBioAndChronics = { memberId, age, weightKg, heightCm, bloodType, chronicKeys, drugAllergies, otherNotes, nationalId, onDone ->
                                                     viewModel.updateMemberBioAndChronic(
                                                         memberId = memberId,
                                                         age = age,
@@ -447,6 +457,7 @@ fun TebAlHajayzahAppRoot(
                                                         chronicConditions = chronicKeys,
                                                         drugAllergies = drugAllergies,
                                                         otherChronicNotes = otherNotes,
+                                                        nationalId = nationalId,
                                                         onSaved = onDone,
                                                     )
                                                 },
@@ -544,6 +555,16 @@ fun TebAlHajayzahAppRoot(
                                                         onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
                                                         onSearchPatientsForActivation = viewModel::searchPatientsForClinicActivation,
                                                          onActivatePatientByClinic = viewModel::activatePatientByClinic,
+                                                         onSubmitFamilyLinkRequest = { reqAccId, targetPhone, marriageUrl, idFrontUrl, idBackUrl ->
+                                                             viewModel.submitFamilyLinkRequest(
+                                                                 requesterAccountId = reqAccId,
+                                                                 targetPhone = targetPhone,
+                                                                 relation = "SPOUSE",
+                                                                 proofMarriageContractUrl = marriageUrl,
+                                                                 proofNationalIdFrontUrl = idFrontUrl,
+                                                                 proofNationalIdBackUrl = idBackUrl,
+                                                             )
+                                                         },
                                                          onRefreshAiSummary = viewModel::refreshAiSummaryForMember,
                                                          onOpenChatThread = { target -> activeChatTarget = target },
                                                          onSendPatientAlert = { accId, patName, msg, onSent ->
@@ -601,7 +622,7 @@ fun TebAlHajayzahAppRoot(
                                 if (state.isAdminLoggedIn) {
                                     SuperAdminDashboardScreen(
                                         state = state,
-                                        onAddDoctor = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl ->
+                                        onAddDoctor = { name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl, secondaryDriveUrl ->
                                             viewModel.addDoctorByAdmin(
                                                 doctorName = name,
                                                 specialty = spec,
@@ -621,9 +642,10 @@ fun TebAlHajayzahAppRoot(
                                                 clinicNameEn = clinicEn,
                                                 locationLabelEn = locEn,
                                                 driveWebAppUrl = driveUrl,
+                                                secondaryDriveWebAppUrl = secondaryDriveUrl,
                                             )
                                         },
-                                        onUpdateDoctor = { docId, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl ->
+                                        onUpdateDoctor = { docId, name, spec, clinic, type, loc, bio, maps, fee, startMin, endMin, dur, user, pass, extraSpecs, nameEn, clinicEn, locEn, driveUrl, secondaryDriveUrl ->
                                             viewModel.updateDoctorByAdmin(
                                                 doctorId = docId,
                                                 doctorName = name,
@@ -644,6 +666,7 @@ fun TebAlHajayzahAppRoot(
                                                 clinicNameEn = clinicEn,
                                                 locationLabelEn = locEn,
                                                 driveWebAppUrl = driveUrl,
+                                                secondaryDriveWebAppUrl = secondaryDriveUrl,
                                             )
                                         },
                                         onDeleteDoctor = viewModel::deleteDoctorByAdmin,
@@ -671,6 +694,10 @@ fun TebAlHajayzahAppRoot(
                                         onOpenChatThread = { target -> activeChatTarget = target },
                                         onDeleteMessage = viewModel::deleteDirectMessageByAdmin,
                                         onDeleteThread = viewModel::deleteChatThreadByAdmin,
+                                        onApproveFamilyLinkRequest = viewModel::approveFamilyLinkRequest,
+                                        onRejectFamilyLinkRequest = viewModel::rejectFamilyLinkRequest,
+                                        onUpdateDoctorDriveAccounts = viewModel::updateDoctorDriveAccounts,
+                                        onPreviewAttachment = { previewAttachment = it },
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
@@ -689,14 +716,15 @@ fun TebAlHajayzahAppRoot(
             activeAccount = activeAccount,
             familyMembers = state.familyMembers,
             activeMemberId = state.activeMemberId,
+            familyLinkRequests = state.familyLinkRequests,
             otpWhatsappPhone = state.brandConfig.otpWhatsappPhone,
             appVersionLabel = state.brandConfig.appVersionLabel,
             unreadSupportCount = state.unreadPatientSupportMessagesFromAdmin(),
             isEn = isEn,
             onSelectMember = viewModel::selectActiveFamilyMember,
-            onAddFamilyMember = { name, relation, age, phone ->
+            onAddFamilyMember = { name, relation, age, phone, natId ->
                 if (activeAccount != null) {
-                    viewModel.addFamilyMember(activeAccount.id, name, relation, age, phone)
+                    viewModel.addFamilyMember(activeAccount.id, name, relation, age, phone, natId)
                 }
             },
             onLogin = viewModel::loginPatient,
@@ -705,13 +733,25 @@ fun TebAlHajayzahAppRoot(
             onVerifyOtp = viewModel::verifyActiveAccountOtp,
             onRegenerateOtp = viewModel::regenerateActiveAccountOtp,
             onOpenSupportChat = openPatientSupportChat,
-            onTriggerHiddenAdmin = {
-                if (state.isAdminLoggedIn) {
-                    viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN)
-                } else {
-                    showAdminPinDialog = true
+            onSubmitFamilyLinkRequest = { targetPhone, marriageUrl, idFrontUrl, idBackUrl ->
+                if (activeAccount != null) {
+                    viewModel.submitFamilyLinkRequest(
+                        requesterAccountId = activeAccount.id,
+                        targetPhone = targetPhone,
+                        relation = "SPOUSE",
+                        proofMarriageContractUrl = marriageUrl,
+                        proofNationalIdFrontUrl = idFrontUrl,
+                        proofNationalIdBackUrl = idBackUrl,
+                    )
                 }
             },
+            onSetSpouseViewPermission = { allow ->
+                if (activeAccount != null) {
+                    viewModel.setSpouseViewPermission(activeAccount.id, allow)
+                }
+            },
+            onOpenPrivacyPolicy = viewModel::openPrivacyPolicyModal,
+            onOpenTermsOfUse = viewModel::openTermsOfUseModal,
             onShowMessage = showMessage,
             onDismiss = { showAccountDialog = false },
         )
@@ -821,6 +861,22 @@ fun TebAlHajayzahAppRoot(
             },
             onShowMessage = showMessage,
             onDismiss = { previewAttachment = null },
+        )
+    }
+
+    if (state.isPrivacyModalOpen) {
+        PrivacyAndTermsDialog(
+            type = LegalModalType.PRIVACY_POLICY,
+            isEn = isEn,
+            onDismiss = viewModel::dismissPrivacyPolicyModal,
+        )
+    }
+
+    if (state.isTermsModalOpen) {
+        PrivacyAndTermsDialog(
+            type = LegalModalType.TERMS_OF_USE,
+            isEn = isEn,
+            onDismiss = viewModel::dismissTermsOfUseModal,
         )
     }
 }

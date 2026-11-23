@@ -79,6 +79,7 @@ data class AttachmentPreviewTarget(
 fun PatientBioOverviewCard(
     member: FamilyMemberEntity,
     isEn: Boolean = false,
+    isSharedFamilyMember: Boolean = false,
     onEditClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -141,6 +142,22 @@ fun PatientBioOverviewCard(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (member.nationalId.isNotBlank()) {
+                            Text(
+                                text = bi(isEn, "الرقم القومي: ${member.nationalId}", "National ID: ${member.nationalId}"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TealPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        if (isSharedFamilyMember) {
+                            Text(
+                                text = bi(isEn, "👨‍👩‍👧‍👦 مرتبط عبر حساب الأسرة", "👨‍👩‍👧‍👦 Shared via Family Link"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF059669),
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
                     }
                 }
                 OutlinedButton(
@@ -319,9 +336,11 @@ fun EditPatientBioDialog(
         chronicConditions: List<String>,
         drugAllergies: String,
         otherChronicNotes: String,
+        nationalId: String,
     ) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var nationalIdText by remember(member.id) { mutableStateOf(member.nationalId) }
     var ageText by remember(member.id) { mutableStateOf(if (member.age > 0) member.age.toString() else "") }
     var weightText by remember(member.id) {
         mutableStateOf(
@@ -386,6 +405,17 @@ fun EditPatientBioDialog(
                         Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
                     }
                 }
+
+                OutlinedTextField(
+                    value = nationalIdText,
+                    onValueChange = { nationalIdText = it.filter { ch -> ch.isDigit() }.take(14) },
+                    label = { Text(bi(isEn, "الرقم القومي (14 رقم - اختياري)", "National ID (14 digits - optional)")) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("bio_national_id_input"),
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -560,6 +590,7 @@ fun EditPatientBioDialog(
                                 finalConditions,
                                 drugAllergies,
                                 otherChronicNotes,
+                                nationalIdText,
                             )
                         },
                         modifier = Modifier

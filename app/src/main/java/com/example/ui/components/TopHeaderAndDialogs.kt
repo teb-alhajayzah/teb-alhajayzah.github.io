@@ -3,6 +3,9 @@ package com.example.ui.components
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -72,6 +75,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -112,6 +116,8 @@ import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.DirectMessageEntity
+import com.example.data.local.FamilyLinkRequestEntity
+import com.example.data.local.FamilyLinkStatus
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.PatientAccountEntity
@@ -490,19 +496,23 @@ fun AccountAndFamilyDialog(
     activeAccount: PatientAccountEntity?,
     familyMembers: List<FamilyMemberEntity>,
     activeMemberId: String,
+    familyLinkRequests: List<FamilyLinkRequestEntity> = emptyList(),
     otpWhatsappPhone: String = "01141271027",
     appVersionLabel: String,
     unreadSupportCount: Int = 0,
     isEn: Boolean = false,
     onSelectMember: (String) -> Unit,
-    onAddFamilyMember: (name: String, relation: String, age: Int, phone: String) -> Unit,
+    onAddFamilyMember: (name: String, relation: String, age: Int, phone: String, nationalId: String) -> Unit,
     onLogin: (identifier: String, password: String) -> Unit,
     onRegister: (name: String, phone: String, nationalId: String, password: String) -> Unit,
     onLogoutPatient: () -> Unit = {},
     onVerifyOtp: (code: String) -> Unit,
     onRegenerateOtp: () -> Unit = {},
     onOpenSupportChat: () -> Unit = {},
-    onTriggerHiddenAdmin: () -> Unit,
+    onSubmitFamilyLinkRequest: (targetPhone: String, marriageUrl: String, idFrontUrl: String, idBackUrl: String) -> Unit = { _, _, _, _ -> },
+    onSetSpouseViewPermission: (allow: Boolean) -> Unit = {},
+    onOpenPrivacyPolicy: () -> Unit = {},
+    onOpenTermsOfUse: () -> Unit = {},
     onShowMessage: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
@@ -513,7 +523,33 @@ fun AccountAndFamilyDialog(
     var newMemberName by remember { mutableStateOf("") }
     var newMemberRelation by remember { mutableStateOf(bi(isEn, "الابن", "Son")) }
     var newMemberAge by remember { mutableStateOf("") }
+    var newMemberNationalId by remember { mutableStateOf("") }
     var newMemberPhone by remember(activeAccount?.phone) { mutableStateOf(activeAccount?.phone ?: "") }
+
+    var spousePhoneInput by remember { mutableStateOf("") }
+    var proofMarriageUrl by remember { mutableStateOf("") }
+    var proofIdFrontUrl by remember { mutableStateOf("") }
+    var proofIdBackUrl by remember { mutableStateOf("") }
+    var activeProofSlot by remember { mutableIntStateOf(0) } // 0=marriage, 1=front, 2=back
+
+    val proofImagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            val saved = ImageStorageHelper.persistDocumentOrImageUri(context, uri)
+            val dataUri = saved?.path?.let { ImageStorageHelper.encodeImageFileToCompactDataUri(it) }.orEmpty()
+            val resolved = dataUri.ifBlank { saved?.path.orEmpty() }
+            if (resolved.isNotBlank()) {
+                when (activeProofSlot) {
+                    0 -> proofMarriageUrl = resolved
+                    1 -> proofIdFrontUrl = resolved
+                    else -> proofIdBackUrl = resolved
+                }
+            } else {
+                onShowMessage(bi(isEn, "تعذر قراءة الصورة المختارة", "Could not read selected image"))
+            }
+        }
+    }
 
     var loginIdentifier by remember(activeAccount?.phone) { mutableStateOf(activeAccount?.phone ?: "") }
     var loginPassword by remember { mutableStateOf("") }
@@ -524,7 +560,6 @@ fun AccountAndFamilyDialog(
     var regPassword by remember { mutableStateOf("") }
 
     var otpInput by remember { mutableStateOf("") }
-    var versionTapCount by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(activeAccount?.isPhoneVerified) {
         if (activeAccount != null && !activeAccount.isPhoneVerified) {
@@ -919,8 +954,8 @@ fun AccountAndFamilyDialog(
                                                 Text(
                                                     text = bi(
                                                         isEn,
-                                                        "${member.relation} • ${member.age} سنة",
-                                                        "${member.relation} • ${member.age} yrs",
+                                                        "${member.relation} • ${member.age} سنة${if (member.nationalId.isNotBlank()) " • قومي: ${member.nationalId}" else ""}",
+                                                        "${member.relation} • ${member.age} yrs${if (member.nationalId.isNotBlank()) " • ID: ${member.nationalId}" else ""}",
                                                     ),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -970,6 +1005,14 @@ fun AccountAndFamilyDialog(
                                     )
                                 }
                                 OutlinedTextField(
+                                    value = newMemberNationalId,
+                                    onValueChange = { newMemberNationalId = filterDigitsOnly(it).take(14) },
+                                    label = { Text(bi(isEn, "الرقم القومي (14 رقم - اختياري)", "National ID (14 digits - optional)")) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
                                     value = newMemberPhone,
                                     onValueChange = { newMemberPhone = it },
                                     label = { Text(bi(isEn, "رقم الهاتف", "Phone Number")) },
@@ -984,9 +1027,11 @@ fun AccountAndFamilyDialog(
                                             newMemberRelation,
                                             newMemberAge.toIntOrNull() ?: 25,
                                             newMemberPhone.ifBlank { activeAccount.phone },
+                                            newMemberNationalId,
                                         )
                                         newMemberName = ""
                                         newMemberAge = ""
+                                        newMemberNationalId = ""
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -996,6 +1041,206 @@ fun AccountAndFamilyDialog(
                                     Icon(Icons.Filled.Add, contentDescription = null)
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(bi(isEn, "إضافة إلى العائلة", "Add Member"))
+                                }
+
+                                // ربط حسابات الأسرة (الزوج / الزوجة) + خيار الخصوصية
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.35f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 6.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = bi(isEn, "👨‍👩‍👧‍👦 ربط حسابات الأسرة (الزوج / الزوجة)", "👨‍👩‍👧‍👦 Family Account Linking (Spouse)"),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = TealPrimary,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                        if (activeAccount.linkedSpouseAccountId.isNotBlank()) {
+                                            Surface(
+                                                color = SlotAvailableBg,
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, SlotAvailableBorder),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                ) {
+                                                    Text(
+                                                        text = bi(
+                                                            isEn,
+                                                            "✓ مرتبط بحساب: ${activeAccount.linkedSpouseName} (${activeAccount.linkedSpousePhone})",
+                                                            "✓ Linked with: ${activeAccount.linkedSpouseName} (${activeAccount.linkedSpousePhone})",
+                                                        ),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = SlotAvailableText,
+                                                        fontWeight = FontWeight.Bold,
+                                                    )
+                                                    Text(
+                                                        text = bi(
+                                                            isEn,
+                                                            "ملفات الأبناء مشتركة تلقائياً في حسابيكما. ملفك الشخصي محجوب افتراضياً ما لم تسمح بذلك أدناه.",
+                                                            "Children's files sync automatically between both parents. Your personal file stays private unless enabled below.",
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                    ) {
+                                                        Text(
+                                                            text = bi(
+                                                                isEn,
+                                                                "🔓 السماح للزوج/الزوجة بالاطلاع على ملفي الطبي الشخصي",
+                                                                "🔓 Allow spouse to view my personal medical file",
+                                                            ),
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            modifier = Modifier.weight(1f),
+                                                        )
+                                                        Switch(
+                                                            checked = activeAccount.allowSpouseViewPersonalRecords,
+                                                            onCheckedChange = onSetSpouseViewPermission,
+                                                            modifier = Modifier.testTag("spouse_privacy_toggle"),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            val pendingReq = familyLinkRequests.firstOrNull {
+                                                it.status == FamilyLinkStatus.PENDING &&
+                                                    (it.requesterAccountId == activeAccount.id || it.targetPhone == activeAccount.phone)
+                                            }
+                                            if (pendingReq != null) {
+                                                Surface(
+                                                    color = DelayWarningBg,
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    border = BorderStroke(1.dp, DelayWarningBorder),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Text(
+                                                        text = bi(
+                                                            isEn,
+                                                            "⏳ لديك طلب ربط أسرة قيد المراجعة مع (${pendingReq.targetPhone}) — بانتظار موافقة الإدارة",
+                                                            "⏳ Pending link request with (${pendingReq.targetPhone}) awaiting Admin review",
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = DelayWarningText,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(10.dp),
+                                                    )
+                                                }
+                                            } else {
+                                                Text(
+                                                    text = bi(
+                                                        isEn,
+                                                        "اربط حسابك بحساب الزوج/الزوجة لمشاركة ملفات الأبناء مع إرفاق قسيمة الزواج أو وجهي البطاقة:",
+                                                        "Link with spouse account to share children's medical files (attach marriage certificate or ID photos):",
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                                OutlinedTextField(
+                                                    value = spousePhoneInput,
+                                                    onValueChange = { spousePhoneInput = filterDigitsOnly(it) },
+                                                    label = { Text(bi(isEn, "رقم هاتف الزوج / الزوجة المسجل *", "Spouse Phone Number *")) },
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                                    singleLine = true,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .testTag("spouse_link_phone_input"),
+                                                )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                ) {
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            activeProofSlot = 0
+                                                            proofImagePicker.launch(
+                                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                                            )
+                                                        },
+                                                        modifier = Modifier.weight(1f),
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                                    ) {
+                                                        Text(
+                                                            text = if (proofMarriageUrl.isNotBlank()) "✓ القسيمة" else "قسيمة الزواج",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            maxLines = 1,
+                                                        )
+                                                    }
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            activeProofSlot = 1
+                                                            proofImagePicker.launch(
+                                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                                            )
+                                                        },
+                                                        modifier = Modifier.weight(1f),
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                                    ) {
+                                                        Text(
+                                                            text = if (proofIdFrontUrl.isNotBlank()) "✓ بطاقة وجه" else "بطاقة (وجه)",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            maxLines = 1,
+                                                        )
+                                                    }
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            activeProofSlot = 2
+                                                            proofImagePicker.launch(
+                                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                                            )
+                                                        },
+                                                        modifier = Modifier.weight(1f),
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                                    ) {
+                                                        Text(
+                                                            text = if (proofIdBackUrl.isNotBlank()) "✓ بطاقة ظهر" else "بطاقة (ظهر)",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            maxLines = 1,
+                                                        )
+                                                    }
+                                                }
+                                                Button(
+                                                    onClick = {
+                                                        if (spousePhoneInput.length < 6) {
+                                                            onShowMessage(bi(isEn, "يرجى إدخال رقم هاتف صحيح للزوج/الزوجة", "Enter valid spouse phone"))
+                                                        } else if (proofMarriageUrl.isBlank() && proofIdFrontUrl.isBlank()) {
+                                                            onShowMessage(bi(isEn, "يرجى إرفاق صورة قسيمة الزواج أو البطاقة القومية للإدارة", "Attach marriage certificate or National ID"))
+                                                        } else {
+                                                            onSubmitFamilyLinkRequest(
+                                                                spousePhoneInput,
+                                                                proofMarriageUrl,
+                                                                proofIdFrontUrl,
+                                                                proofIdBackUrl,
+                                                            )
+                                                            spousePhoneInput = ""
+                                                            proofMarriageUrl = ""
+                                                            proofIdFrontUrl = ""
+                                                            proofIdBackUrl = ""
+                                                        }
+                                                    },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(48.dp)
+                                                        .testTag("submit_family_link_button"),
+                                                ) {
+                                                    Text(bi(isEn, "إرسال طلب الربط للإدارة للمراجعة", "Submit Link Request to Admin"))
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1072,8 +1317,8 @@ fun AccountAndFamilyDialog(
                             )
                             OutlinedTextField(
                                 value = regNationalId,
-                                onValueChange = { regNationalId = filterDigitsOnly(it) },
-                                label = { Text(bi(isEn, "الرقم القومي (اختياري)", "National ID (Optional)")) },
+                                onValueChange = { regNationalId = filterDigitsOnly(it).take(14) },
+                                label = { Text(bi(isEn, "الرقم القومي (14 رقم - اختياري)", "National ID (14 digits - optional)")) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
@@ -1110,6 +1355,33 @@ fun AccountAndFamilyDialog(
                             ) {
                                 Text(bi(isEn, "إنشاء الحساب والمتابعة للتفعيل (OTP)", "Create Account & Activate (OTP)"))
                             }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                TextButton(
+                                    onClick = onOpenPrivacyPolicy,
+                                    modifier = Modifier.testTag("reg_privacy_policy_button"),
+                                ) {
+                                    Text(
+                                        text = bi(isEn, "📜 سياسة الخصوصية", "📜 Privacy Policy"),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = TealPrimary,
+                                    )
+                                }
+                                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                TextButton(
+                                    onClick = onOpenTermsOfUse,
+                                    modifier = Modifier.testTag("reg_terms_button"),
+                                ) {
+                                    Text(
+                                        text = bi(isEn, "⚖️ شروط الاستخدام", "⚖️ Terms of Use"),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = TealPrimary,
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -1127,17 +1399,7 @@ fun AccountAndFamilyDialog(
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                versionTapCount += 1
-                                if (versionTapCount >= 5) {
-                                    versionTapCount = 0
-                                    onDismiss()
-                                    onTriggerHiddenAdmin()
-                                }
-                            }
-                            .padding(vertical = 8.dp)
-                            .testTag("hidden_version_trigger"),
+                            .padding(vertical = 8.dp),
                     )
                 }
             }
@@ -1207,7 +1469,7 @@ fun AdminPinLockDialog(
                 } else {
                     PasswordOutlinedTextField(
                         value = pinInput,
-                        onValueChange = { pinInput = it },
+                        onValueChange = { pinInput = filterDigitsOnly(it) },
                         label = bi(isEn, "الرقم السري للوحة التحكم (Admin PIN)", "Admin PIN"),
                         keyboardType = KeyboardType.NumberPassword,
                         toggleTestTag = "admin_pin_toggle",
@@ -2038,20 +2300,47 @@ fun FullImagePreviewDialog(
                                 }
                             }
                         } else {
-                            AsyncImage(
-                                model = File(target.path),
-                                contentDescription = target.title,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(12.dp)
-                                    .graphicsLayer(
-                                        scaleX = zoomScale,
-                                        scaleY = zoomScale,
-                                        translationX = panX,
-                                        translationY = panY,
-                                    ),
-                                contentScale = ContentScale.Fit,
-                            )
+                            val decodedDataBitmap = remember(target.path) {
+                                if (target.path.startsWith("data:image", ignoreCase = true)) {
+                                    ImageStorageHelper.decodeDataUriToBitmap(target.path)
+                                } else null
+                            }
+                            if (decodedDataBitmap != null) {
+                                Image(
+                                    bitmap = decodedDataBitmap.asImageBitmap(),
+                                    contentDescription = target.title,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(12.dp)
+                                        .graphicsLayer(
+                                            scaleX = zoomScale,
+                                            scaleY = zoomScale,
+                                            translationX = panX,
+                                            translationY = panY,
+                                        ),
+                                    contentScale = ContentScale.Fit,
+                                )
+                            } else {
+                                val modelAny: Any = if (target.path.startsWith("http://") || target.path.startsWith("https://")) {
+                                    target.path
+                                } else {
+                                    File(target.path)
+                                }
+                                AsyncImage(
+                                    model = modelAny,
+                                    contentDescription = target.title,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(12.dp)
+                                        .graphicsLayer(
+                                            scaleX = zoomScale,
+                                            scaleY = zoomScale,
+                                            translationX = panX,
+                                            translationY = panY,
+                                        ),
+                                    contentScale = ContentScale.Fit,
+                                )
+                            }
                         }
                     }
 

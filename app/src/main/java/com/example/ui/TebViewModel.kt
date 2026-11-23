@@ -1039,6 +1039,7 @@ class TebViewModel(
         clinicNameEn: String = "",
         locationLabelEn: String = "",
         driveWebAppUrl: String = "",
+        secondaryDriveWebAppUrl: String = "",
     ) {
         viewModelScope.launch {
             val res = repository.addDoctorByAdmin(
@@ -1060,6 +1061,7 @@ class TebViewModel(
                 clinicNameEn = clinicNameEn,
                 locationLabelEn = locationLabelEn,
                 driveWebAppUrl = driveWebAppUrl,
+                secondaryDriveWebAppUrl = secondaryDriveWebAppUrl,
             )
             res.onSuccess { doc ->
                 _snackbarMessages.tryEmit("تمت إضافة ${doc.doctorName} ونشر عيادته في المنصة فوراً")
@@ -1089,6 +1091,7 @@ class TebViewModel(
         clinicNameEn: String = "",
         locationLabelEn: String = "",
         driveWebAppUrl: String = "",
+        secondaryDriveWebAppUrl: String = "",
     ) {
         viewModelScope.launch {
             val res = repository.updateDoctorByAdmin(
@@ -1111,6 +1114,7 @@ class TebViewModel(
                 clinicNameEn = clinicNameEn,
                 locationLabelEn = locationLabelEn,
                 driveWebAppUrl = driveWebAppUrl,
+                secondaryDriveWebAppUrl = secondaryDriveWebAppUrl,
             )
             res.onSuccess { doc ->
                 _snackbarMessages.tryEmit("تم تحديث بيانات ${doc.doctorName} فوراً")
@@ -1558,6 +1562,7 @@ class TebViewModel(
         chronicConditions: List<String>,
         drugAllergies: String,
         otherChronicNotes: String,
+        nationalId: String? = null,
         onSaved: () -> Unit = {},
     ) {
         viewModelScope.launch {
@@ -1570,6 +1575,7 @@ class TebViewModel(
                 chronicConditions = chronicConditions,
                 drugAllergies = drugAllergies,
                 otherChronicNotes = otherChronicNotes,
+                nationalId = nationalId,
             )
             res.onSuccess {
                 launchAiSummaryRefresh(memberId, null)
@@ -1630,13 +1636,14 @@ class TebViewModel(
         relation: String,
         age: Int,
         phone: String,
+        nationalId: String = "",
     ) {
         viewModelScope.launch {
             if (fullName.isBlank()) {
                 _snackbarMessages.tryEmit("يرجى كتابة اسم فرد العائلة")
                 return@launch
             }
-            repository.addFamilyMember(accountId, fullName, relation, age, phone)
+            repository.addFamilyMember(accountId, fullName, relation, age, phone, nationalId)
             _snackbarMessages.tryEmit("تمت إضافة $fullName إلى قائمة العائلة")
         }
     }

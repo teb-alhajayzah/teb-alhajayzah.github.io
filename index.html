@@ -1062,6 +1062,107 @@
 
     .stat-num { font-size: 1.4rem; font-weight: 800; }
 
+    .stat-box.clickable {
+      cursor: pointer;
+      transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+      user-select: none;
+    }
+    .stat-box.clickable:hover {
+      transform: translateY(-2px);
+      border-color: var(--teal);
+      box-shadow: 0 6px 16px rgba(13, 115, 119, 0.12);
+    }
+
+    .visitor-stats-card {
+      background: linear-gradient(135deg, rgba(13,115,119,0.06) 0%, rgba(255,255,255,0.98) 100%);
+      border: 1.5px solid rgba(13,115,119,0.28);
+      border-radius: 16px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .visitor-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    @media (max-width: 540px) {
+      .visitor-stats-grid { grid-template-columns: 1fr; }
+    }
+
+    .visitor-stat-tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .admin-accordion {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .admin-accordion-trigger {
+      width: 100%;
+      background: var(--surface);
+      border: none;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      text-align: inherit;
+      font-family: inherit;
+      color: var(--text);
+    }
+
+    .admin-accordion-trigger:hover {
+      background: rgba(13, 115, 119, 0.04);
+    }
+
+    .admin-accordion-body {
+      padding: 0 14px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 12px;
+    }
+
+    .legal-links-bar {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 6px 0 4px;
+    }
+
+    .legal-link-btn {
+      background: rgba(255,255,255,0.85);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 7px 12px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--teal-text);
+      cursor: pointer;
+    }
+
+    .legal-link-btn:hover {
+      border-color: var(--teal);
+      background: var(--teal-soft);
+    }
+
     /* Modals */
     .modal-backdrop {
       position: fixed;
@@ -1451,7 +1552,7 @@
     <div class="header-inner">
       <div class="header-row">
         <div class="brand-box">
-          <img src="./icon.svg" alt="شعار طب الحجايزة" class="brand-logo" />
+          <img src="./icon.svg" alt="شعار طب الحجايزة" id="hdrBrandLogo" class="brand-logo" style="cursor:pointer;" />
           <div style="min-width:0;">
             <div class="brand-title" id="hdrBrandName">طب الحجايزة</div>
             <div class="brand-sub" id="hdrVillageName">قرية الحجايزة والقرى المجاورة</div>
@@ -1540,7 +1641,7 @@
         apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
         medicationsApiUrl: '',
         adminOwnerName: 'المهندس محمد يوسف',
-        adminPin: '202600',
+        adminPin: '132027',
         globalChatEnabled: true,
         firebaseApiKey: 'AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs',
         firebaseAuthDomain: 'gen-lang-client-0015800098.firebaseapp.com',
@@ -1569,6 +1670,8 @@
         messages: CLOUD_NAMESPACE + '/data/messages',
         blockedPhones: CLOUD_NAMESPACE + '/data/blocked_phones',
         activationCodes: CLOUD_NAMESPACE + '/data/activation_codes',
+        familyLinkRequests: CLOUD_NAMESPACE + '/data/family_link_requests',
+        visitorHits: CLOUD_NAMESPACE + '/data/visitor_hits',
         config: CLOUD_NAMESPACE + '/settings'
       };
       const PATIENT_MODIFY_CUTOFF_MINUTES = 120;
@@ -1581,13 +1684,24 @@
       ];
       const STORAGE_KEY = 'teb_alhajayzah_prod_v100';
       const LANG_KEY = 'teb_alhajayzah_lang_v1';
+      const ADMIN_PIN_MIGRATED_KEY = 'teb_admin_pin_migrated_132027_v1';
+      const ADMIN_SESSION_KEY = 'teb_admin_session_v1';
+      const ADMIN_ROLE_ACTIVE_KEY = 'teb_admin_role_active_v1';
+      const VISITOR_HIT_SESSION_KEY = 'teb_visitor_hit_logged_v1';
+      const PRESERVED_LOCAL_KEYS = new Set([
+        STORAGE_KEY,
+        LANG_KEY,
+        ADMIN_PIN_MIGRATED_KEY,
+        ADMIN_SESSION_KEY,
+        ADMIN_ROLE_ACTIVE_KEY
+      ]);
 
       // مسح أي بيانات وهمية أو مفاتيح قديمة من التخزين المحلي (localStorage) تلقائياً
       try {
         LEGACY_STORAGE_KEYS.forEach((k) => localStorage.removeItem(k));
         for (let i = localStorage.length - 1; i >= 0; i--) {
           const k = localStorage.key(i);
-          if (k && k !== STORAGE_KEY && k !== LANG_KEY && /(teb_alhajayzah|hajayzah|smsgate|demo)/i.test(k)) {
+          if (k && !PRESERVED_LOCAL_KEYS.has(k) && /(teb_alhajayzah|hajayzah|smsgate|demo)/i.test(k)) {
             localStorage.removeItem(k);
           }
         }
@@ -1803,6 +1917,7 @@
         if (!mem) return mem;
         return Object.assign({
           age: mem.age != null ? mem.age : 30,
+          nationalId: String(mem.nationalId || ''),
           weightKg: mem.weightKg != null ? Number(mem.weightKg) || 0 : 0,
           heightCm: mem.heightCm != null ? Number(mem.heightCm) || 0 : 0,
           bloodType: String(mem.bloodType || ''),
@@ -1816,6 +1931,7 @@
           aiSummaryUpdatedAtMillis: Number(mem.aiSummaryUpdatedAtMillis) || 0,
           aiSummarySource: String(mem.aiSummarySource || '')
         }, mem, {
+          nationalId: toAsciiDigits(mem.nationalId || '').replace(/\D/g, ''),
           chronicConditions: Array.isArray(mem.chronicConditions)
             ? mem.chronicConditions.map((x) => String(x || '').trim()).filter(Boolean)
             : []
@@ -2336,6 +2452,8 @@
           blockedPhones: [],
           adminSecurity: { failedAttempts: 0, lockoutUntilMillis: 0 },
           familyMembers: [],
+          familyLinkRequests: [],
+          visitorHits: [],
           activeMemberId: null,
           doctors: [],
           labs: [],
@@ -2363,6 +2481,8 @@
       }
 
       function loadState() {
+        let pinMigrated = false;
+        try { pinMigrated = localStorage.getItem(ADMIN_PIN_MIGRATED_KEY) === '1'; } catch (e) {}
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (raw) {
@@ -2381,6 +2501,17 @@
                     parsed.config[ck] = DEFAULT_CONFIG[ck];
                   }
                 });
+                let didMigrateAdminPin = false;
+                if (!pinMigrated) {
+                  const curPin = String(parsed.config.adminPin || '').trim();
+                  if (!curPin || curPin === '202600') {
+                    parsed.config.adminPin = '132027';
+                    didMigrateAdminPin = true;
+                  }
+                  try { localStorage.setItem(ADMIN_PIN_MIGRATED_KEY, '1'); } catch (e) {}
+                } else if (!String(parsed.config.adminPin || '').trim()) {
+                  parsed.config.adminPin = '132027';
+                }
                 parsed.config.appVersionLabel = 'v1.0.0';
                 parsed.config.globalChatEnabled = parsed.config.globalChatEnabled !== false;
                 parsed.config.defaultDriveWebAppUrl = String(parsed.config.defaultDriveWebAppUrl || '').trim();
@@ -2391,7 +2522,8 @@
                 delete parsed.config.smsGateProxyUrl;
                 parsed.doctors = parsed.doctors.map((d) => Object.assign({}, d, {
                   chatEnabled: !d || d.chatEnabled !== false,
-                  driveWebAppUrl: String((d && d.driveWebAppUrl) || '').trim()
+                  driveWebAppUrl: String((d && d.driveWebAppUrl) || '').trim(),
+                  secondaryDriveWebAppUrl: String((d && d.secondaryDriveWebAppUrl) || '').trim()
                 }));
                 if (!Array.isArray(parsed.accounts)) parsed.accounts = [];
                 if (!Array.isArray(parsed.activationCodes)) parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
@@ -2404,7 +2536,9 @@
                     otpCode: a && a.otpCode ? toAsciiDigits(a.otpCode).replace(/\D/g, '') : '',
                     otpCreatedAtMillis: a && a.otpCreatedAtMillis ? a.otpCreatedAtMillis : 0,
                     otpExpiresAtMillis: a && a.otpExpiresAtMillis ? a.otpExpiresAtMillis : 0,
-                    otpUsed: Boolean(a && a.otpUsed)
+                    otpUsed: Boolean(a && a.otpUsed),
+                    spouseAccountId: String((a && a.spouseAccountId) || ''),
+                    allowSpouseViewPersonalRecords: Boolean(a && a.allowSpouseViewPersonalRecords)
                   }, a);
                   if (!normalized.isPhoneVerified && (!normalized.otpCode || normalized.otpCode.length !== 6)) {
                     assignFreshUserOtp(normalized, parsed);
@@ -2418,6 +2552,8 @@
                 }
                 if (!Array.isArray(parsed.familyMembers)) parsed.familyMembers = [];
                 parsed.familyMembers = parsed.familyMembers.map(normalizeFamilyMemberObj);
+                if (!Array.isArray(parsed.familyLinkRequests)) parsed.familyLinkRequests = [];
+                if (!Array.isArray(parsed.visitorHits)) parsed.visitorHits = [];
                 if (!Array.isArray(parsed.labs)) parsed.labs = [];
                 if (!Array.isArray(parsed.records)) parsed.records = [];
                 if (!Array.isArray(parsed.permanentLogs)) parsed.permanentLogs = [];
@@ -2434,7 +2570,7 @@
                 if (!Array.isArray(parsed.blockedPhones)) parsed.blockedPhones = [];
                 if (!parsed.doctorFavorites || typeof parsed.doctorFavorites !== 'object') parsed.doctorFavorites = {};
                 parsed.adminSecurity = Object.assign({ failedAttempts: 0, lockoutUntilMillis: 0 }, parsed.adminSecurity || {});
-                if (seedBaselineRealDoctorsOnce(parsed) || didAssignLegacyOtp) {
+                if (seedBaselineRealDoctorsOnce(parsed) || didAssignLegacyOtp || didMigrateAdminPin) {
                   saveState(parsed, { skipCloudSync: true });
                 }
                 return parsed;
@@ -2442,6 +2578,9 @@
             }
           }
         } catch (e) { /* fallback to clean state */ }
+        if (!pinMigrated) {
+          try { localStorage.setItem(ADMIN_PIN_MIGRATED_KEY, '1'); } catch (e) {}
+        }
         const clean = createCleanProductionState();
         saveState(clean, { skipCloudSync: true });
         return clean;
@@ -2555,7 +2694,9 @@
         { stateKey: 'notifications', fsCollection: 'notifications', idFn: (x) => String((x && x.id) || '') },
         { stateKey: 'messages', fsCollection: 'messages', idFn: (x) => String((x && x.id) || '') },
         { stateKey: 'blockedPhones', fsCollection: 'blocked_phones', idFn: (x) => String((x && x.phone) || '').replace(/\D/g, '') },
-        { stateKey: 'activationCodes', fsCollection: 'activation_codes', idFn: (x) => String((x && x.code) || '') }
+        { stateKey: 'activationCodes', fsCollection: 'activation_codes', idFn: (x) => String((x && x.code) || '') },
+        { stateKey: 'familyLinkRequests', fsCollection: 'family_link_requests', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'visitorHits', fsCollection: 'visitor_hits', idFn: (x) => String((x && x.id) || '') }
       ];
 
       const tebCloudRuntime = {
@@ -2835,6 +2976,12 @@
             ].forEach((ck) => {
               if (!String(merged[ck] || '').trim()) merged[ck] = DEFAULT_CONFIG[ck];
             });
+            // Do not allow stale remote '202600' PIN to overwrite migrated '132027' PIN
+            let didOverrideLegacyRemotePin = false;
+            if (String(merged.adminPin || '').trim() === '202600' || !String(merged.adminPin || '').trim()) {
+              merged.adminPin = String((db.config && db.config.adminPin !== '202600' ? db.config.adminPin : '') || '132027');
+              didOverrideLegacyRemotePin = true;
+            }
             merged.appVersionLabel = 'v1.0.0';
             merged.globalChatEnabled = merged.globalChatEnabled !== false;
             merged.defaultDriveWebAppUrl = String(merged.defaultDriveWebAppUrl || '').trim();
@@ -2842,13 +2989,13 @@
 
             const prevSig = JSON.stringify(db.config || {});
             const nextSig = JSON.stringify(merged);
-            if (prevSig !== nextSig) {
+            if (prevSig !== nextSig || didOverrideLegacyRemotePin) {
               db.config = merged;
               tebCloudRuntime.lastSettingsJson = nextSig;
               if (typeof pruneExpiredHeavyAttachmentsWeb === 'function') {
                 pruneExpiredHeavyAttachmentsWeb(db);
               }
-              saveState(db, { skipCloudSync: true });
+              saveState(db, { skipCloudSync: !didOverrideLegacyRemotePin });
               initFirebaseCloudBridge();
               renderApp();
               if (getCloudConfigSig(merged) !== sig) {
@@ -3375,10 +3522,17 @@
 
       let db = loadState();
 
+      let persistedAdminSession = false;
+      let persistedAdminRoleActive = false;
+      try {
+        persistedAdminSession = localStorage.getItem(ADMIN_SESSION_KEY) === '1';
+        persistedAdminRoleActive = persistedAdminSession && localStorage.getItem(ADMIN_ROLE_ACTIVE_KEY) === '1';
+      } catch (e) {}
+
       // Ephemeral UI State
       const ui = {
         lang: loadSavedLang(), // 'ar' | 'en'
-        roleMode: 'PATIENT', // PATIENT | DOCTOR | ADMIN
+        roleMode: persistedAdminRoleActive ? 'ADMIN' : 'PATIENT', // PATIENT | DOCTOR | ADMIN
         staffPortalTab: 'DOCTOR', // DOCTOR | LAB
         patientTab: 'HOME', // HOME | PRIVATE | HOSPITAL | SPECIALTIES | EMR
         bookingDoctorId: null,
@@ -3396,15 +3550,18 @@
         labSearchResults: [],
         labTargetMemberId: '',
         labTargetAccountPhone: '',
-        isAdminLoggedIn: false,
-        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | USERS | BOOKINGS | MESSAGES | SETTINGS
+        isAdminLoggedIn: persistedAdminSession,
+        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | USERS | BOOKINGS | MESSAGES | SETTINGS | FAMILY_LINKS
         adminSearchQuery: '',
         adminUsersQuery: '',
         adminUsersFilter: 'ALL', // ALL | VERIFIED | UNVERIFIED
         adminAlertDocId: '',
         cloudSettingsExpanded: false,
+        adminAccordions: {}, // All admin sections default collapsed
+        adminDriveSelectedDocId: '',
         expandedAdminThreads: {},
-        versionTapCount: 0,
+        logoTapCount: 0,
+        logoLastTapMs: 0,
         medications: BUILTIN_MEDICATIONS.slice(),
         isLiveMedsApi: false,
         hasNewDataBanner: false,
@@ -4552,57 +4709,396 @@
         }
       }
 
-      function resolveDriveWebAppUrlWeb(clinicDriveUrl) {
-        const cUrl = String(clinicDriveUrl || '').trim();
-        if (/^https?:\/\//i.test(cUrl)) return cUrl;
-        const fbUrl = String((db && db.config && db.config.defaultDriveWebAppUrl) || '').trim();
-        if (/^https?:\/\//i.test(fbUrl)) return fbUrl;
+      function resolveDriveCandidateUrlsWeb(clinicOrUrl) {
+        const list = [];
+        function pushValid(u) {
+          const s = String(u || '').trim();
+          if (/^https?:\/\//i.test(s) && list.indexOf(s) < 0) list.push(s);
+        }
+        if (clinicOrUrl && typeof clinicOrUrl === 'object') {
+          pushValid(clinicOrUrl.driveWebAppUrl);
+          pushValid(clinicOrUrl.secondaryDriveWebAppUrl);
+        } else {
+          pushValid(clinicOrUrl);
+        }
+        pushValid(db && db.config && db.config.defaultDriveWebAppUrl);
+        return list;
+      }
+
+      function resolveDriveWebAppUrlWeb(clinicOrUrl) {
+        const candidates = resolveDriveCandidateUrlsWeb(clinicOrUrl);
+        return candidates[0] || '';
+      }
+
+      async function uploadFileToGoogleDriveWebApp(record, clinicOrUrl, clinicName) {
+        if (!record || !record.attachmentDataUrl || typeof fetch !== 'function') return '';
+        const candidates = resolveDriveCandidateUrlsWeb(clinicOrUrl);
+        if (candidates.length === 0) return '';
+        const dataStr = String(record.attachmentDataUrl || '');
+        const commaIdx = dataStr.indexOf(',');
+        const base64Data = commaIdx >= 0 ? dataStr.slice(commaIdx + 1) : dataStr;
+        if (!base64Data) return '';
+        const payload = {
+          fileName: record.attachmentName || ('teb_record_' + record.id + (record.attachmentMimeType === 'application/pdf' ? '.pdf' : '.jpg')),
+          mimeType: record.attachmentMimeType || (dataStr.indexOf('data:application/pdf') === 0 ? 'application/pdf' : 'image/jpeg'),
+          base64Data: base64Data,
+          clinicId: record.doctorId || '',
+          clinicName: clinicName || record.doctorName || 'منصة طب الحجايزة',
+          patientName: record.patientName || '',
+          familyMemberId: record.familyMemberId || '',
+          recordId: record.id || '',
+          recordType: record.recordType || ''
+        };
+        for (let i = 0; i < candidates.length; i += 1) {
+          const targetUrl = candidates[i];
+          try {
+            const resp = await fetch(targetUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify(payload)
+            });
+            if (!resp || !resp.ok) continue;
+            const txt = await resp.text();
+            let json = null;
+            try { json = JSON.parse(txt); } catch (err) { json = null; }
+            const driveUrl = json
+              ? String(json.fileUrl || json.webViewLink || json.url || '').trim()
+              : (/^https?:\/\//i.test(txt.trim()) ? txt.trim() : '');
+            if (driveUrl && /^https?:\/\//i.test(driveUrl)) {
+              const idx = (db.records || []).findIndex((r) => r.id === record.id);
+              if (idx >= 0) {
+                db.records[idx].driveFileUrl = driveUrl;
+                saveState(db);
+                renderApp();
+              }
+              return driveUrl;
+            }
+          } catch (e) { /* try next Drive account / fallback */ }
+        }
         return '';
       }
 
-      async function uploadFileToGoogleDriveWebApp(record, clinicDriveUrl, clinicName) {
-        if (!record || !record.attachmentDataUrl || typeof fetch !== 'function') return '';
-        const targetUrl = resolveDriveWebAppUrlWeb(clinicDriveUrl);
-        if (!targetUrl) return '';
-        try {
-          const dataStr = String(record.attachmentDataUrl || '');
-          const commaIdx = dataStr.indexOf(',');
-          const base64Data = commaIdx >= 0 ? dataStr.slice(commaIdx + 1) : dataStr;
-          if (!base64Data) return '';
-          const payload = {
-            fileName: record.attachmentName || ('teb_record_' + record.id + (record.attachmentMimeType === 'application/pdf' ? '.pdf' : '.jpg')),
-            mimeType: record.attachmentMimeType || (dataStr.indexOf('data:application/pdf') === 0 ? 'application/pdf' : 'image/jpeg'),
-            base64Data: base64Data,
-            clinicId: record.doctorId || '',
-            clinicName: clinicName || record.doctorName || 'منصة طب الحجايزة',
-            patientName: record.patientName || '',
-            familyMemberId: record.familyMemberId || '',
-            recordId: record.id || '',
-            recordType: record.recordType || ''
+      function compressImageFileToCompactDataUri(file, maxDim, quality) {
+        const limitDim = maxDim || 720;
+        const jpegQ = quality || 0.65;
+        return new Promise((resolve) => {
+          if (!file) { resolve(''); return; }
+          const reader = new FileReader();
+          reader.onerror = function () { resolve(''); };
+          reader.onload = function () {
+            const rawUrl = String(reader.result || '');
+            const img = new Image();
+            img.onerror = function () { resolve(rawUrl); };
+            img.onload = function () {
+              let w = img.width || limitDim;
+              let h = img.height || limitDim;
+              if (w > limitDim || h > limitDim) {
+                const ratio = Math.min(limitDim / w, limitDim / h);
+                w = Math.max(1, Math.round(w * ratio));
+                h = Math.max(1, Math.round(h * ratio));
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) { resolve(rawUrl); return; }
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillRect(0, 0, w, h);
+              ctx.drawImage(img, 0, 0, w, h);
+              try {
+                resolve(canvas.toDataURL('image/jpeg', jpegQ));
+              } catch (err) {
+                resolve(rawUrl);
+              }
+            };
+            img.src = rawUrl;
           };
-          const resp = await fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
-          });
-          if (!resp || !resp.ok) return '';
-          const txt = await resp.text();
-          let json = null;
-          try { json = JSON.parse(txt); } catch (err) { json = null; }
-          const driveUrl = json
-            ? String(json.fileUrl || json.webViewLink || json.url || '').trim()
-            : (/^https?:\/\//i.test(txt.trim()) ? txt.trim() : '');
-          if (driveUrl && /^https?:\/\//i.test(driveUrl)) {
-            const idx = (db.records || []).findIndex((r) => r.id === record.id);
-            if (idx >= 0) {
-              db.records[idx].driveFileUrl = driveUrl;
-              saveState(db);
-              renderApp();
-            }
-            return driveUrl;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function recordWebVisitorHitOnce() {
+        try {
+          if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(VISITOR_HIT_SESSION_KEY) === '1') {
+            return;
           }
-        } catch (e) { /* non-blocking cloud backup */ }
-        return '';
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem(VISITOR_HIT_SESSION_KEY, '1');
+          }
+        } catch (e) {}
+        if (!Array.isArray(db.visitorHits)) db.visitorHits = [];
+        const hit = {
+          id: 'vh_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+          platform: isInsideAndroidApk() ? 'APK' : 'WEB',
+          timestampMillis: Date.now()
+        };
+        db.visitorHits.push(hit);
+        if (db.visitorHits.length > 5000) {
+          db.visitorHits = db.visitorHits.slice(db.visitorHits.length - 5000);
+        }
+        saveState(db);
+      }
+
+      function computeVisitorStats(hits) {
+        const list = Array.isArray(hits) ? hits : [];
+        const now = new Date();
+        const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const dayMs = 24 * 60 * 60 * 1000;
+        const weekStartMs = Date.now() - 7 * dayMs;
+        const monthStartMs = Date.now() - 30 * dayMs;
+        const out = {
+          today: { apk: 0, web: 0, total: 0 },
+          week: { apk: 0, web: 0, total: 0 },
+          month: { apk: 0, web: 0, total: 0 }
+        };
+        list.forEach((h) => {
+          if (!h) return;
+          const ts = Number(h.timestampMillis || h.createdAtMillis || 0);
+          if (!ts) return;
+          const isApk = String(h.platform || '').toUpperCase() === 'APK';
+          const key = isApk ? 'apk' : 'web';
+          if (ts >= startOfTodayMs) {
+            out.today[key] += 1;
+            out.today.total += 1;
+          }
+          if (ts >= weekStartMs) {
+            out.week[key] += 1;
+            out.week.total += 1;
+          }
+          if (ts >= monthStartMs) {
+            out.month[key] += 1;
+            out.month.total += 1;
+          }
+        });
+        return out;
+      }
+
+      function isPersonalSelfMemberWeb(member, ownerAccount) {
+        if (!member) return false;
+        const rel = String(member.relation || '').trim().toLowerCase();
+        if (rel.indexOf('نفسي') >= 0 || rel.indexOf('صاحب الحساب') >= 0 || rel === 'self') return true;
+        if (ownerAccount && normalizePhoneDigits(member.phone) === normalizePhoneDigits(ownerAccount.phone) &&
+            String(member.fullName || '').trim() === String(ownerAccount.fullName || '').trim()) {
+          return true;
+        }
+        return false;
+      }
+
+      function getVisibleMembersForActiveAccount() {
+        if (!db.account) return [];
+        const ownAcc = db.account;
+        const ownPhone = normalizePhoneDigits(ownAcc.phone);
+        const allMems = (db.familyMembers || []).map(normalizeFamilyMemberObj);
+        const result = [];
+        const seenIds = {};
+
+        allMems.forEach((m) => {
+          if (m.accountId === ownAcc.id || (!m.accountId && normalizePhoneDigits(m.phone) === ownPhone)) {
+            if (!seenIds[m.id]) {
+              seenIds[m.id] = true;
+              result.push(m);
+            }
+          }
+        });
+
+        const spouseId = String(ownAcc.spouseAccountId || '').trim();
+        if (spouseId) {
+          const spouseAcc = (db.accounts || []).find((a) => a.id === spouseId);
+          if (spouseAcc) {
+            const allowPersonal = spouseAcc.allowSpouseViewPersonalRecords === true;
+            allMems.forEach((m) => {
+              if (m.accountId === spouseAcc.id && !seenIds[m.id]) {
+                const isSelf = isPersonalSelfMemberWeb(m, spouseAcc);
+                if (!isSelf || allowPersonal) {
+                  seenIds[m.id] = true;
+                  result.push(m);
+                }
+              }
+            });
+          }
+        }
+        return result;
+      }
+
+      function openLegalFloatingModal(type) {
+        const isPrivacy = type === 'PRIVACY';
+        const title = isPrivacy
+          ? bi('📜 سياسة الخصوصية وحماية البيانات', '📜 Privacy Policy & Data Protection')
+          : bi('⚖️ اتفاقية وشروط الاستخدام', '⚖️ Terms & Conditions of Use');
+        const bodyHtml = isPrivacy
+          ? '<div style="display:flex;flex-direction:column;gap:10px;line-height:1.7;font-size:0.9rem;">' +
+              '<p><strong>' + esc(bi('1. سرية البيانات الطبية:', '1. Medical Confidentiality:')) + '</strong> ' +
+              esc(bi('جميع السجلات الطبية، الروشتات، التحاليل، والأرقام القومية مشفرة ومحفوظة في المسار المعزول لمنصة طب الحجايزة ولا يطلع عليها سوى صاحب الحساب والأطباء المختصين أثناء الكشف.', 'All medical records, prescriptions, lab results, and national IDs are protected inside Teb Al-Hajayzah isolated cloud space and accessible only to the account owner and treating physicians.')) + '</p>' +
+              '<p><strong>' + esc(bi('2. خصوصية ربط حسابات الأسرة:', '2. Family Linking Privacy:')) + '</strong> ' +
+              esc(bi('عند ربط حساب الزوج والزوجة بعد مراجعة الإدارة لوثائق الإثبات، يظهر ملف الأبناء تلقائياً للطرفين، بينما يظل الملف الشخصي للزوج والزوجة سرياً تماماً ولا يظهر للطرف الآخر إلا إذا فعّل المالك خيار السماح يدوياً من حسابه.', 'When spouses are linked after admin verification, children records are automatically shared, whereas each spouse’s personal medical profile remains strictly private unless explicitly permitted by the owner.')) + '</p>' +
+              '<p><strong>' + esc(bi('3. الأرشفة السحابية:', '3. Cloud Archiving:')) + '</strong> ' +
+              esc(bi('يتم أرشفة مرفقات PDF والصور على مساحات Google Drive الخاصة بالعيادات مع الحفاظ الدائم على السجل التاريخي الطبي المكتوب مدى الحياة.', 'Heavy attachments (PDF/scans) are archived to clinic Google Drive while preserving the written lifelong medical history log permanently.')) + '</p>' +
+              '<p><strong>' + esc(bi('4. التواصل والدعم:', '4. Contact & Support:')) + '</strong> ' +
+              esc(bi('للاستفسار أو طلب حذف البيانات: 01125002428 — واتساب التوثيق: 01141271027.', 'Support: 01125002428 — Verification WhatsApp: 01141271027.')) + '</p>' +
+            '</div>'
+          : '<div style="display:flex;flex-direction:column;gap:10px;line-height:1.7;font-size:0.9rem;">' +
+              '<p><strong>' + esc(bi('1. نطاق الخدمة:', '1. Scope of Service:')) + '</strong> ' +
+              esc(bi('منصة طب الحجايزة تتيح حجز المواعيد في العيادات الخاصة والمستشفى التخصصي ومتابعة السجل الطبي الموحد لأهالي الحجايزة والقرى المجاورة.', 'Teb Al-Hajayzah enables real-time clinic appointment booking and unified medical record management for Al-Hajayzah and neighboring villages.')) + '</p>' +
+              '<p><strong>' + esc(bi('2. التوثيق والحجز:', '2. Verification & Booking Rules:')) + '</strong> ' +
+              esc(bi('يتطلب الحجز توثيق الحساب لمرة واحدة عبر كود التفعيل أو التفعيل المباشر من العيادة أو الإدارة. يُمنع عمل حجوزات وهمية وقد يعرض الرقم للحظر الإداري.', 'Booking requires one-time account verification via OTP or clinic/admin activation. Fake bookings may lead to administrative phone blocking.')) + '</p>' +
+              '<p><strong>' + esc(bi('3. تعديل أو إلغاء الموعد:', '3. Cancellation & Rescheduling:')) + '</strong> ' +
+              esc(bi('يسمح للمريض بإلغاء أو تعديل موعده قبل وقت الكشف بساعتين على الأقل عبر التطبيق.', 'Patients may cancel or reschedule appointments at least 2 hours prior to the scheduled time.')) + '</p>' +
+              '<p><strong>' + esc(bi('4. إخلاء المسؤولية الطبية:', '4. Medical AI Disclaimer:')) + '</strong> ' +
+              esc(bi('التلخيص الطبي بالذكاء الاصطناعي استرشادي لتبسيط القراءة فقط ولا يغني أبداً عن الكشف والاستشارة المباشرة للطبيب المختص.', 'AI medical summaries are informational aids only and never replace direct diagnosis or consultation by a licensed physician.')) + '</p>' +
+            '</div>';
+        openModal(title, bodyHtml + '<button class="btn btn-primary btn-block" id="btnCloseLegalModal" type="button">' + esc(bi('فهمت / إغلاق', 'Close')) + '</button>', function () {
+          const b = document.getElementById('btnCloseLegalModal');
+          if (b) b.onclick = closeModal;
+        });
+      }
+
+      function openProofLightboxModal(title, dataUrl) {
+        openModal(
+          title || bi('معاينة المستند', 'Proof Document Preview'),
+          (dataUrl
+            ? '<img src="' + esc(dataUrl) + '" alt="proof" style="width:100%;max-height:70vh;object-fit:contain;border-radius:12px;border:1px solid var(--border);background:#0f172a;" />'
+            : '<div style="text-align:center;color:var(--text-muted);padding:16px;">' + esc(bi('لا توجد صورة مرفقة', 'No proof image')) + '</div>'),
+          null
+        );
+      }
+
+      function openQuickAddFamilyMemberModal() {
+        if (!db.account) {
+          openAccountModal('LOGIN');
+          return;
+        }
+        openModal(
+          bi('➕ إضافة ابن / فرد من الأسرة', '➕ Add Child / Family Member'),
+          '<input class="input" id="quickMemName" placeholder="' + esc(bi('الاسم الكامل *', 'Full Name *')) + '" />' +
+          '<div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:8px;">' +
+            '<input class="input" id="quickMemRel" value="' + esc(bi('الابن', 'Child')) + '" placeholder="' + esc(bi('صلة القرابة *', 'Relation *')) + '" />' +
+            '<input class="input" id="quickMemAge" type="number" min="0" max="120" placeholder="' + esc(bi('العمر', 'Age')) + '" />' +
+          '</div>' +
+          '<input class="input" id="quickMemNatId" type="text" inputmode="numeric" maxlength="14" placeholder="' + esc(bi('الرقم القومي (14 رقم - اختياري)', 'National ID (14 digits - optional)')) + '" dir="ltr" />' +
+          '<input class="input" id="quickMemPhone" type="tel" value="' + esc(db.account.phone || '') + '" placeholder="' + esc(bi('رقم الهاتف', 'Phone')) + '" dir="ltr" />' +
+          '<button class="btn btn-primary btn-block" id="btnSubmitQuickFamily" type="button">✓ ' + esc(bi('حفظ في الأسرة وفتح ملفه الطبي', 'Save & Open Medical File')) + '</button>',
+          function () {
+            document.getElementById('btnSubmitQuickFamily').onclick = function () {
+              const name = (document.getElementById('quickMemName').value || '').trim();
+              const natId = toAsciiDigits(document.getElementById('quickMemNatId').value || '').replace(/\D/g, '');
+              if (!name) {
+                showToast(bi('يرجى إدخال اسم الابن أو فرد الأسرة', 'Enter family member name'));
+                return;
+              }
+              if (natId && natId.length !== 14) {
+                showToast(bi('الرقم القومي يجب أن يكون 14 رقماً بالضبط (أو اتركه فارغاً)', 'National ID must be 14 digits or empty'));
+                return;
+              }
+              const mem = normalizeFamilyMemberObj({
+                id: 'mem_' + Date.now(),
+                accountId: db.account.id,
+                fullName: name,
+                relation: (document.getElementById('quickMemRel').value || '').trim() || 'الابن',
+                age: parseInt(document.getElementById('quickMemAge').value, 10) || 10,
+                phone: (document.getElementById('quickMemPhone').value || '').trim() || db.account.phone,
+                nationalId: natId
+              });
+              db.familyMembers.push(mem);
+              db.activeMemberId = mem.id;
+              saveState(db);
+              closeModal();
+              showToast(bi('تمت إضافة ' + name + ' وتنشيط ملفه الطبي', 'Added ' + name));
+              renderApp();
+            };
+          }
+        );
+      }
+
+      function openFamilyLinkRequestModal(sourceAccount, submittedByLabel) {
+        if (!sourceAccount) return;
+        let marriageUrl = '';
+        let idFrontUrl = '';
+        let idBackUrl = '';
+        openModal(
+          bi('👨‍👩‍👧‍👦 طلب ربط حسابات الأسرة (الزوج / الزوجة)', '👨‍👩‍👧‍👦 Family Spouse Link Request'),
+          '<div class="card" style="background:var(--teal-soft);border:none;padding:10px;font-size:0.84rem;color:var(--teal-text);line-height:1.5;">' +
+            esc(bi('عند موافقة الإدارة، يظهر ملف الأبناء للوالدين تلقائياً، ويظل الملف الشخصي للزوج/الزوجة سرياً ما لم تسمح به من إعدادات حسابك.', 'Once approved by admin, children profiles sync automatically while personal medical records remain private unless allowed.')) +
+          '</div>' +
+          '<div style="font-size:0.86rem;font-weight:700;">' + esc(bi('الحساب الطالب للربط:', 'Requester Account:')) + ' ' + esc(sourceAccount.fullName) + ' (<span dir="ltr">' + esc(sourceAccount.phone) + '</span>)</div>' +
+          '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رقم هاتف حساب الزوج / الزوجة المسجل *', 'Spouse Registered Phone Number *')) +
+            '<input class="input" id="famLinkSpousePhone" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" dir="ltr" />' +
+          '</label>' +
+          '<label style="font-size:0.82rem;font-weight:700;">💍 ' + esc(bi('صورة قسيمة الزواج (تُضغط تلقائياً) *', 'Marriage Certificate Photo *')) +
+            '<input class="input" id="famLinkMarriageFile" type="file" accept="image/*" />' +
+            '<div id="prevMarriage" style="font-size:0.78rem;color:var(--avail-text);margin-top:2px;"></div>' +
+          '</label>' +
+          '<label style="font-size:0.82rem;font-weight:700;">🪪 ' + esc(bi('صورة البطاقة الشخصية (الوجه) *', 'National ID Photo (Front) *')) +
+            '<input class="input" id="famLinkIdFrontFile" type="file" accept="image/*" />' +
+            '<div id="prevIdFront" style="font-size:0.78rem;color:var(--avail-text);margin-top:2px;"></div>' +
+          '</label>' +
+          '<label style="font-size:0.82rem;font-weight:700;">🪪 ' + esc(bi('صورة البطاقة الشخصية (الظهر) *', 'National ID Photo (Back) *')) +
+            '<input class="input" id="famLinkIdBackFile" type="file" accept="image/*" />' +
+            '<div id="prevIdBack" style="font-size:0.78rem;color:var(--avail-text);margin-top:2px;"></div>' +
+          '</label>' +
+          '<button class="btn btn-primary btn-block" id="btnSubmitFamilyLinkReq" type="button">📤 ' + esc(bi('إرسال طلب الربط للإدارة للمراجعة', 'Submit Link Request for Admin Review')) + '</button>',
+          function () {
+            function wireImg(inpId, prevId, setter) {
+              const el = document.getElementById(inpId);
+              if (!el) return;
+              el.onchange = async function (e) {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                const prev = document.getElementById(prevId);
+                if (prev) prev.textContent = bi('جاري ضغط الصورة...', 'Compressing...');
+                const compressed = await compressImageFileToCompactDataUri(file, 720, 0.62);
+                setter(compressed);
+                if (prev) prev.textContent = compressed ? bi('✓ تم تجهيز وضغط الصورة بنجاح', '✓ Compressed & ready') : '';
+              };
+            }
+            wireImg('famLinkMarriageFile', 'prevMarriage', (u) => { marriageUrl = u; });
+            wireImg('famLinkIdFrontFile', 'prevIdFront', (u) => { idFrontUrl = u; });
+            wireImg('famLinkIdBackFile', 'prevIdBack', (u) => { idBackUrl = u; });
+
+            document.getElementById('btnSubmitFamilyLinkReq').onclick = function () {
+              const targetPhone = toAsciiDigits(document.getElementById('famLinkSpousePhone').value || '').trim();
+              const targetDigits = normalizePhoneDigits(targetPhone);
+              if (targetDigits.length < 10) {
+                showToast(bi('يرجى إدخال رقم هاتف صحيح للزوج/الزوجة', 'Enter valid spouse phone'));
+                return;
+              }
+              if (targetDigits === normalizePhoneDigits(sourceAccount.phone)) {
+                showToast(bi('لا يمكن ربط الحساب بنفسه', 'Cannot link an account to itself'));
+                return;
+              }
+              const targetAcc = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === targetDigits);
+              if (!targetAcc) {
+                showToast(bi('لم يتم العثور على حساب مسجل للزوج/الزوجة بهذا الرقم', 'No registered account found for this phone'));
+                return;
+              }
+              if (!marriageUrl || !idFrontUrl || !idBackUrl) {
+                showToast(bi('يرجى إرفاق قسيمة الزواج وصورة البطاقة (الوجه والظهر)', 'Attach marriage certificate + ID front & back'));
+                return;
+              }
+              if (!Array.isArray(db.familyLinkRequests)) db.familyLinkRequests = [];
+              const req = {
+                id: 'flr_' + Date.now(),
+                requesterAccountId: sourceAccount.id,
+                requesterName: sourceAccount.fullName,
+                requesterPhone: sourceAccount.phone,
+                targetSpousePhone: targetAcc.phone,
+                targetSpouseAccountId: targetAcc.id,
+                targetSpouseName: targetAcc.fullName,
+                submittedBy: submittedByLabel || sourceAccount.fullName,
+                marriageCertDataUrl: marriageUrl,
+                idFrontDataUrl: idFrontUrl,
+                idBackDataUrl: idBackUrl,
+                status: 'PENDING',
+                createdAtMillis: Date.now()
+              };
+              db.familyLinkRequests.unshift(req);
+              saveState(db);
+              syncDocToFirestoreNamespace('familyLinkRequests', req.id, req);
+              closeModal();
+              showToast(bi('تم إرسال طلب ربط الأسرة للإدارة للمراجعة والاعتماد', 'Family link request sent to Super Admin'));
+              renderApp();
+            };
+          }
+        );
       }
 
       /**
@@ -4663,7 +5159,7 @@
             )
           };
         }
-        const expectedPin = (db.config.adminPin || DEFAULT_CONFIG.adminPin || '202600').trim();
+        const expectedPin = (db.config.adminPin || DEFAULT_CONFIG.adminPin || '132027').trim();
         if (toAsciiDigits(enteredPin).trim() === expectedPin) {
           db.adminSecurity = { failedAttempts: 0, lockoutUntilMillis: 0 };
           saveState(db);
@@ -5312,8 +5808,10 @@
       }
 
       function getActiveMember() {
-        if (!db.familyMembers || db.familyMembers.length === 0) return null;
-        return db.familyMembers.find((m) => m.id === db.activeMemberId) || db.familyMembers[0];
+        const visible = getVisibleMembersForActiveAccount();
+        const list = visible.length > 0 ? visible : (db.familyMembers || []);
+        if (list.length === 0) return null;
+        return list.find((m) => m.id === db.activeMemberId) || list[0];
       }
 
       function printPrescription(record, isEnOverride) {
@@ -5451,7 +5949,7 @@
         if (aud === 'PATIENT') {
           if (!tid) return true;
           if (db.account && (tid === db.account.id || normalizePhoneDigits(tid) === normalizePhoneDigits(db.account.phone))) return true;
-          return (db.familyMembers || []).some((m) => m.id === tid);
+          return getVisibleMembersForActiveAccount().some((m) => m.id === tid);
         }
         return false;
       }
@@ -5763,7 +6261,11 @@
 
           '</div>' +
 
-          // 3. صندوق تثبيت التطبيق والتحقق من التحديثات (تحت قسم التواصل وفوق سطر الحقوق مباشرة)
+          // 3. الروابط القانونية (سياسة الخصوصية وشروط الاستخدام) + صندوق تثبيت التطبيق
+          '<div class="legal-links-bar">' +
+            '<button class="legal-link-btn" type="button" data-open-legal="PRIVACY">📜 ' + esc(bi('سياسة الخصوصية', 'Privacy Policy')) + '</button>' +
+            '<button class="legal-link-btn" type="button" data-open-legal="TERMS">⚖️ ' + esc(bi('اتفاقية وشروط الاستخدام', 'Terms of Use')) + '</button>' +
+          '</div>' +
           appInstallUpdateCardHtml +
 
           // 4. شريط الحقوق
@@ -5881,8 +6383,9 @@
 
       function renderPatientHome() {
         const activeMember = getActiveMember();
-        const familyIds = new Set(db.familyMembers.map((m) => m.id));
-        const familyNames = new Set(db.familyMembers.map((m) => m.fullName));
+        const visibleMembers = getVisibleMembersForActiveAccount();
+        const familyIds = new Set(visibleMembers.map((m) => m.id));
+        const familyNames = new Set(visibleMembers.map((m) => m.fullName));
 
         const myBooked = db.account
           ? db.slots
@@ -5911,9 +6414,9 @@
                 '<button class="btn btn-outline" id="btnAddFamilyQuick" type="button" style="min-height:38px;padding:6px 12px;">+ ' + esc(bi('إضافة فرد عائلة', 'Add Family Member')) + '</button>' +
               '</div>' +
               '<div class="chips-row">' +
-                db.familyMembers.map((m) =>
+                visibleMembers.map((m) =>
                   '<button class="chip ' + (activeMember && m.id === activeMember.id ? 'active' : '') + '" type="button" data-select-member="' + esc(m.id) + '">' +
-                    '👤 ' + esc(m.fullName.split(' ')[0]) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
+                    (m.accountId && db.account && m.accountId !== db.account.id ? '👨‍👩‍👧 ' : '👤 ') + esc(m.fullName.split(' ')[0]) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
                   '</button>'
                 ).join('') +
               '</div>' +
@@ -6129,8 +6632,9 @@
         const doc = db.doctors.find((d) => d.id === ui.bookingDoctorId);
         if (!doc) return '';
         const activeMember = getActiveMember();
-        const familyIds = new Set(db.familyMembers.map((m) => m.id));
-        const familyNames = new Set(db.familyMembers.map((m) => m.fullName));
+        const visibleMembers = getVisibleMembersForActiveAccount();
+        const familyIds = new Set(visibleMembers.map((m) => m.id));
+        const familyNames = new Set(visibleMembers.map((m) => m.fullName));
         const slots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
 
         return '<div style="display:flex;align-items:center;gap:10px;">' +
@@ -6157,11 +6661,11 @@
               : '') +
           '</section>' +
 
-          (db.account && db.familyMembers.length > 0
+          (db.account && visibleMembers.length > 0
             ? '<section>' +
                 '<div style="font-weight:700;margin-bottom:6px;">' + esc(bi('احجز الموعد لصالح:', 'Book appointment for:')) + '</div>' +
                 '<div class="chips-row">' +
-                  db.familyMembers.map((m) =>
+                  visibleMembers.map((m) =>
                     '<button class="chip ' + (activeMember && m.id === activeMember.id ? 'active' : '') + '" type="button" data-select-member="' + esc(m.id) + '">' +
                       esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
                     '</button>'
@@ -6202,11 +6706,16 @@
         const mem = normalizeFamilyMemberObj(member);
         if (!mem) return '';
         const chronics = (mem.chronicConditions || []).map((k) => chronicLabelByKey(k));
+        const isSharedSpouseChild = Boolean(db.account && mem.accountId && mem.accountId !== db.account.id);
         return '<section class="bio-overview-card">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
             '<div>' +
               '<div style="font-weight:800;font-size:1.02rem;color:var(--teal-text);">🩺 ' + esc(bi('البيانات الحيوية والأمراض المزمنة (نظرة عامة)', 'Vital Bio & Chronic Conditions Overview')) + '</div>' +
-              '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(mem.fullName) + ' (' + esc(mem.relation) + ')</div>' +
+              '<div style="font-size:0.8rem;color:var(--text-muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
+                '<span>' + esc(mem.fullName) + ' (' + esc(mem.relation) + ')</span>' +
+                (mem.nationalId ? '<span class="badge" style="background:var(--surface);border:1px solid var(--border);color:var(--teal-text);" dir="ltr">🪪 ' + esc(mem.nationalId) + '</span>' : '') +
+                (isSharedSpouseChild ? '<span class="badge badge-avail">👨‍👩‍👧‍👦 ' + esc(bi('ملف عائلي مشترك', 'Shared Family')) + '</span>' : '') +
+              '</div>' +
             '</div>' +
             '<button class="btn btn-outline" id="btnEditPatientBio" type="button" style="min-height:38px;padding:6px 12px;">✏️ ' + esc(bi('تعديل البيانات', 'Edit Bio Data')) + '</button>' +
           '</div>' +
@@ -6268,6 +6777,7 @@
             '</div>';
         }
 
+        const visibleMembers = getVisibleMembersForActiveAccount();
         const records = db.records
           .filter((r) => r.familyMemberId === activeMember.id || r.patientName === activeMember.fullName)
           .sort((a, b) => b.createdAtMillis - a.createdAtMillis);
@@ -6277,12 +6787,13 @@
             '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('جميع الزيارات السابقة، الزيارات الخارجية، نتائج المعامل، والروشتات مع ملخص طبي آلي.', 'All clinic visits, external doctor visits, lab results, prescriptions, and AI summary.')) + '</div>' +
           '</section>' +
 
-          '<div class="chips-row">' +
-            db.familyMembers.map((m) =>
+          '<div class="chips-row" style="align-items:center;">' +
+            visibleMembers.map((m) =>
               '<button class="chip ' + (m.id === activeMember.id ? 'active' : '') + '" type="button" data-select-member="' + esc(m.id) + '">' +
-                esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
+                (m.accountId && db.account && m.accountId !== db.account.id ? '👨‍👩‍👧 ' : '') + esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')' +
               '</button>'
             ).join('') +
+            '<button class="btn btn-primary" id="btnMedicalFileAddChild" type="button" style="min-height:40px;padding:6px 14px;border-radius:999px;white-space:nowrap;">➕ ' + esc(bi('إضافة ابن / فرد من الأسرة', 'Add Child / Family Member')) + '</button>' +
           '</div>' +
 
           renderPatientBioOverviewCardHtml(activeMember) +
@@ -6383,6 +6894,7 @@
                     (!isVerified
                       ? '<button class="btn btn-green btn-block" type="button" data-doc-activate-acc="' + esc(acc.id) + '">✓ ' + esc(bi('تفعيل حساب المريض فوراً', 'Activate Patient Account Now')) + '</button>'
                       : '<div style="font-size:0.84rem;color:var(--avail-text);font-weight:700;">✓ ' + esc(bi('الحساب مُفعّل وجاهز لحجز المواعيد في عيادة ' + doc.doctorName, 'Account is verified and ready to book appointments')) + '</div>') +
+                    '<button class="btn btn-outline btn-block" type="button" data-doc-family-link="' + esc(acc.id) + '">👨‍👩‍👧‍👦 ' + esc(bi('رفع طلب ربط أسرة للإدارة (زوج / زوجة)', 'Submit Family Link Request to Admin')) + '</button>' +
                   '</div>';
                 }).join('')) +
           '</section>';
@@ -6706,74 +7218,108 @@
           }).join('');
         }
 
+        function renderAdminAccordionHtml(accKey, title, subtitle, innerHtml) {
+          const isOpen = Boolean(ui.adminAccordions && ui.adminAccordions[accKey]);
+          return '<div class="admin-accordion">' +
+            '<button class="admin-accordion-trigger" type="button" data-admin-accordion="' + esc(accKey) + '">' +
+              '<div>' +
+                '<div style="font-weight:800;font-size:0.96rem;color:var(--teal-text);">' + esc(title) + '</div>' +
+                (subtitle ? '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">' + esc(subtitle) + '</div>' : '') +
+              '</div>' +
+              '<span style="font-weight:800;font-size:1rem;color:var(--teal);">' + (isOpen ? '▲' : '▼') + '</span>' +
+            '</button>' +
+            (isOpen ? '<div class="admin-accordion-body">' + innerHtml + '</div>' : '') +
+          '</div>';
+        }
+
+        const famLinkRequests = (db.familyLinkRequests || []).slice().sort((a, b) => {
+          if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
+          if (b.status === 'PENDING' && a.status !== 'PENDING') return 1;
+          return (Number(b.createdAtMillis) || 0) - (Number(a.createdAtMillis) || 0);
+        });
+        const pendingFamLinkCount = famLinkRequests.filter((r) => r.status === 'PENDING').length;
+
         let tabBodyHtml = '';
         if (ui.adminTab === 'CLINICS') {
-          tabBodyHtml =
+          tabBodyHtml = renderAdminAccordionHtml(
+            'clinicsList',
+            bi('🩺 قائمة العيادات الخاصة والأطباء (' + privateDocs.length + ')', '🩺 Private Clinics & Doctors (' + privateDocs.length + ')'),
+            bi('إضافة عيادة خاصة أو تعديل مواعيد وأسعار الأطباء', 'Add private clinic or edit schedules'),
             '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
               '<button class="btn btn-primary" id="btnAdminAddPrivateDoctor" type="button" style="flex:1;min-width:220px;">➕ ' + esc(bi('إضافة دكتور / عيادة خاصة', 'Add Private Doctor / Clinic')) + '</button>' +
               '<input class="input" id="adminDoctorSearch" placeholder="' + esc(bi('ابحث عن دكتور أو عيادة أو اسم مستخدم...', 'Search doctor, clinic, or username...')) + '" value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
             '</section>' +
             '<section style="display:flex;flex-direction:column;gap:12px;">' +
-              '<h3>' + esc(bi('العيادات الخاصة والأطباء (' + privateDocs.length + ')', 'Private Clinics & Doctors (' + privateDocs.length + ')')) + '</h3>' +
               renderAdminDoctorsList(privateDocs, bi('لا توجد عيادات خاصة مضافة بعد. اضغط إضافة دكتور بالأعلى.', 'No private clinics added yet.')) +
-            '</section>';
+            '</section>'
+          );
         } else if (ui.adminTab === 'HOSPITAL') {
-          tabBodyHtml =
+          tabBodyHtml = renderAdminAccordionHtml(
+            'hospitalList',
+            bi('🏥 أقسام ' + db.config.hospitalNameAr + ' (' + hospitalDocs.length + ')', '🏥 Hospital Departments (' + hospitalDocs.length + ')'),
+            bi('إدارة أقسام وأطباء المستشفى التخصصي', 'Manage specialist hospital departments'),
             '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
               '<button class="btn btn-primary" id="btnAdminAddHospitalDept" type="button" style="flex:1;min-width:220px;">➕ ' + esc(bi('إضافة قسم / طبيب بالمستشفى', 'Add Hospital Department / Doctor')) + '</button>' +
               '<input class="input" id="adminDoctorSearch" placeholder="' + esc(bi('ابحث داخل أقسام ' + db.config.hospitalNameAr + '...', 'Search hospital departments...')) + '" value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
             '</section>' +
             '<section style="display:flex;flex-direction:column;gap:12px;">' +
-              '<h3>' + esc(bi('أقسام ' + db.config.hospitalNameAr + ' (' + hospitalDocs.length + ')', 'Hospital Departments (' + hospitalDocs.length + ')')) + '</h3>' +
               renderAdminDoctorsList(hospitalDocs, bi('لا توجد أقسام مضافة بالمستشفى بعد.', 'No hospital departments added yet.')) +
-            '</section>';
+            '</section>'
+          );
         } else if (ui.adminTab === 'BOOKINGS') {
-          tabBodyHtml =
-            '<section class="card" style="display:flex;flex-direction:column;gap:8px;border-color:rgba(220,38,38,0.4);">' +
-              '<h3 style="color:var(--booked-text);">🚫 ' + esc(bi('حظر رقم هاتف مسيء / حجوزات وهمية', 'Block Phone Number (Fake Bookings)')) + '</h3>' +
+          const blockBody =
+            '<div style="display:flex;flex-direction:column;gap:8px;">' +
               '<div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;">' +
                 '<input class="input" id="adminBlockPhoneInp" type="tel" placeholder="' + esc(bi('رقم الهاتف المراد حظره', 'Phone number to block')) + '" dir="ltr" />' +
                 '<input class="input" id="adminBlockReasonInp" placeholder="' + esc(bi('سبب الحظر (مثال: حجز وهمي)', 'Reason (e.g. Fake booking)')) + '" />' +
               '</div>' +
               '<button class="btn btn-danger-outline btn-block" id="btnAdminBlockPhoneSubmit" type="button">🚫 ' + esc(bi('حظر الرقم وإلغاء جميع حجوزاته النشطة', 'Block Phone & Cancel Bookings')) + '</button>' +
-            '</section>' +
-            '<section style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>' + esc(bi('الأرقام المحظورة حالياً (' + blockedList.length + ')', 'Blocked Phone Numbers (' + blockedList.length + ')')) + '</h3>' +
               (blockedList.length === 0
-                ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد أرقام محظورة حالياً.', 'No blocked phone numbers.')) + '</div>'
+                ? '<div style="text-align:center;color:var(--text-muted);font-size:0.86rem;padding:8px;">' + esc(bi('لا توجد أرقام محظورة حالياً.', 'No blocked phone numbers.')) + '</div>'
                 : blockedList.map((b) =>
                     '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--booked-bg);border-color:var(--booked-border);">' +
                       '<div><strong dir="ltr">' + esc(b.phone) + '</strong><div style="font-size:0.84rem;color:var(--booked-text);">' + esc(b.reason || bi('حظر إداري', 'Blocked')) + '</div></div>' +
                       '<button class="btn btn-outline" type="button" data-admin-unblock-phone="' + esc(b.phone) + '" style="min-height:38px;padding:6px 12px;">✓ ' + esc(bi('رفع الحظر', 'Unblock')) + '</button>' +
                     '</div>'
                   ).join('')) +
-            '</section>' +
-            '<section style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>' + esc(bi('جميع الحجوزات الحالية بالمنصة (' + allBookings.length + ')', 'All Platform Bookings (' + allBookings.length + ')')) + '</h3>' +
-              (allBookings.length === 0
-                ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد حجوزات حالية اليوم.', 'No active bookings today.')) + '</div>'
-                : allBookings.map((item) => {
-                    const s = item.slot;
-                    const d = item.doc;
-                    const eff = s.startMinutes + s.delayMinutes;
-                    return '<div class="card">' +
-                      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
-                        '<div>' +
-                          '<strong>' + esc(s.patientName) + '</strong>' +
-                          '<div style="font-size:0.84rem;color:var(--text-muted);" dir="ltr">' + esc(s.patientPhone || '-') + '</div>' +
-                        '</div>' +
-                        '<span class="badge badge-booked">' + formatMinutesAr(eff) + '</span>' +
+            '</div>';
+          const bookingsBody =
+            (allBookings.length === 0
+              ? '<div style="text-align:center;color:var(--text-muted);padding:10px;">' + esc(bi('لا توجد حجوزات حالية اليوم.', 'No active bookings today.')) + '</div>'
+              : allBookings.map((item) => {
+                  const s = item.slot;
+                  const d = item.doc;
+                  const eff = s.startMinutes + s.delayMinutes;
+                  return '<div class="card">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                      '<div>' +
+                        '<strong>' + esc(s.patientName) + '</strong>' +
+                        '<div style="font-size:0.84rem;color:var(--text-muted);" dir="ltr">' + esc(s.patientPhone || '-') + '</div>' +
                       '</div>' +
-                      '<div style="font-size:0.85rem;color:var(--teal);font-weight:700;margin-top:4px;">' +
-                        (d ? esc(getDoctorDisplayName(d) + ' • ' + getClinicDisplayName(d)) : esc(s.doctorId)) +
-                      '</div>' +
-                      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">' +
-                        '<button class="btn btn-outline" type="button" data-admin-cancel-slot="' + esc(s.id) + '" style="flex:1;min-height:38px;">' + esc(bi('إلغاء الحجز', 'Cancel Booking')) + '</button>' +
-                        (s.patientPhone ? '<button class="btn btn-danger-outline" type="button" data-admin-quick-block="' + esc(s.patientPhone) + '" style="min-height:38px;">🚫 ' + esc(bi('حظر الرقم', 'Block Phone')) + '</button>' : '') +
-                      '</div>' +
-                    '</div>';
-                  }).join('')) +
-            '</section>';
+                      '<span class="badge badge-booked">' + formatMinutesAr(eff) + '</span>' +
+                    '</div>' +
+                    '<div style="font-size:0.85rem;color:var(--teal);font-weight:700;margin-top:4px;">' +
+                      (d ? esc(getDoctorDisplayName(d) + ' • ' + getClinicDisplayName(d)) : esc(s.doctorId)) +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">' +
+                      '<button class="btn btn-outline" type="button" data-admin-cancel-slot="' + esc(s.id) + '" style="flex:1;min-height:38px;">' + esc(bi('إلغاء الحجز', 'Cancel Booking')) + '</button>' +
+                      (s.patientPhone ? '<button class="btn btn-danger-outline" type="button" data-admin-quick-block="' + esc(s.patientPhone) + '" style="min-height:38px;">🚫 ' + esc(bi('حظر الرقم', 'Block Phone')) + '</button>' : '') +
+                    '</div>' +
+                  '</div>';
+                }).join(''));
+          tabBodyHtml =
+            renderAdminAccordionHtml(
+              'activeBookings',
+              bi('📋 جميع الحجوزات النشطة بالمنصة (' + allBookings.length + ')', '📋 All Platform Bookings (' + allBookings.length + ')'),
+              bi('مراقبة وإدارة حجوزات جميع العيادات', 'Monitor and cancel bookings across clinics'),
+              bookingsBody
+            ) +
+            renderAdminAccordionHtml(
+              'blockPhone',
+              bi('🚫 الأرقام المحظورة وحظر رقم جديد (' + blockedList.length + ')', '🚫 Blocked Phones & New Block (' + blockedList.length + ')'),
+              bi('منع الأرقام المسيئة أو أصحاب الحجوزات الوهمية', 'Block abusive or fake-booking phone numbers'),
+              blockBody
+            );
         } else if (ui.adminTab === 'LABS') {
           const allLabs = db.labs || [];
           const filteredLabs = allLabs.filter((l) =>
@@ -6783,35 +7329,36 @@
             (l.username || '').toLowerCase().includes(q) ||
             (l.phone || '').includes(q)
           );
-          tabBodyHtml =
+          tabBodyHtml = renderAdminAccordionHtml(
+            'labsList',
+            bi('🧪 معامل التحاليل المعتمدة (' + allLabs.length + ')', '🧪 Verified Medical Labs (' + allLabs.length + ')'),
+            bi('إضافة وتعديل حسابات معامل التحاليل الطبية', 'Manage verified lab portal accounts'),
             '<section style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
               '<button class="btn btn-primary" id="btnAdminAddLab" type="button" style="flex:1;min-width:220px;background:#3730A3;">➕ ' + esc(bi('إضافة معمل تحاليل جديد', 'Add New Medical Lab')) + '</button>' +
               '<input class="input" id="adminLabSearch" placeholder="' + esc(bi('ابحث عن معمل أو عنوان أو اسم مستخدم...', 'Search lab, location, or username...')) + '" value="' + esc(ui.adminSearchQuery) + '" style="flex:1.4;min-width:220px;" />' +
             '</section>' +
-            '<section style="display:flex;flex-direction:column;gap:12px;">' +
-              '<h3>' + esc(bi('معامل التحاليل المعتمدة (' + allLabs.length + ')', 'Verified Medical Labs (' + allLabs.length + ')')) + '</h3>' +
-              (filteredLabs.length === 0
-                ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد معامل تحاليل مضافة بعد. اضغط إضافة معمل بالأعلى.', 'No medical labs added yet. Tap Add Lab above.')) + '</div>'
-                : filteredLabs.map((lab) =>
-                    '<div class="card" style="border-color:rgba(79,70,229,0.35);">' +
-                      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
-                        '<div>' +
-                          '<div style="font-weight:800;font-size:1.08rem;">🧪 ' + esc(lab.labName) + '</div>' +
-                          '<div style="font-size:0.86rem;color:var(--text-muted);margin-top:4px;">📍 ' + esc(lab.locationLabel) + (lab.phone ? ' • 📞 <span dir="ltr">' + esc(lab.phone) + '</span>' : '') + '</div>' +
-                        '</div>' +
-                        '<span class="badge badge-lab">' + esc(bi('معمل تحاليل', 'Medical Lab')) + '</span>' +
+            (filteredLabs.length === 0
+              ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد معامل تحاليل مضافة بعد. اضغط إضافة معمل بالأعلى.', 'No medical labs added yet. Tap Add Lab above.')) + '</div>'
+              : filteredLabs.map((lab) =>
+                  '<div class="card" style="border-color:rgba(79,70,229,0.35);">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                      '<div>' +
+                        '<div style="font-weight:800;font-size:1.08rem;">🧪 ' + esc(lab.labName) + '</div>' +
+                        '<div style="font-size:0.86rem;color:var(--text-muted);margin-top:4px;">📍 ' + esc(lab.locationLabel) + (lab.phone ? ' • 📞 <span dir="ltr">' + esc(lab.phone) + '</span>' : '') + '</div>' +
                       '</div>' +
-                      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:0.84rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
-                        '<span>🔐 ' + esc(bi('دخول المعمل:', 'Lab Login:')) + ' <strong dir="ltr">' + esc(lab.username) + '</strong></span>' +
-                        '<span>🔑 ' + esc(bi('كلمة المرور:', 'Password:')) + ' <strong dir="ltr">' + esc(lab.password) + '</strong></span>' +
-                      '</div>' +
-                      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
-                        '<button class="btn btn-outline" type="button" data-admin-edit-lab="' + esc(lab.id) + '" style="flex:1;min-height:42px;">✏️ ' + esc(bi('تعديل المعمل', 'Edit Lab')) + '</button>' +
-                        '<button class="btn btn-danger-outline" type="button" data-admin-delete-lab="' + esc(lab.id) + '" style="min-height:42px;">🗑️ ' + esc(bi('حذف نهائي', 'Delete')) + '</button>' +
-                      '</div>' +
-                    '</div>'
-                  ).join('')) +
-            '</section>';
+                      '<span class="badge badge-lab">' + esc(bi('معمل تحاليل', 'Medical Lab')) + '</span>' +
+                    '</div>' +
+                    '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:0.84rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
+                      '<span>🔐 ' + esc(bi('دخول المعمل:', 'Lab Login:')) + ' <strong dir="ltr">' + esc(lab.username) + '</strong></span>' +
+                      '<span>🔑 ' + esc(bi('كلمة المرور:', 'Password:')) + ' <strong dir="ltr">' + esc(lab.password) + '</strong></span>' +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
+                      '<button class="btn btn-outline" type="button" data-admin-edit-lab="' + esc(lab.id) + '" style="flex:1;min-height:42px;">✏️ ' + esc(bi('تعديل المعمل', 'Edit Lab')) + '</button>' +
+                      '<button class="btn btn-danger-outline" type="button" data-admin-delete-lab="' + esc(lab.id) + '" style="min-height:42px;">🗑️ ' + esc(bi('حذف نهائي', 'Delete')) + '</button>' +
+                    '</div>' +
+                  '</div>'
+                ).join(''))
+          );
         } else if (ui.adminTab === 'USERS') {
           const allUsers = (db.accounts || []).slice();
           const uq = (ui.adminUsersQuery || '').trim().toLowerCase();
@@ -6833,27 +7380,22 @@
           const verifiedTotal = allUsers.filter((a) => a.isPhoneVerified !== false).length;
           const unverifiedTotal = allUsers.length - verifiedTotal;
 
-          tabBodyHtml =
-            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
-              '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
-                '<div>' +
-                  '<h3>👥 ' + esc(bi('قائمة العملاء والمشتركين (' + allUsers.length + ')', 'Registered Users & Patients (' + allUsers.length + ')')) + '</h3>' +
-                  '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('عرض وإدارة جميع حسابات المرضى، أفراد أسرهم، حالة التفعيل، وجهة التفعيل.', 'Manage all patient accounts, family members, activation status & source.')) + '</div>' +
-                '</div>' +
-                '<div style="display:flex;gap:6px;">' +
-                  '<span class="badge badge-avail">' + esc(bi('موثق: ', 'Verified: ')) + verifiedTotal + '</span>' +
-                  '<span class="badge badge-booked">' + esc(bi('غير موثق: ', 'Unverified: ')) + unverifiedTotal + '</span>' +
-                '</div>' +
+          const usersInner =
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+              '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('عرض وإدارة جميع حسابات المرضى، أفراد أسرهم، حالة التفعيل، وجهة التفعيل.', 'Manage all patient accounts, family members, activation status & source.')) + '</div>' +
+              '<div style="display:flex;gap:6px;">' +
+                '<span class="badge badge-avail">' + esc(bi('موثق: ', 'Verified: ')) + verifiedTotal + '</span>' +
+                '<span class="badge badge-booked">' + esc(bi('غير موثق: ', 'Unverified: ')) + unverifiedTotal + '</span>' +
               '</div>' +
-              '<input class="input" id="adminUsersSearch" value="' + esc(ui.adminUsersQuery || '') + '" placeholder="' + esc(bi('ابحث بالاسم أو رقم الهاتف أو فرد العائلة...', 'Search by name, phone, or family member...')) + '" />' +
-              '<div class="chips-row" style="padding:0;">' +
-                '<button class="chip ' + (ui.adminUsersFilter === 'ALL' ? 'active' : '') + '" type="button" data-admin-users-filter="ALL">' + esc(bi('الكل (' + allUsers.length + ')', 'All (' + allUsers.length + ')')) + '</button>' +
-                '<button class="chip ' + (ui.adminUsersFilter === 'VERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="VERIFIED">✓ ' + esc(bi('موثق (' + verifiedTotal + ')', 'Verified (' + verifiedTotal + ')')) + '</button>' +
-                '<button class="chip ' + (ui.adminUsersFilter === 'UNVERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="UNVERIFIED">⏳ ' + esc(bi('غير موثق (' + unverifiedTotal + ')', 'Unverified (' + unverifiedTotal + ')')) + '</button>' +
-              '</div>' +
-            '</section>' +
+            '</div>' +
+            '<input class="input" id="adminUsersSearch" value="' + esc(ui.adminUsersQuery || '') + '" placeholder="' + esc(bi('ابحث بالاسم أو رقم الهاتف أو فرد العائلة...', 'Search by name, phone, or family member...')) + '" />' +
+            '<div class="chips-row" style="padding:0;">' +
+              '<button class="chip ' + (ui.adminUsersFilter === 'ALL' ? 'active' : '') + '" type="button" data-admin-users-filter="ALL">' + esc(bi('الكل (' + allUsers.length + ')', 'All (' + allUsers.length + ')')) + '</button>' +
+              '<button class="chip ' + (ui.adminUsersFilter === 'VERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="VERIFIED">✓ ' + esc(bi('موثق (' + verifiedTotal + ')', 'Verified (' + verifiedTotal + ')')) + '</button>' +
+              '<button class="chip ' + (ui.adminUsersFilter === 'UNVERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="UNVERIFIED">⏳ ' + esc(bi('غير موثق (' + unverifiedTotal + ')', 'Unverified (' + unverifiedTotal + ')')) + '</button>' +
+            '</div>' +
             (filteredUsers.length === 0
-              ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا يوجد عملاء مسجلون أو مطابقون للبحث.', 'No registered users match your filter.')) + '</div>'
+              ? '<div style="text-align:center;color:var(--text-muted);padding:10px;">' + esc(bi('لا يوجد عملاء مسجلون أو مطابقون للبحث.', 'No registered users match your filter.')) + '</div>'
               : '<div class="users-table-wrap">' +
                   '<table class="users-table">' +
                     '<thead><tr>' +
@@ -6917,6 +7459,12 @@
                     '</tbody>' +
                   '</table>' +
                 '</div>');
+          tabBodyHtml = renderAdminAccordionHtml(
+            'usersList',
+            bi('👥 قائمة العملاء والمشتركين (' + allUsers.length + ')', '👥 Registered Users & Patients (' + allUsers.length + ')'),
+            bi('موثق: ' + verifiedTotal + ' • غير موثق: ' + unverifiedTotal, 'Verified: ' + verifiedTotal + ' • Unverified: ' + unverifiedTotal),
+            usersInner
+          );
         } else if (ui.adminTab === 'MESSAGES') {
           const globalEnabled = db.config.globalChatEnabled !== false;
           const allThreadsMap = {};
@@ -6953,181 +7501,308 @@
             return (bl ? bl.createdAtMillis : 0) - (al ? al.createdAtMillis : 0);
           });
 
-          tabBodyHtml =
-            '<section class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:' + (globalEnabled ? 'var(--avail-bg)' : 'var(--booked-bg)') + ';border-color:' + (globalEnabled ? 'var(--avail-border)' : 'var(--booked-border)') + ';">' +
+          const broadcastInner =
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:10px;border-radius:12px;background:' + (globalEnabled ? 'var(--avail-bg)' : 'var(--booked-bg)') + ';border:1px solid ' + (globalEnabled ? 'var(--avail-border)' : 'var(--booked-border)') + ';">' +
               '<div>' +
-                '<div style="font-weight:800;font-size:1.04rem;">🛡️ ' + esc(bi('المفتاح الرئيسي لدردشة المرضى مع العيادات', 'Master Global Chat Switch (Patients ↔ Clinics)')) + '</div>' +
-                '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(globalEnabled ? bi('مفعّل حالياً: يظهر زر "مراسلة العيادة" في العيادات المفعّلة.', 'ON: Patients can chat with enabled clinics.') : bi('معطّل بالكامل: تم إخفاء وإيقاف زر مراسلة العيادات على مستوى المنصة.', 'OFF: Patient-to-clinic chat is suspended platform-wide.')) + '</div>' +
+                '<div style="font-weight:800;font-size:0.98rem;">🛡️ ' + esc(bi('المفتاح الرئيسي لدردشة المرضى مع العيادات', 'Master Global Chat Switch')) + '</div>' +
+                '<div style="font-size:0.82rem;color:var(--text-muted);">' + esc(globalEnabled ? bi('مفعّل حالياً: يظهر زر "مراسلة العيادة".', 'ON: Patients can chat with enabled clinics.') : bi('معطّل بالكامل على مستوى المنصة.', 'OFF: Patient-to-clinic chat suspended.')) + '</div>' +
               '</div>' +
               '<label class="switch-toggle">' +
                 '<input type="checkbox" id="admGlobalChatToggle"' + (globalEnabled ? ' checked' : '') + ' />' +
                 '<span class="switch-slider"></span>' +
                 '<strong style="font-size:0.86rem;">' + esc(globalEnabled ? 'ON' : 'OFF') + '</strong>' +
               '</label>' +
-            '</section>' +
+            '</div>' +
+            '<textarea class="textarea" id="admBroadcastMsg" placeholder="' + esc(bi('اكتب رسالة تنبيه أو إعلان عام يصل لجميع المرضى والعيادات...', 'Write broadcast message for all users and clinics...')) + '"></textarea>' +
+            '<button class="btn btn-primary btn-block" id="btnAdmSendBroadcast" type="button">🚀 ' + esc(bi('نشر الإشعار العام للجميع', 'Send Global Broadcast')) + '</button>';
 
-            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>📣 ' + esc(bi('إرسال إشعار عام لجميع مستخدمي المنصة (Broadcast)', 'Send Global Platform Broadcast')) + '</h3>' +
-              '<textarea class="textarea" id="admBroadcastMsg" placeholder="' + esc(bi('اكتب رسالة تنبيه أو إعلان عام يصل لجميع المرضى والعيادات...', 'Write broadcast message for all users and clinics...')) + '"></textarea>' +
-              '<button class="btn btn-primary btn-block" id="btnAdmSendBroadcast" type="button">🚀 ' + esc(bi('نشر الإشعار العام للجميع', 'Send Global Broadcast')) + '</button>' +
-            '</section>' +
+          const clinicChatInner =
+            '<select class="select" id="admClinicAlertTarget">' +
+              '<option value="">' + esc(bi('جميع العيادات والأقسام', 'All Clinics & Departments')) + '</option>' +
+              db.doctors.map((d) =>
+                '<option value="' + esc(d.id) + '"' + (ui.adminAlertDocId === d.id ? ' selected' : '') + '>' + esc(getDoctorDisplayName(d)) + ' — ' + esc(getClinicDisplayName(d)) + '</option>'
+              ).join('') +
+            '</select>' +
+            '<textarea class="textarea" id="admClinicAlertMsg" placeholder="' + esc(bi('تنبيه إداري موجه للعيادة المحددة أو جميع العيادات...', 'Targeted administrative notice for clinic(s)...')) + '"></textarea>' +
+            '<button class="btn btn-outline btn-block" id="btnAdmSendClinicAlert" type="button">🔔 ' + esc(bi('إرسال تنبيه للعيادة', 'Send Clinic Alert')) + '</button>' +
+            '<hr style="border:none;border-top:1px dashed var(--border);margin:4px 0;" />' +
+            '<div style="font-weight:700;font-size:0.9rem;color:var(--teal-text);">' + esc(bi('تشغيل / إيقاف الدردشة لكل عيادة على حدة:', 'Per-Clinic Chat Switches:')) + '</div>' +
+            '<div style="display:flex;flex-direction:column;gap:8px;">' +
+              db.doctors.map((d) => {
+                const docChatOn = d.chatEnabled !== false;
+                return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg);">' +
+                  '<div><strong>' + esc(getDoctorDisplayName(d)) + '</strong><div style="font-size:0.8rem;color:var(--text-muted);">' + esc(getClinicDisplayName(d)) + '</div></div>' +
+                  '<label class="switch-toggle">' +
+                    '<input type="checkbox" data-adm-clinic-chat-toggle="' + esc(d.id) + '"' + (docChatOn ? ' checked' : '') + ' />' +
+                    '<span class="switch-slider"></span>' +
+                  '</label>' +
+                '</div>';
+              }).join('') +
+            '</div>';
 
-            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>🏥 ' + esc(bi('تنبيهات العيادات والتحكم الفردي في دردشة كل عيادة', 'Clinic Alerts & Per-Clinic Chat Control')) + '</h3>' +
-              '<select class="select" id="admClinicAlertTarget">' +
-                '<option value="">' + esc(bi('جميع العيادات والأقسام', 'All Clinics & Departments')) + '</option>' +
-                db.doctors.map((d) =>
-                  '<option value="' + esc(d.id) + '"' + (ui.adminAlertDocId === d.id ? ' selected' : '') + '>' + esc(getDoctorDisplayName(d)) + ' — ' + esc(getClinicDisplayName(d)) + '</option>'
-                ).join('') +
-              '</select>' +
-              '<textarea class="textarea" id="admClinicAlertMsg" placeholder="' + esc(bi('تنبيه إداري موجه للعيادة المحددة أو جميع العيادات...', 'Targeted administrative notice for clinic(s)...')) + '"></textarea>' +
-              '<button class="btn btn-outline btn-block" id="btnAdmSendClinicAlert" type="button">🔔 ' + esc(bi('إرسال تنبيه للعيادة', 'Send Clinic Alert')) + '</button>' +
-              '<hr style="border:none;border-top:1px dashed var(--border);margin:4px 0;" />' +
-              '<div style="font-weight:700;font-size:0.9rem;color:var(--teal-text);">' + esc(bi('تشغيل / إيقاف الدردشة لكل عيادة على حدة:', 'Per-Clinic Chat Switches:')) + '</div>' +
-              '<div style="display:flex;flex-direction:column;gap:8px;">' +
-                db.doctors.map((d) => {
-                  const docChatOn = d.chatEnabled !== false;
-                  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg);">' +
-                    '<div><strong>' + esc(getDoctorDisplayName(d)) + '</strong><div style="font-size:0.8rem;color:var(--text-muted);">' + esc(getClinicDisplayName(d)) + '</div></div>' +
-                    '<label class="switch-toggle">' +
-                      '<input type="checkbox" data-adm-clinic-chat-toggle="' + esc(d.id) + '"' + (docChatOn ? ' checked' : '') + ' />' +
-                      '<span class="switch-slider"></span>' +
-                    '</label>' +
-                  '</div>';
-                }).join('') +
-              '</div>' +
-            '</section>' +
-
-            '<section style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>📥 ' + esc(bi('كافة محادثات المنصة والدعم الفني (' + allThreads.length + ')', 'All Platform & Support Chats (' + allThreads.length + ')')) + '</h3>' +
-              (allThreads.length === 0
-                ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد محادثات مسجلة في المنصة حتى الآن.', 'No chat conversations recorded yet.')) + '</div>'
-                : allThreads.map((t) => {
-                    const sortedMsgs = t.msgs.slice().sort((a, b) => (a.createdAtMillis || 0) - (b.createdAtMillis || 0));
-                    const last = sortedMsgs[sortedMsgs.length - 1];
-                    const roleBadge = t.threadType === 'PATIENT_CLINIC'
-                      ? bi('مريض ↔ عيادة', 'Patient ↔ Clinic')
-                      : (t.threadType === 'PATIENT_ADMIN' ? bi('مريض ↔ إدارة', 'Patient ↔ Admin') : bi('عيادة ↔ إدارة', 'Clinic ↔ Admin'));
-                    const isExpanded = Boolean(ui.expandedAdminThreads && ui.expandedAdminThreads[t.key]);
-                    const threadDelAttrs =
-                      'data-adm-del-thread="1" ' +
-                      'data-thread-type="' + esc(t.threadType) + '" ' +
-                      'data-thread-patient="' + esc(t.patientAccountId) + '" ' +
-                      'data-thread-doc="' + esc(t.doctorId) + '"';
-                    return '<div class="card" style="display:flex;flex-direction:column;gap:8px;' + (t.unread > 0 ? 'border-color:var(--teal);background:var(--teal-soft);' : '') + '">' +
-                      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
-                        '<div style="flex:1;min-width:190px;">' +
-                          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
-                            '<span class="badge badge-lab">' + esc(roleBadge) + '</span>' +
-                            '<strong>' + esc(t.title) + '</strong>' +
-                            '<span class="badge" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);">' + sortedMsgs.length + ' ' + esc(bi('رسالة', 'msgs')) + '</span>' +
-                            (t.unread > 0 ? '<span class="badge badge-booked">' + t.unread + ' ' + esc(bi('غير مقروء', 'unread')) + '</span>' : '') +
-                          '</div>' +
-                          (t.subtitle ? '<div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;" dir="ltr">' + esc(t.subtitle) + '</div>' : '') +
-                          (last ? '<div style="font-size:0.86rem;margin-top:4px;color:var(--text);">' + esc(last.body) + '</div>' : '') +
+          const threadsInner =
+            (allThreads.length === 0
+              ? '<div style="text-align:center;color:var(--text-muted);padding:10px;">' + esc(bi('لا توجد محادثات مسجلة في المنصة حتى الآن.', 'No chat conversations recorded yet.')) + '</div>'
+              : allThreads.map((t) => {
+                  const sortedMsgs = t.msgs.slice().sort((a, b) => (a.createdAtMillis || 0) - (b.createdAtMillis || 0));
+                  const last = sortedMsgs[sortedMsgs.length - 1];
+                  const roleBadge = t.threadType === 'PATIENT_CLINIC'
+                    ? bi('مريض ↔ عيادة', 'Patient ↔ Clinic')
+                    : (t.threadType === 'PATIENT_ADMIN' ? bi('مريض ↔ إدارة', 'Patient ↔ Admin') : bi('عيادة ↔ إدارة', 'Clinic ↔ Admin'));
+                  const isExpanded = Boolean(ui.expandedAdminThreads && ui.expandedAdminThreads[t.key]);
+                  const threadDelAttrs =
+                    'data-adm-del-thread="1" ' +
+                    'data-thread-type="' + esc(t.threadType) + '" ' +
+                    'data-thread-patient="' + esc(t.patientAccountId) + '" ' +
+                    'data-thread-doc="' + esc(t.doctorId) + '"';
+                  return '<div class="card" style="display:flex;flex-direction:column;gap:8px;' + (t.unread > 0 ? 'border-color:var(--teal);background:var(--teal-soft);' : '') + '">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
+                      '<div style="flex:1;min-width:190px;">' +
+                        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+                          '<span class="badge badge-lab">' + esc(roleBadge) + '</span>' +
+                          '<strong>' + esc(t.title) + '</strong>' +
+                          '<span class="badge" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);">' + sortedMsgs.length + ' ' + esc(bi('رسالة', 'msgs')) + '</span>' +
+                          (t.unread > 0 ? '<span class="badge badge-booked">' + t.unread + ' ' + esc(bi('غير مقروء', 'unread')) + '</span>' : '') +
                         '</div>' +
-                        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-                          '<button class="btn btn-outline" type="button" data-adm-toggle-thread="' + esc(t.key) + '" style="min-height:40px;padding:6px 10px;">' +
-                            (isExpanded ? '🔼 ' + esc(bi('إخفاء الرسائل', 'Hide Msgs')) : '🔽 ' + esc(bi('عرض الرسائل', 'View Msgs'))) +
-                          '</button>' +
-                          (t.threadType !== 'PATIENT_CLINIC'
-                            ? '<button class="btn btn-primary" type="button" data-adm-open-thread="' + esc(t.key) + '" style="min-height:40px;">💬 ' + esc(bi('فتح والرد', 'Open & Reply')) + '</button>'
-                            : '') +
-                          '<button class="btn btn-danger-outline" type="button" ' + threadDelAttrs + ' style="min-height:40px;padding:6px 10px;">🗑️ ' + esc(bi('مسح المحادثة', 'Clear Thread')) + '</button>' +
-                        '</div>' +
+                        (t.subtitle ? '<div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;" dir="ltr">' + esc(t.subtitle) + '</div>' : '') +
+                        (last ? '<div style="font-size:0.86rem;margin-top:4px;color:var(--text);">' + esc(last.body) + '</div>' : '') +
                       '</div>' +
-                      (isExpanded
-                        ? '<div style="display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--border);padding-top:8px;">' +
-                            sortedMsgs.map((m) =>
-                              '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#fff;border:1px solid var(--border);">' +
-                                '<div style="flex:1;min-width:0;">' +
-                                  '<div style="font-size:0.78rem;font-weight:800;color:var(--teal-text);">' + esc(m.senderName || m.senderRole) + ' • <span style="font-weight:500;color:var(--text-muted);">' + esc(formatMessageTime(m.createdAtMillis)) + '</span></div>' +
-                                  '<div style="font-size:0.86rem;margin-top:2px;white-space:pre-wrap;word-break:break-word;">' + esc(m.body) + '</div>' +
-                                '</div>' +
-                                '<button class="btn btn-danger-outline" type="button" data-adm-del-msg="' + esc(m.id) + '" title="' + esc(bi('حذف الرسالة', 'Delete Message')) + '" style="min-width:44px;min-height:44px;padding:6px 10px;">🗑️</button>' +
-                              '</div>'
-                            ).join('') +
-                          '</div>'
-                        : '') +
-                    '</div>';
-                  }).join('')) +
-            '</section>';
+                      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                        '<button class="btn btn-outline" type="button" data-adm-toggle-thread="' + esc(t.key) + '" style="min-height:40px;padding:6px 10px;">' +
+                          (isExpanded ? '🔼 ' + esc(bi('إخفاء الرسائل', 'Hide Msgs')) : '🔽 ' + esc(bi('عرض الرسائل', 'View Msgs'))) +
+                        '</button>' +
+                        (t.threadType !== 'PATIENT_CLINIC'
+                          ? '<button class="btn btn-primary" type="button" data-adm-open-thread="' + esc(t.key) + '" style="min-height:40px;">💬 ' + esc(bi('فتح والرد', 'Open & Reply')) + '</button>'
+                          : '') +
+                        '<button class="btn btn-danger-outline" type="button" ' + threadDelAttrs + ' style="min-height:40px;padding:6px 10px;">🗑️ ' + esc(bi('مسح المحادثة', 'Clear Thread')) + '</button>' +
+                      '</div>' +
+                    '</div>' +
+                    (isExpanded
+                      ? '<div style="display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--border);padding-top:8px;">' +
+                          sortedMsgs.map((m) =>
+                            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#fff;border:1px solid var(--border);">' +
+                              '<div style="flex:1;min-width:0;">' +
+                                '<div style="font-size:0.78rem;font-weight:800;color:var(--teal-text);">' + esc(m.senderName || m.senderRole) + ' • <span style="font-weight:500;color:var(--text-muted);">' + esc(formatMessageTime(m.createdAtMillis)) + '</span></div>' +
+                                '<div style="font-size:0.86rem;margin-top:2px;white-space:pre-wrap;word-break:break-word;">' + esc(m.body) + '</div>' +
+                              '</div>' +
+                              '<button class="btn btn-danger-outline" type="button" data-adm-del-msg="' + esc(m.id) + '" title="' + esc(bi('حذف الرسالة', 'Delete Message')) + '" style="min-width:44px;min-height:44px;padding:6px 10px;">🗑️</button>' +
+                            '</div>'
+                          ).join('') +
+                        '</div>'
+                      : '') +
+                  '</div>';
+                }).join(''));
+
+          tabBodyHtml =
+            renderAdminAccordionHtml(
+              'chatBroadcast',
+              bi('🛡️ المفتاح الرئيسي للدردشة والإشعار العام', '🛡️ Global Chat Switch & Broadcast'),
+              bi(globalEnabled ? 'الدردشة العامة مفعلة' : 'الدردشة العامة متوقفة', globalEnabled ? 'Global chat enabled' : 'Global chat disabled'),
+              broadcastInner
+            ) +
+            renderAdminAccordionHtml(
+              'clinicChat',
+              bi('🏥 تنبيهات العيادات والدردشة الفردية (' + db.doctors.length + ')', '🏥 Clinic Alerts & Per-Clinic Chat'),
+              bi('إرسال تنبيهات وتشغيل/إيقاف دردشة كل عيادة', 'Clinic notices and per-clinic chat toggles'),
+              clinicChatInner
+            ) +
+            renderAdminAccordionHtml(
+              'threadsList',
+              bi('📥 كافة محادثات المنصة والدعم الفني (' + allThreads.length + ')', '📥 All Platform & Support Chats (' + allThreads.length + ')'),
+              bi('استعراض والرد على المحادثات أو حذفها', 'Inspect, reply, and delete messages/threads'),
+              threadsInner
+            );
+        } else if (ui.adminTab === 'FAMILY_LINKS') {
+          const famLinksInner =
+            famLinkRequests.length === 0
+              ? '<div style="text-align:center;color:var(--text-muted);padding:12px;">' + esc(bi('لا توجد طلبات ربط أسرة حالياً.', 'No family link requests yet.')) + '</div>'
+              : famLinkRequests.map((req) => {
+                  const isPending = req.status === 'PENDING';
+                  const isApproved = req.status === 'APPROVED';
+                  const badgeHtml = isPending
+                    ? '<span class="badge badge-booked">⏳ ' + esc(bi('قيد المراجعة', 'Pending')) + '</span>'
+                    : (isApproved
+                        ? '<span class="badge badge-avail">✓ ' + esc(bi('مقبول ومربوط', 'Approved & Linked')) + '</span>'
+                        : '<span class="badge" style="background:var(--surface-soft);color:var(--text-muted);">✕ ' + esc(bi('مرفوض', 'Rejected')) + '</span>');
+                  return '<div class="card" style="display:flex;flex-direction:column;gap:8px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                      '<div>' +
+                        '<div style="font-weight:800;">👨 ' + esc(req.requesterName) + ' ↔ 👩 ' + esc(req.targetSpouseName || req.targetSpousePhone) + '</div>' +
+                        '<div style="font-size:0.82rem;color:var(--text-muted);" dir="ltr">' + esc(req.requesterPhone) + ' ↔ ' + esc(req.targetSpousePhone) + '</div>' +
+                        (req.submittedBy ? '<div style="font-size:0.78rem;color:var(--teal-text);">📤 ' + esc(bi('مقدّم بواسطة: ', 'Submitted by: ')) + esc(req.submittedBy) + '</div>' : '') +
+                      '</div>' +
+                      badgeHtml +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                      (req.marriageCertDataUrl ? '<button class="btn btn-outline" type="button" data-preview-proof="' + esc(req.id) + '" data-proof-kind="marriage" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">💍 ' + esc(bi('قسيمة الزواج', 'Marriage Cert')) + '</button>' : '') +
+                      (req.idFrontDataUrl ? '<button class="btn btn-outline" type="button" data-preview-proof="' + esc(req.id) + '" data-proof-kind="front" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🪪 ' + esc(bi('البطاقة وجه', 'ID Front')) + '</button>' : '') +
+                      (req.idBackDataUrl ? '<button class="btn btn-outline" type="button" data-preview-proof="' + esc(req.id) + '" data-proof-kind="back" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🪪 ' + esc(bi('البطاقة ظهر', 'ID Back')) + '</button>' : '') +
+                    '</div>' +
+                    (isPending
+                      ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">' +
+                          '<button class="btn btn-green" type="button" data-approve-fam-link="' + esc(req.id) + '">✓ ' + esc(bi('موافقة وربط الأسرة', 'Approve & Link')) + '</button>' +
+                          '<button class="btn btn-danger-outline" type="button" data-reject-fam-link="' + esc(req.id) + '">✕ ' + esc(bi('رفض الطلب', 'Reject')) + '</button>' +
+                        '</div>'
+                      : '') +
+                  '</div>';
+                }).join('');
+
+          tabBodyHtml = renderAdminAccordionHtml(
+            'familyLinks',
+            bi('👨‍👩‍👧‍👦 طلبات ربط الأسرة (الزوج / الزوجة) (' + famLinkRequests.length + ')', '👨‍👩‍👧‍👦 Family Spouse Link Requests (' + famLinkRequests.length + ')'),
+            pendingFamLinkCount > 0
+              ? bi('بانتظار المراجعة: ' + pendingFamLinkCount, 'Pending review: ' + pendingFamLinkCount)
+              : bi('مراجعة وثائق الإثبات والموافقة أو الرفض', 'Review marriage certificates & national IDs'),
+            famLinksInner
+          );
         } else {
           const cfg = db.config;
+          const allDocs = db.doctors || [];
+          const selectedDriveDoc = allDocs.find((d) => d.id === ui.adminDriveSelectedDocId) || allDocs[0] || null;
+          if (selectedDriveDoc && ui.adminDriveSelectedDocId !== selectedDriveDoc.id) {
+            ui.adminDriveSelectedDocId = selectedDriveDoc.id;
+          }
+
+          const platformSettingsInner =
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم المنصة', 'Platform Name')) + '<input class="input" id="admSetPlatform" value="' + esc(cfg.platformNameAr) + '" /></label>' +
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم القرية / المركز', 'Village / District')) + '<input class="input" id="admSetVillage" value="' + esc(cfg.villageNameAr) + '" /></label>' +
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم المستشفى التخصصي', 'Hospital Name')) + '<input class="input" id="admSetHospital" value="' + esc(cfg.hospitalNameAr) + '" /></label>' +
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رقم هاتف الدعم والواتساب', 'Support & WhatsApp Phone')) + '<input class="input" id="admSetPhone" value="' + esc(cfg.supportPhone) + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('إعلان هام في الصفحة الرئيسية (اختياري)', 'Home Announcement Banner (optional)')) + '<textarea class="textarea" id="admSetAnnouncement" placeholder="' + esc(bi('اتركه فارغاً لإخفاء شريط الإعلان...', 'Leave empty to hide banner...')) + '">' + esc(cfg.homeAnnouncementAr || '') + '</textarea></label>' +
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط تحميل التطبيق المباشر (APK)', 'Direct APK Download URL')) + '<input class="input" id="admSetApk" value="' + esc(cfg.apkDownloadUrl) + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط API الأدوية المصرية (اختياري)', 'Medications API URL (optional)')) + '<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 ' + esc(bi('الرقم السري للدخول السري (Admin PIN - الافتراضي 132027)', 'Secret Admin PIN (Default 132027)')) + renderPasswordFieldHtml('admSetPin', cfg.adminPin || '132027', 'Admin PIN', 'inputmode="numeric" data-pin-numeric="1"') + '</label>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
+              '<button class="btn btn-outline" id="btnAdmResetCfg" type="button">' + esc(bi('استعادة الافتراضي', 'Reset Defaults')) + '</button>' +
+              '<button class="btn btn-primary" id="btnAdmSaveCfg" type="button">💾 ' + esc(bi('حفظ كافة الإعدادات', 'Save Settings')) + '</button>' +
+            '</div>';
+
+          const dualDriveInner =
+            '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;">' +
+              '<div style="font-weight:800;color:#166534;font-size:0.9rem;">🩺 ' + esc(bi('حسابا Google Drive لكل عيادة (حساب أساسي + حساب احتياطي ثانٍ)', '2 Google Drive Accounts per Clinic (Primary + Secondary)')) + '</div>' +
+              (allDocs.length === 0
+                ? '<div style="font-size:0.82rem;color:var(--text-muted);">' + esc(bi('لا توجد عيادات مضافة حالياً.', 'No clinics added yet.')) + '</div>'
+                : '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('اختر العيادة', 'Select Clinic')) +
+                    '<select class="select" id="admDriveClinicSelect">' +
+                      allDocs.map((d) =>
+                        '<option value="' + esc(d.id) + '"' + (selectedDriveDoc && selectedDriveDoc.id === d.id ? ' selected' : '') + '>' + esc(getDoctorDisplayName(d)) + ' — ' + esc(getClinicDisplayName(d)) + '</option>'
+                      ).join('') +
+                    '</select>' +
+                  '</label>' +
+                  '<label style="font-size:0.8rem;font-weight:700;">1️⃣ ' + esc(bi('رابط حساب Google Drive الأساسي (Apps Script URL)', 'Primary Google Drive Apps Script URL')) +
+                    '<input class="input" id="admDriveClinicPrimary" value="' + esc(selectedDriveDoc ? (selectedDriveDoc.driveWebAppUrl || '') : '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" />' +
+                  '</label>' +
+                  '<label style="font-size:0.8rem;font-weight:700;">2️⃣ ' + esc(bi('رابط حساب Google Drive الثاني الاحتياطي (Secondary Apps Script URL)', 'Secondary Backup Google Drive Apps Script URL')) +
+                    '<input class="input" id="admDriveClinicSecondary" value="' + esc(selectedDriveDoc ? (selectedDriveDoc.secondaryDriveWebAppUrl || '') : '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" />' +
+                  '</label>' +
+                  '<button class="btn btn-primary btn-block" id="btnSaveClinicDriveUrls" type="button">💾 ' + esc(bi('حفظ ومزامنة حسابي Drive للعيادة', 'Save Clinic 2 Drive Accounts')) + '</button>') +
+              '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">' +
+                allDocs.map((d) =>
+                  '<div style="font-size:0.78rem;display:flex;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #BBF7D0;">' +
+                    '<strong>' + esc(getDoctorDisplayName(d)) + '</strong>' +
+                    '<span style="color:#166534;">' + (d.driveWebAppUrl ? '1✓ ' : '1✕ ') + (d.secondaryDriveWebAppUrl ? '2✓' : '2—') + '</span>' +
+                  '</div>'
+                ).join('') +
+              '</div>' +
+            '</div>' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('الرابط الاحتياطي العام للمنصة (Fallback Apps Script Web App URL)', 'Platform Fallback Google Drive Web App URL')) +
+              '<input class="input" id="admSetDefaultDriveUrl" value="' + esc(cfg.defaultDriveWebAppUrl || '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" />' +
+            '</label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('مدة الاحتفاظ بالملفات الثقيلة (PDF / صور) قبل الحذف التلقائي:', 'Heavy File Retention Duration:')) +
+              '<select class="select" id="admSetRetentionDays">' +
+                '<option value="90"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 90 ? ' selected' : '') + '>' + esc(bi('90 يوماً (3 أشهر)', '90 Days (3 Months)')) + '</option>' +
+                '<option value="180"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 180 ? ' selected' : '') + '>' + esc(bi('180 يوماً (6 أشهر)', '180 Days (6 Months)')) + '</option>' +
+                '<option value="360"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 360 ? ' selected' : '') + '>' + esc(bi('360 يوماً — سنة كاملة (موصى به)', '360 Days — Full Year (Default)')) + '</option>' +
+              '</select>' +
+            '</label>' +
+            '<button class="btn btn-outline btn-block" id="btnSaveDrivePolicyQuick" type="button">💾 ' + esc(bi('حفظ سياسة التخزين والاحتفاظ', 'Save Drive Policy & Retention')) + '</button>';
+
+          const cloudSyncInner =
+            '<div style="font-size:0.8rem;color:#047857;line-height:1.5;">' +
+              esc(bi('المزامنة اللحظية متعددة الأجهزة نشطة تلقائياً تحت المسار المعزول:', 'Real-time multi-device sync auto-connected under:')) +
+              '<div dir="ltr" style="font-family:monospace;font-size:0.74rem;margin-top:4px;color:#064E3B;">' +
+                esc(CLOUD_PATHS.settings) + ' • ' + esc(CLOUD_PATHS.clinics) + ' • ' + esc(CLOUD_PATHS.users) + ' • ' + esc(CLOUD_PATHS.appointments) + ' • ' + esc(CLOUD_PATHS.records) + ' • ' + esc(CLOUD_PATHS.messages) +
+              '</div>' +
+            '</div>' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('رابط الخادم الوسيط (Cloudflare Worker URL)', 'Cloudflare Worker URL')) + '<input class="input" id="admSetWorkerUrl" value="' + esc(cfg.workerUrl || '') + '" placeholder="https://teb-worker.your-subdomain.workers.dev" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase apiKey<input class="input" id="admSetFbApiKey" value="' + esc(cfg.firebaseApiKey || '') + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase authDomain<input class="input" id="admSetFbAuthDomain" value="' + esc(cfg.firebaseAuthDomain || '') + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase projectId<input class="input" id="admSetFbProjectId" value="' + esc(cfg.firebaseProjectId || '') + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase storageBucket<input class="input" id="admSetFbStorageBucket" value="' + esc(cfg.firebaseStorageBucket || '') + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase messagingSenderId<input class="input" id="admSetFbMessagingSenderId" value="' + esc(cfg.firebaseMessagingSenderId || '') + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase appId<input class="input" id="admSetFbAppId" value="' + esc(cfg.firebaseAppId || '') + '" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase vapidKey (Web Push)<input class="input" id="admSetFbVapidKey" value="' + esc(cfg.firebaseVapidKey || '') + '" dir="ltr" /></label>';
+
           tabBodyHtml =
-            renderNotificationStatusCardHtml('admin_notif') +
-            '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
-              '<h3>⚙️ ' + esc(bi('إعدادات المنصة العامة والرقم السري (PIN)', 'Platform Settings & Admin PIN')) + '</h3>' +
-              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم المنصة', 'Platform Name')) + '<input class="input" id="admSetPlatform" value="' + esc(cfg.platformNameAr) + '" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم القرية / المركز', 'Village / District')) + '<input class="input" id="admSetVillage" value="' + esc(cfg.villageNameAr) + '" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم المستشفى التخصصي', 'Hospital Name')) + '<input class="input" id="admSetHospital" value="' + esc(cfg.hospitalNameAr) + '" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رقم هاتف الدعم والواتساب', 'Support & WhatsApp Phone')) + '<input class="input" id="admSetPhone" value="' + esc(cfg.supportPhone) + '" dir="ltr" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('إعلان هام في الصفحة الرئيسية (اختياري)', 'Home Announcement Banner (optional)')) + '<textarea class="textarea" id="admSetAnnouncement" placeholder="' + esc(bi('اتركه فارغاً لإخفاء شريط الإعلان...', 'Leave empty to hide banner...')) + '">' + esc(cfg.homeAnnouncementAr || '') + '</textarea></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط تحميل التطبيق المباشر (APK)', 'Direct APK Download URL')) + '<input class="input" id="admSetApk" value="' + esc(cfg.apkDownloadUrl) + '" dir="ltr" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط API الأدوية المصرية (اختياري)', 'Medications API URL (optional)')) + '<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
-              '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 ' + esc(bi('الرقم السري للدخول السري (Admin PIN - 4 أرقام فأكثر)', 'Secret Admin PIN (4+ digits)')) + renderPasswordFieldHtml('admSetPin', cfg.adminPin || '202600', 'Admin PIN', 'inputmode="numeric" data-pin-numeric="1"') + '</label>' +
-              '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;" />' +
-              '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                '<div style="font-weight:800;color:#166534;font-size:0.9rem;">☁️ ' + esc(bi('المساحات السحابية (Google Drive) وسياسة احتفاظ الملفات الثقيلة', 'Google Drive Storage & Heavy-File Retention Policy')) + '</div>' +
-                '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('الرابط الاحتياطي لمجلد Google Drive العام (Apps Script Web App URL)', 'Platform Fallback Google Drive Web App URL (Apps Script)')) +
-                  '<input class="input" id="admSetDefaultDriveUrl" value="' + esc(cfg.defaultDriveWebAppUrl || '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" />' +
-                '</label>' +
-                '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('مدة الاحتفاظ بالملفات الثقيلة (PDF / صور الأشعة) قبل الحذف التلقائي (مع بقاء التلخيص النصي الدائم مدى الحياة):', 'Heavy File Retention Duration (before auto-cleanup; permanent text logs stay forever):')) +
-                  '<select class="select" id="admSetRetentionDays">' +
-                    '<option value="90"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 90 ? ' selected' : '') + '>' + esc(bi('90 يوماً (3 أشهر)', '90 Days (3 Months)')) + '</option>' +
-                    '<option value="180"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 180 ? ' selected' : '') + '>' + esc(bi('180 يوماً (6 أشهر)', '180 Days (6 Months)')) + '</option>' +
-                    '<option value="360"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 360 ? ' selected' : '') + '>' + esc(bi('360 يوماً — سنة كاملة لمتابعات الحمل والأمراض المزمنة (موصى به)', '360 Days — Full Year for Pregnancy & Chronic Care (Default)')) + '</option>' +
-                  '</select>' +
-                '</label>' +
-              '</div>' +
-              '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;" />' +
-              '<div style="background:#ECFDF5;border:1px solid #34D399;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-                '<button type="button" id="btnToggleCloudSettings" style="background:none;border:none;width:100%;display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:2px 0;text-align:inherit;font-family:inherit;">' +
-                  '<span style="font-weight:800;color:#065F46;font-size:0.9rem;">🟢 ' + esc(bi('المزامنة السحابية والإشعارات نشطة (اضغط للتعديل)', 'Cloud Sync & Notifications Active (Tap to Edit)')) + '</span>' +
-                  '<span style="font-weight:800;color:#047857;">' + (ui.cloudSettingsExpanded ? '▲' : '▼') + '</span>' +
-                '</button>' +
-                '<div id="cloudSettingsBody" style="display:' + (ui.cloudSettingsExpanded ? 'flex' : 'none') + ';flex-direction:column;gap:8px;">' +
-                  '<div style="font-size:0.8rem;color:#047857;line-height:1.5;">' +
-                    esc(bi('المزامنة اللحظية متعددة الأجهزة نشطة تلقائياً تحت المسار المعزول:', 'Real-time multi-device sync auto-connected under:')) +
-                    '<div dir="ltr" style="font-family:monospace;font-size:0.74rem;margin-top:4px;color:#064E3B;">' +
-                      esc(CLOUD_PATHS.settings) + ' • ' + esc(CLOUD_PATHS.clinics) + ' • ' + esc(CLOUD_PATHS.users) + ' • ' + esc(CLOUD_PATHS.appointments) + ' • ' + esc(CLOUD_PATHS.records) + ' • ' + esc(CLOUD_PATHS.messages) +
-                    '</div>' +
-                  '</div>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('رابط الخادم الوسيط (Cloudflare Worker URL)', 'Cloudflare Worker URL')) + '<input class="input" id="admSetWorkerUrl" value="' + esc(cfg.workerUrl || '') + '" placeholder="https://teb-worker.your-subdomain.workers.dev" dir="ltr" /></label>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">Firebase apiKey<input class="input" id="admSetFbApiKey" value="' + esc(cfg.firebaseApiKey || '') + '" dir="ltr" /></label>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">Firebase authDomain<input class="input" id="admSetFbAuthDomain" value="' + esc(cfg.firebaseAuthDomain || '') + '" dir="ltr" /></label>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">Firebase projectId<input class="input" id="admSetFbProjectId" value="' + esc(cfg.firebaseProjectId || '') + '" dir="ltr" /></label>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">Firebase storageBucket<input class="input" id="admSetFbStorageBucket" value="' + esc(cfg.firebaseStorageBucket || '') + '" dir="ltr" /></label>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">Firebase messagingSenderId<input class="input" id="admSetFbMessagingSenderId" value="' + esc(cfg.firebaseMessagingSenderId || '') + '" dir="ltr" /></label>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">Firebase appId<input class="input" id="admSetFbAppId" value="' + esc(cfg.firebaseAppId || '') + '" dir="ltr" /></label>' +
-                  '<label style="font-size:0.82rem;font-weight:700;">Firebase vapidKey (Web Push)<input class="input" id="admSetFbVapidKey" value="' + esc(cfg.firebaseVapidKey || '') + '" dir="ltr" /></label>' +
-                '</div>' +
-              '</div>' +
-              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
-                '<button class="btn btn-outline" id="btnAdmResetCfg" type="button">' + esc(bi('استعادة الافتراضي', 'Reset Defaults')) + '</button>' +
-                '<button class="btn btn-primary" id="btnAdmSaveCfg" type="button">💾 ' + esc(bi('حفظ كافة الإعدادات', 'Save Settings')) + '</button>' +
-              '</div>' +
-            '</section>';
+            renderAdminAccordionHtml(
+              'notifStatus',
+              bi('🔔 حالة إشعارات الخلفية و Web Push', '🔔 Background & Web Push Notification Status'),
+              bi('تفعيل وفحص تنبيهات الإدارة الفورية', 'Inspect push subscription and permissions'),
+              renderNotificationStatusCardHtml('admin_notif')
+            ) +
+            renderAdminAccordionHtml(
+              'platformSettings',
+              bi('⚙️ إعدادات المنصة العامة والرقم السري (PIN)', '⚙️ Platform Settings & Admin PIN'),
+              bi('الاسم، الدعم، الإعلان، رابط APK، ورقم الدخول السري', 'Names, support phone, APK URL, Admin PIN'),
+              platformSettingsInner
+            ) +
+            renderAdminAccordionHtml(
+              'dualDrive',
+              bi('☁️ إدارة حسابات Google Drive للعيادات والاحتفاظ بالملفات', '☁️ Clinic Dual Google Drive & Retention Policy'),
+              bi('حسابان Drive لكل عيادة + رابط احتياطي + مدة الاحتفاظ', '2 Drive accounts per clinic + fallback + retention'),
+              dualDriveInner
+            ) +
+            renderAdminAccordionHtml(
+              'cloudSync',
+              bi('🟢 مفاتيح المزامنة السحابية والـ Worker (Firebase)', '🟢 Firebase Cloud Sync & Worker Keys'),
+              bi('مزامنة فورية متعددة الأجهزة تحت المسار المعزول', 'Isolated Firestore + Cloudflare Worker config'),
+              cloudSyncInner
+            );
         }
 
         const unreadAdminInbox = getUnreadSupportInboxForAdmin();
+        const visitorStats = computeVisitorStats(db.visitorHits || []);
 
         return '<section class="hero-card">' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
               '<div>' +
                 '<span class="hero-pill">🛡️ ' + esc(bi('الإدارة العليا السرية • محمية بالـ PIN', 'Protected Super Admin • PIN Locked')) + '</span>' +
                 '<h2 style="font-size:1.35rem;margin-top:6px;">' + esc(bi('أهلاً بك، ' + (db.config.adminOwnerName || 'المهندس محمد يوسف'), 'Welcome, ' + (db.config.adminOwnerName || 'Eng. Mohamed Youssef'))) + '</h2>' +
-                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، معامل التحاليل، قائمة العملاء، الحجوزات، الرسائل والإشعارات، وإعدادات المنصة.', 'Full control over clinics, hospital, medical labs, users, bookings, messaging & notifications, and platform settings.')) + '</div>' +
+                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، معامل التحاليل، قائمة العملاء، طلبات الأسرة، الحجوزات، الرسائل، وإعدادات المنصة.', 'Full control over clinics, hospital, medical labs, users, family links, bookings, messaging & settings.')) + '</div>' +
               '</div>' +
               '<button class="btn" id="btnAdminLogout" type="button" style="background:#fff;color:var(--teal);min-height:40px;">🚪 ' + esc(bi('خروج وتأمين', 'Lock & Exit')) + '</button>' +
             '</div>' +
           '</section>' +
 
           '<section class="stats-row-2x2">' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">' + esc(bi('عيادات / مستشفى', 'Clinics / Hospital')) + '</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:#3730A3;">' + (db.accounts || []).length + '</div><div style="font-size:0.82rem;">' + esc(bi('العملاء والمشتركين', 'Registered Users')) + '</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">' + esc(bi('حجوزات نشطة', 'Active Bookings')) + '</div></div>' +
-            '<div class="stat-box card"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">' + esc(bi('أرقام محظورة', 'Blocked Phones')) + '</div></div>' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="CLINICS"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">' + esc(bi('عيادات / مستشفى ←', 'Clinics / Hospital →')) + '</div></button>' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="USERS"><div class="stat-num" style="color:#3730A3;">' + (db.accounts || []).length + '</div><div style="font-size:0.82rem;">' + esc(bi('العملاء والمشتركين ←', 'Registered Users →')) + '</div></button>' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="BOOKINGS"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">' + esc(bi('حجوزات نشطة ←', 'Active Bookings →')) + '</div></button>' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="BLOCKED"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">' + esc(bi('أرقام محظورة ←', 'Blocked Phones →')) + '</div></button>' +
+          '</section>' +
+
+          '<section class="visitor-stats-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<strong style="font-size:0.96rem;color:var(--teal-text);">📊 ' + esc(bi('إحصائيات الزوار الفعلية الحية (تطبيق APK vs المتصفح Web)', 'Live Real Visitor Stats (Android APK vs Web Browser)')) + '</strong>' +
+              '<span class="badge" style="background:#fff;border:1px solid var(--border);color:var(--text-muted);">' + esc(bi('بيانات حقيقية 100%', '100% Real Data')) + '</span>' +
+            '</div>' +
+            '<div class="visitor-stats-grid">' +
+              '<div class="visitor-stat-tile">' +
+                '<div style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('زوار اليوم', 'Today')) + '</div>' +
+                '<div style="font-size:1.25rem;font-weight:800;color:var(--teal);">' + visitorStats.today.total + '</div>' +
+                '<div style="font-size:0.74rem;color:var(--text-muted);">📱 APK: ' + visitorStats.today.apk + ' • 🌐 Web: ' + visitorStats.today.web + '</div>' +
+              '</div>' +
+              '<div class="visitor-stat-tile">' +
+                '<div style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('آخر 7 أيام', 'Last 7 Days')) + '</div>' +
+                '<div style="font-size:1.25rem;font-weight:800;color:#3730A3;">' + visitorStats.week.total + '</div>' +
+                '<div style="font-size:0.74rem;color:var(--text-muted);">📱 APK: ' + visitorStats.week.apk + ' • 🌐 Web: ' + visitorStats.week.web + '</div>' +
+              '</div>' +
+              '<div class="visitor-stat-tile">' +
+                '<div style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('آخر 30 يوماً', 'Last 30 Days')) + '</div>' +
+                '<div style="font-size:1.25rem;font-weight:800;color:var(--avail-text);">' + visitorStats.month.total + '</div>' +
+                '<div style="font-size:0.74rem;color:var(--text-muted);">📱 APK: ' + visitorStats.month.apk + ' • 🌐 Web: ' + visitorStats.month.web + '</div>' +
+              '</div>' +
+            '</div>' +
           '</section>' +
 
           '<div class="chips-row">' +
@@ -7135,6 +7810,7 @@
             '<button class="chip ' + (ui.adminTab === 'HOSPITAL' ? 'active' : '') + '" type="button" data-admin-tab="HOSPITAL">🏥 ' + esc(bi('المستشفى والأقسام', 'Hospital Depts')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'LABS' ? 'active' : '') + '" type="button" data-admin-tab="LABS">🧪 ' + esc(bi('إدارة معامل التحاليل', 'Medical Labs')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين (Users)', 'Users List')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'FAMILY_LINKS' ? 'active' : '') + '" type="button" data-admin-tab="FAMILY_LINKS">👨‍👩‍👧‍👦 ' + esc(bi('طلبات ربط الأسرة', 'Family Links')) + (pendingFamLinkCount > 0 ? ' (' + pendingFamLinkCount + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-admin-tab="MESSAGES">💬 ' + esc(bi('التحكم في الرسائل والإشعارات', 'Messaging & Alerts')) + (unreadAdminInbox > 0 ? ' (' + unreadAdminInbox + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('إعدادات المنصة والـ PIN', 'Settings & PIN')) + '</button>' +
@@ -7178,6 +7854,11 @@
             }
           };
         }
+        footerEl.querySelectorAll('[data-open-legal]').forEach((btn) => {
+          btn.onclick = function () {
+            openLegalFloatingModal(btn.getAttribute('data-open-legal') === 'TERMS' ? 'TERMS' : 'PRIVACY');
+          };
+        });
         footerEl.querySelectorAll('[data-footer-tab]').forEach((btn) => {
           btn.onclick = function () {
             ui.roleMode = 'PATIENT';
@@ -7442,6 +8123,10 @@
             if (res.ok) {
               ui.isAdminLoggedIn = true;
               ui.roleMode = 'ADMIN';
+              try {
+                localStorage.setItem(ADMIN_SESSION_KEY, '1');
+                localStorage.setItem(ADMIN_ROLE_ACTIVE_KEY, '1');
+              } catch (e) {}
               closeModal();
               showToast(bi('تم فتح لوحة تحكم الإدارة العليا بنجاح', 'Super Admin dashboard unlocked'));
               renderApp();
@@ -7467,20 +8152,21 @@
       }
 
       function openAccountModal(initialAuthTab) {
-        ui.versionTapCount = 0;
+        ui.logoTapCount = 0;
         ui.otpErrorMsg = '';
         let authMode = initialAuthTab || (!db.account ? 'LOGIN' : 'NONE'); // NONE | REGISTER | LOGIN
 
         function renderAccountBody() {
           const hasAcc = Boolean(db.account);
           const isVerified = hasAcc && db.account.isPhoneVerified !== false;
+          const visibleMembers = hasAcc ? getVisibleMembersForActiveAccount() : [];
 
           const mHtml = hasAcc
-            ? db.familyMembers.map((m) =>
+            ? visibleMembers.map((m) =>
                 '<div class="card" style="padding:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;' +
                   (m.id === db.activeMemberId ? 'border-color:var(--teal);background:var(--teal-soft);' : '') +
                   '" data-pick-mem="' + esc(m.id) + '">' +
-                  '<div><strong>' + esc(m.fullName) + '</strong><div style="font-size:0.82rem;color:var(--text-muted);">' + esc(m.relation) + ' • ' + m.age + ' ' + esc(bi('سنة', 'yrs')) + '</div></div>' +
+                  '<div><strong>' + esc(m.fullName) + '</strong><div style="font-size:0.82rem;color:var(--text-muted);">' + esc(m.relation) + ' • ' + m.age + ' ' + esc(bi('سنة', 'yrs')) + (m.nationalId ? ' • ' + esc(m.nationalId) : '') + '</div></div>' +
                   (m.id === db.activeMemberId ? '<strong style="color:var(--teal);">' + esc(bi('نشط ✓', 'Active ✓')) + '</strong>' : '') +
                 '</div>'
               ).join('')
@@ -7535,8 +8221,13 @@
                   '<div style="font-weight:700;font-size:0.9rem;">' + esc(bi('تسجيل مريض جديد (يتطلب تفعيل الحساب قبل الحجز)', 'New Patient Registration (Activation required)')) + '</div>' +
                   '<input class="input" id="regFullName" placeholder="' + esc(bi('الاسم الكامل *', 'Full Name *')) + '" />' +
                   '<input class="input" id="regPhone" type="tel" inputmode="numeric" placeholder="' + esc(bi('رقم الهاتف (11 رقم) *', 'Phone Number (11 digits) *')) + '" dir="ltr" />' +
-                  '<input class="input" id="regNationalId" inputmode="numeric" placeholder="' + esc(bi('الرقم القومي (اختياري)', 'National ID (optional)')) + '" dir="ltr" />' +
+                  '<input class="input" id="regNationalId" inputmode="numeric" maxlength="14" placeholder="' + esc(bi('الرقم القومي (14 رقم - اختياري)', 'National ID (14 digits - optional)')) + '" dir="ltr" />' +
                   renderPasswordFieldHtml('regPassword', '', bi('الرقم السري (أرقام فقط - 4 أرقام فأكثر) *', 'Numeric PIN (4+ digits) *'), 'inputmode="numeric" data-pin-numeric="1" autocomplete="new-password"') +
+                  '<div style="font-size:0.78rem;color:var(--text-muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+                    '<span>' + esc(bi('بالتسجيل أنت توافق على:', 'By registering you agree to:')) + '</span>' +
+                    '<button class="legal-link-btn" type="button" data-acc-legal="PRIVACY" style="font-size:0.76rem;padding:4px 10px;">📜 ' + esc(bi('سياسة الخصوصية', 'Privacy Policy')) + '</button>' +
+                    '<button class="legal-link-btn" type="button" data-acc-legal="TERMS" style="font-size:0.76rem;padding:4px 10px;">⚖️ ' + esc(bi('شروط الاستخدام', 'Terms of Use')) + '</button>' +
+                  '</div>' +
                   '<button class="btn btn-primary btn-block" id="btnSubmitRegister" type="button">' + esc(bi('إنشاء الحساب والانتقال للتفعيل', 'Register & Proceed to Activation')) + '</button>' +
                 '</div>'
               : (authMode === 'LOGIN'
@@ -7546,6 +8237,31 @@
                       '<button class="btn btn-primary btn-block" id="btnSubmitLogin" type="button">' + esc(bi('تسجيل الدخول', 'Sign In')) + '</button>' +
                     '</div>'
                   : ''));
+
+          const linkedSpouse = (hasAcc && db.account.spouseAccountId)
+            ? (db.accounts || []).find((a) => a.id === db.account.spouseAccountId)
+            : null;
+          const pendingSpouseReq = hasAcc
+            ? (db.familyLinkRequests || []).find((r) =>
+                r.status === 'PENDING' && (r.requesterAccountId === db.account.id || r.targetSpouseAccountId === db.account.id)
+              )
+            : null;
+          const familyLinkHtml = hasAcc
+            ? '<div class="card" style="background:#F8FAFC;border:1px solid var(--border);padding:12px;display:flex;flex-direction:column;gap:8px;">' +
+                '<div style="font-weight:800;color:var(--teal-text);font-size:0.92rem;">👨‍👩‍👧‍👦 ' + esc(bi('ربط حسابات الأسرة (الزوج / الزوجة)', 'Family Spouse Account Linking')) + '</div>' +
+                (linkedSpouse
+                  ? '<div style="font-size:0.84rem;color:var(--avail-text);font-weight:700;">✓ ' + esc(bi('مربوط بحساب: ', 'Linked with: ')) + esc(linkedSpouse.fullName) + ' (<span dir="ltr">' + esc(linkedSpouse.phone) + '</span>)</div>' +
+                    '<div style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('ملفات الأبناء مشتركة تلقائياً. ملفك الطبي الشخصي خاص وسري افتراضياً.', 'Children profiles sync automatically. Your personal profile stays private by default.')) + '</div>' +
+                    '<label style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;background:#fff;border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
+                      '<span style="font-size:0.82rem;font-weight:700;">🔓 ' + esc(bi('السماح للزوج/الزوجة بالاطلاع على ملفي الطبي الشخصي', 'Allow spouse to view my personal medical file')) + '</span>' +
+                      '<input type="checkbox" id="chkSpouseViewPersonalRecords"' + (db.account.allowSpouseViewPersonalRecords === true ? ' checked' : '') + ' />' +
+                    '</label>'
+                  : (pendingSpouseReq
+                      ? '<div class="badge badge-booked" style="width:fit-content;">⏳ ' + esc(bi('يوجد طلب ربط أسرة قيد مراجعة الإدارة', 'Family link request pending Admin review')) + '</div>'
+                      : '') +
+                    '<button class="btn btn-outline btn-block" id="btnOpenPatientFamilyLink" type="button">👨‍👩‍👧‍👦 ' + esc(bi('ربط حساب الزوج / الزوجة (رفع الإثباتات)', 'Link Spouse Account (Upload Proofs)')) + '</button>') +
+              '</div>'
+            : '';
 
           return (
             (hasAcc
@@ -7568,6 +8284,7 @@
                   '💬 ' + esc(bi('مراسلة الإدارة / الدعم الفني', 'Message Admin / Support')) +
                   (getUnreadMessagesForPatientSupport() > 0 ? ' (' + getUnreadMessagesForPatientSupport() + ')' : '') +
                 '</button>' +
+                familyLinkHtml +
                 '<h4>' + esc(bi('أفراد العائلة المسجلون', 'Registered Family Members')) + '</h4>' + mHtml +
                 '<h4 style="margin-top:6px;">' + esc(bi('إضافة فرد جديد من العائلة', 'Add Family Member')) + '</h4>' +
                 '<input class="input" id="newMemName" placeholder="' + esc(bi('الاسم الكامل', 'Full Name')) + '" />' +
@@ -7575,12 +8292,13 @@
                   '<input class="input" id="newMemRel" value="' + esc(bi('الابن', 'Child')) + '" placeholder="' + esc(bi('صلة القرابة', 'Relation')) + '" />' +
                   '<input class="input" id="newMemAge" type="number" placeholder="' + esc(bi('العمر', 'Age')) + '" />' +
                 '</div>' +
+                '<input class="input" id="newMemNationalId" type="text" inputmode="numeric" maxlength="14" placeholder="' + esc(bi('الرقم القومي (14 رقم - اختياري)', 'National ID (14 digits - optional)')) + '" dir="ltr" />' +
                 '<input class="input" id="newMemPhone" value="' + esc(db.account.phone) + '" placeholder="' + esc(bi('رقم الهاتف', 'Phone')) + '" dir="ltr" />' +
                 '<button class="btn btn-primary btn-block" id="btnSubmitFamily" type="button">+ ' + esc(bi('إضافة إلى العائلة', 'Add to Family')) + '</button>' +
                 '<button class="btn btn-danger-outline btn-block" id="btnPatientLogout" type="button" style="min-height:40px;">🚪 ' + esc(bi('تسجيل خروج من الحساب', 'Sign Out')) + '</button>'
               : '') +
             renderNotificationStatusCardHtml('account_notif') +
-            '<div id="hiddenVersionTrigger" style="text-align:center;color:var(--text-muted);font-size:0.82rem;padding:8px 4px 2px;cursor:pointer;user-select:none;">' +
+            '<div style="text-align:center;color:var(--text-muted);font-size:0.82rem;padding:8px 4px 2px;user-select:none;">' +
               esc(bi('إصدار التطبيق: ', 'App Version: ')) + esc(db.config.appVersionLabel || 'v1.0.0') +
             '</div>'
           );
@@ -7714,7 +8432,8 @@
                 fullName: fullName,
                 relation: 'نفسي (صاحب الحساب)',
                 age: 30,
-                phone: phone
+                phone: phone,
+                nationalId: nationalId
               });
               db.accounts = (db.accounts || []).concat([newAcc]);
               db.account = newAcc;
@@ -7774,13 +8493,20 @@
             addFamSubmit.onclick = function () {
               const name = document.getElementById('newMemName').value.trim();
               if (!name) { showToast(bi('يرجى كتابة اسم فرد العائلة', 'Enter family member name')); return; }
+              const natEl = document.getElementById('newMemNationalId');
+              const natId = toAsciiDigits(natEl ? natEl.value : '').replace(/\D/g, '');
+              if (natId && natId.length !== 14) {
+                showToast(bi('الرقم القومي يجب أن يكون 14 رقماً أو اتركه فارغاً', 'National ID must be 14 digits or empty'));
+                return;
+              }
               const mem = normalizeFamilyMemberObj({
                 id: 'mem_' + Date.now(),
                 accountId: db.account.id,
                 fullName: name,
                 relation: document.getElementById('newMemRel').value.trim() || 'فرد عائلة',
                 age: parseInt(document.getElementById('newMemAge').value, 10) || 25,
-                phone: document.getElementById('newMemPhone').value.trim() || db.account.phone
+                phone: document.getElementById('newMemPhone').value.trim() || db.account.phone,
+                nationalId: natId
               });
               db.familyMembers.push(mem);
               db.activeMemberId = mem.id;
@@ -7788,6 +8514,40 @@
               closeModal();
               showToast(bi('تمت إضافة ' + name + ' إلى قائمة العائلة', 'Added ' + name + ' to family list'));
               renderApp();
+            };
+          }
+
+          document.querySelectorAll('[data-acc-legal]').forEach((btn) => {
+            btn.onclick = function () {
+              openLegalFloatingModal(btn.getAttribute('data-acc-legal') === 'TERMS' ? 'TERMS' : 'PRIVACY');
+            };
+          });
+
+          const openFamLinkBtn = document.getElementById('btnOpenPatientFamilyLink');
+          if (openFamLinkBtn && db.account) {
+            openFamLinkBtn.onclick = function () {
+              const acc = db.account;
+              closeModal();
+              openFamilyLinkRequestModal(acc, acc.fullName);
+            };
+          }
+
+          const spousePrivacyChk = document.getElementById('chkSpouseViewPersonalRecords');
+          if (spousePrivacyChk && db.account) {
+            spousePrivacyChk.onchange = function () {
+              db.account.allowSpouseViewPersonalRecords = Boolean(spousePrivacyChk.checked);
+              const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id);
+              if (idx >= 0) db.accounts[idx].allowSpouseViewPersonalRecords = db.account.allowSpouseViewPersonalRecords;
+              saveState(db);
+              syncDocToFirestoreNamespace('users', db.account.id, db.account);
+              showToast(bi(
+                db.account.allowSpouseViewPersonalRecords
+                  ? 'تم السماح للزوج/الزوجة بالاطلاع على ملفك الطبي الشخصي'
+                  : 'تم تأمين ملفك الطبي الشخصي كسري وخاص بك فقط',
+                db.account.allowSpouseViewPersonalRecords
+                  ? 'Spouse can now view your personal medical records'
+                  : 'Your personal medical file is now private'
+              ));
             };
           }
 
@@ -7815,18 +8575,6 @@
                 patientName: acc.fullName,
                 patientPhone: acc.phone
               });
-            };
-          }
-
-          const versionTrigger = document.getElementById('hiddenVersionTrigger');
-          if (versionTrigger) {
-            versionTrigger.onclick = function () {
-              ui.versionTapCount = (ui.versionTapCount || 0) + 1;
-              if (ui.versionTapCount >= 5) {
-                ui.versionTapCount = 0;
-                closeModal();
-                openAdminPinModal();
-              }
             };
           }
         }
@@ -8125,7 +8873,8 @@
             '<input class="input" id="admDocFee" type="number" value="' + esc(editDoc ? editDoc.feeEgp : 150) + '" placeholder="' + esc(bi('سعر الكشف', 'Fee')) + '" />' +
           '</div>' +
           '<input class="input" id="admDocMaps" value="' + esc(editDoc ? (editDoc.mapsUrl || '') : '') + '" placeholder="' + esc(bi('رابط موقع العيادة على خرائط جوجل (Google Maps)', 'Google Maps URL')) + '" dir="ltr" />' +
-          '<input class="input" id="admDocDriveUrl" value="' + esc(editDoc ? (editDoc.driveWebAppUrl || '') : '') + '" placeholder="' + esc(bi('رابط Google Apps Script / Drive الخاص بالعيادة (اختياري)', 'Clinic Google Drive Apps Script URL (optional)')) + '" dir="ltr" />' +
+          '<input class="input" id="admDocDriveUrl" value="' + esc(editDoc ? (editDoc.driveWebAppUrl || '') : '') + '" placeholder="' + esc(bi('حساب Google Drive الأساسي #1 للعيادة (Apps Script URL)', 'Clinic Primary Google Drive #1 URL (optional)')) + '" dir="ltr" />' +
+          '<input class="input" id="admDocSecondaryDriveUrl" value="' + esc(editDoc ? (editDoc.secondaryDriveWebAppUrl || '') : '') + '" placeholder="' + esc(bi('حساب Google Drive الاحتياطي #2 للعيادة (اختياري)', 'Clinic Secondary Backup Google Drive #2 URL (optional)')) + '" dir="ltr" />' +
           '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">' +
             '<div><label style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('بداية (ساعة)', 'Start Hr')) + '</label><input class="input" id="admStartHr" type="number" min="8" max="22" value="' + startHr + '" /></div>' +
             '<div><label style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('نهاية (ساعة)', 'End Hr')) + '</label><input class="input" id="admEndHr" type="number" min="9" max="23" value="' + endHr + '" /></div>' +
@@ -8167,6 +8916,7 @@
               const feeEgp = parseInt(document.getElementById('admDocFee').value, 10) || 150;
               const mapsUrl = document.getElementById('admDocMaps').value.trim();
               const driveWebAppUrl = (document.getElementById('admDocDriveUrl').value || '').trim();
+              const secondaryDriveWebAppUrl = (document.getElementById('admDocSecondaryDriveUrl').value || '').trim();
               const sHr = Math.min(22, Math.max(8, parseInt(document.getElementById('admStartHr').value, 10) || 17));
               const eHr = Math.min(23, Math.max(sHr + 1, parseInt(document.getElementById('admEndHr').value, 10) || 21));
               const slotDurationMinutes = parseInt(document.getElementById('admSlotDur').value, 10) || 20;
@@ -8203,6 +8953,7 @@
                 editDoc.feeEgp = feeEgp;
                 editDoc.mapsUrl = mapsUrl;
                 editDoc.driveWebAppUrl = driveWebAppUrl;
+                editDoc.secondaryDriveWebAppUrl = secondaryDriveWebAppUrl;
                 editDoc.workStartMinutes = sHr * 60;
                 editDoc.workEndMinutes = eHr * 60;
                 editDoc.slotDurationMinutes = slotDurationMinutes;
@@ -8231,6 +8982,7 @@
                   bio: bio,
                   mapsUrl: mapsUrl,
                   driveWebAppUrl: driveWebAppUrl,
+                  secondaryDriveWebAppUrl: secondaryDriveWebAppUrl,
                   username: username,
                   password: password,
                   feeEgp: feeEgp,
@@ -8908,7 +9660,7 @@
               saveState(db);
               createAndSyncPermanentMedicalLogWeb(newRxRec, 'CLINIC_VISIT', doc.doctorName);
               if (newRxRec.attachmentDataUrl) {
-                uploadFileToGoogleDriveWebApp(newRxRec, doc.driveWebAppUrl || '', doc.clinicName || doc.doctorName);
+                uploadFileToGoogleDriveWebApp(newRxRec, doc, doc.clinicName || doc.doctorName);
               }
               closeModal();
               showToast(bi('تم حفظ الروشتة والتقرير الثنائي وتدوينها في السجل الدائم مدى الحياة', 'Bilingual Rx saved & permanently logged'));
@@ -8980,6 +9732,9 @@
               '<button class="btn btn-outline" id="btnAddCustomChronic" type="button">+ ' + esc(bi('إضافة', 'Add')) + '</button>' +
             '</div>' +
           '</div>' +
+          '<label style="font-size:0.82rem;font-weight:700;">🪪 ' + esc(bi('الرقم القومي (14 رقم - اختياري)', 'National ID (14 digits - optional)')) +
+            '<input class="input" id="bioNationalIdInp" type="text" inputmode="numeric" maxlength="14" value="' + esc(mem.nationalId || '') + '" placeholder="29xxxxxxxxxxxx" dir="ltr" />' +
+          '</label>' +
           '<label style="font-size:0.82rem;font-weight:700;color:#B91C1C;">⚠️ ' + esc(bi('حساسية من أدوية معينة (مهم جداً للطبيب)', 'Drug Allergies (Important Alert)')) +
             '<input class="input" id="bioAllergyInp" value="' + esc(mem.drugAllergies || '') + '" placeholder="' + esc(bi('مثال: البنسلين، السلفا، الأسبرين...', 'e.g. Penicillin, Sulfa...')) + '" />' +
           '</label>' +
@@ -8997,6 +9752,11 @@
               renderChronicChips();
             };
             document.getElementById('btnSavePatientBio').onclick = function () {
+              const natDigits = toAsciiDigits((document.getElementById('bioNationalIdInp') || {}).value || '').replace(/\D/g, '');
+              if (natDigits && natDigits.length !== 14) {
+                showToast(bi('الرقم القومي يجب أن يكون 14 رقماً بالضبط أو اتركه فارغاً', 'National ID must be 14 digits or empty'));
+                return;
+              }
               const idx = (db.familyMembers || []).findIndex((m) => m.id === mem.id);
               if (idx >= 0) {
                 db.familyMembers[idx] = normalizeFamilyMemberObj(Object.assign({}, db.familyMembers[idx], {
@@ -9004,6 +9764,7 @@
                   weightKg: parseFloat(document.getElementById('bioWeightInp').value) || 0,
                   heightCm: parseFloat(document.getElementById('bioHeightInp').value) || 0,
                   bloodType: document.getElementById('bioBloodSel').value || '',
+                  nationalId: natDigits,
                   chronicConditions: selectedChronics.slice(),
                   drugAllergies: (document.getElementById('bioAllergyInp').value || '').trim(),
                   otherChronicNotes: (document.getElementById('bioOtherNotesInp').value || '').trim()
@@ -9449,6 +10210,9 @@
 
         const addFamBtn = document.getElementById('btnAddFamilyQuick');
         if (addFamBtn) addFamBtn.onclick = function () { openAccountModal(); };
+
+        const medFileAddChildBtn = document.getElementById('btnMedicalFileAddChild');
+        if (medFileAddChildBtn) medFileAddChildBtn.onclick = function () { openQuickAddFamilyMemberModal(); };
 
         const heroRegBtn = document.getElementById('btnHeroRegister');
         if (heroRegBtn) heroRegBtn.onclick = function () { openAccountModal('REGISTER'); };
@@ -9938,6 +10702,10 @@
         const logoutBtn = document.getElementById('btnAdminLogout');
         if (logoutBtn) {
           logoutBtn.onclick = function () {
+            try {
+              localStorage.removeItem(ADMIN_SESSION_KEY);
+              localStorage.removeItem(ADMIN_ROLE_ACTIVE_KEY);
+            } catch (e) {}
             ui.isAdminLoggedIn = false;
             ui.roleMode = 'PATIENT';
             showToast(bi('تم تأمين وإغلاق لوحة الإدارة العليا', 'Super Admin dashboard locked'));
@@ -10070,22 +10838,23 @@
             db.config.apkDownloadUrl = document.getElementById('admSetApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
             db.config.medicationsApiUrl = document.getElementById('admSetMedsApi').value.trim();
             const drvEl = document.getElementById('admSetDefaultDriveUrl');
-            db.config.defaultDriveWebAppUrl = drvEl ? String(drvEl.value || '').trim() : '';
+            if (drvEl) db.config.defaultDriveWebAppUrl = String(drvEl.value || '').trim();
             const retEl = document.getElementById('admSetRetentionDays');
-            db.config.fileRetentionDays = normalizeRetentionDaysWeb(retEl ? retEl.value : 360);
+            if (retEl) db.config.fileRetentionDays = normalizeRetentionDaysWeb(retEl.value);
             const valOf = (id, fb) => {
               const el = document.getElementById(id);
-              const v = el ? String(el.value || '').trim() : '';
+              if (!el) return fb;
+              const v = String(el.value || '').trim();
               return v || fb;
             };
-            db.config.workerUrl = valOf('admSetWorkerUrl', DEFAULT_CONFIG.workerUrl);
-            db.config.firebaseApiKey = valOf('admSetFbApiKey', DEFAULT_CONFIG.firebaseApiKey);
-            db.config.firebaseAuthDomain = valOf('admSetFbAuthDomain', DEFAULT_CONFIG.firebaseAuthDomain);
-            db.config.firebaseProjectId = valOf('admSetFbProjectId', DEFAULT_CONFIG.firebaseProjectId);
-            db.config.firebaseStorageBucket = valOf('admSetFbStorageBucket', DEFAULT_CONFIG.firebaseStorageBucket);
-            db.config.firebaseMessagingSenderId = valOf('admSetFbMessagingSenderId', DEFAULT_CONFIG.firebaseMessagingSenderId);
-            db.config.firebaseAppId = valOf('admSetFbAppId', DEFAULT_CONFIG.firebaseAppId);
-            db.config.firebaseVapidKey = valOf('admSetFbVapidKey', DEFAULT_CONFIG.firebaseVapidKey);
+            db.config.workerUrl = valOf('admSetWorkerUrl', db.config.workerUrl || DEFAULT_CONFIG.workerUrl);
+            db.config.firebaseApiKey = valOf('admSetFbApiKey', db.config.firebaseApiKey || DEFAULT_CONFIG.firebaseApiKey);
+            db.config.firebaseAuthDomain = valOf('admSetFbAuthDomain', db.config.firebaseAuthDomain || DEFAULT_CONFIG.firebaseAuthDomain);
+            db.config.firebaseProjectId = valOf('admSetFbProjectId', db.config.firebaseProjectId || DEFAULT_CONFIG.firebaseProjectId);
+            db.config.firebaseStorageBucket = valOf('admSetFbStorageBucket', db.config.firebaseStorageBucket || DEFAULT_CONFIG.firebaseStorageBucket);
+            db.config.firebaseMessagingSenderId = valOf('admSetFbMessagingSenderId', db.config.firebaseMessagingSenderId || DEFAULT_CONFIG.firebaseMessagingSenderId);
+            db.config.firebaseAppId = valOf('admSetFbAppId', db.config.firebaseAppId || DEFAULT_CONFIG.firebaseAppId);
+            db.config.firebaseVapidKey = valOf('admSetFbVapidKey', db.config.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey);
             if (newPin.length >= 4) db.config.adminPin = newPin;
             pruneExpiredHeavyAttachmentsWeb(db);
             saveState(db);
@@ -10416,6 +11185,131 @@
           };
         });
 
+        document.querySelectorAll('[data-admin-accordion]').forEach((btn) => {
+          btn.onclick = function () {
+            const key = btn.getAttribute('data-admin-accordion');
+            if (!key) return;
+            if (!ui.adminAccordions) ui.adminAccordions = {};
+            ui.adminAccordions[key] = !ui.adminAccordions[key];
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-admin-metric]').forEach((btn) => {
+          btn.onclick = function () {
+            const target = btn.getAttribute('data-admin-metric');
+            if (!ui.adminAccordions) ui.adminAccordions = {};
+            if (target === 'CLINICS') {
+              ui.adminTab = 'CLINICS';
+              ui.adminAccordions.clinicsList = true;
+            } else if (target === 'USERS') {
+              ui.adminTab = 'USERS';
+              ui.adminAccordions.usersList = true;
+            } else if (target === 'BOOKINGS') {
+              ui.adminTab = 'BOOKINGS';
+              ui.adminAccordions.activeBookings = true;
+            } else if (target === 'BLOCKED') {
+              ui.adminTab = 'BOOKINGS';
+              ui.adminAccordions.blockPhone = true;
+            }
+            renderApp();
+            const firstAcc = document.querySelector('.admin-accordion');
+            if (firstAcc && typeof firstAcc.scrollIntoView === 'function') {
+              firstAcc.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          };
+        });
+
+        const driveClinicSel = document.getElementById('admDriveClinicSelect');
+        if (driveClinicSel) {
+          driveClinicSel.onchange = function () {
+            ui.adminDriveSelectedDocId = driveClinicSel.value;
+            const dObj = (db.doctors || []).find((d) => d.id === ui.adminDriveSelectedDocId);
+            const pInp = document.getElementById('admDriveClinicPrimary');
+            const sInp = document.getElementById('admDriveClinicSecondary');
+            if (pInp) pInp.value = dObj ? (dObj.driveWebAppUrl || '') : '';
+            if (sInp) sInp.value = dObj ? (dObj.secondaryDriveWebAppUrl || '') : '';
+          };
+        }
+
+        const saveClinicDriveBtn = document.getElementById('btnSaveClinicDriveUrls');
+        if (saveClinicDriveBtn) {
+          saveClinicDriveBtn.onclick = function () {
+            const selId = (document.getElementById('admDriveClinicSelect') || {}).value || ui.adminDriveSelectedDocId;
+            const dObj = (db.doctors || []).find((d) => d.id === selId);
+            if (!dObj) return;
+            const pVal = ((document.getElementById('admDriveClinicPrimary') || {}).value || '').trim();
+            const sVal = ((document.getElementById('admDriveClinicSecondary') || {}).value || '').trim();
+            dObj.driveWebAppUrl = pVal;
+            dObj.secondaryDriveWebAppUrl = sVal;
+            saveState(db);
+            showToast(bi('تم حفظ ومزامنة حسابي Google Drive للعيادة بنجاح', 'Saved dual Google Drive URLs for clinic'));
+            renderApp();
+          };
+        }
+
+        const saveDrivePolicyQuickBtn = document.getElementById('btnSaveDrivePolicyQuick');
+        if (saveDrivePolicyQuickBtn) {
+          saveDrivePolicyQuickBtn.onclick = async function () {
+            const drvEl = document.getElementById('admSetDefaultDriveUrl');
+            const retEl = document.getElementById('admSetRetentionDays');
+            db.config.defaultDriveWebAppUrl = drvEl ? String(drvEl.value || '').trim() : (db.config.defaultDriveWebAppUrl || '');
+            db.config.fileRetentionDays = normalizeRetentionDaysWeb(retEl ? retEl.value : (db.config.fileRetentionDays || 360));
+            pruneExpiredHeavyAttachmentsWeb(db);
+            saveState(db);
+            await pushSettingsToCloudNow(db.config);
+            showToast(bi('تم حفظ سياسة التخزين الاحتياطي ومدة الاحتفاظ سحابياً', 'Saved Drive fallback & retention policy'));
+            renderApp();
+          };
+        }
+
+        document.querySelectorAll('[data-preview-proof]').forEach((btn) => {
+          btn.onclick = function () {
+            const req = (db.familyLinkRequests || []).find((r) => r.id === btn.getAttribute('data-preview-proof'));
+            if (!req) return;
+            const kind = btn.getAttribute('data-proof-kind');
+            if (kind === 'marriage') openProofLightboxModal(bi('💍 صورة قسيمة الزواج', '💍 Marriage Certificate'), req.marriageCertDataUrl);
+            else if (kind === 'front') openProofLightboxModal(bi('🪪 صورة البطاقة الشخصية (الوجه)', '🪪 National ID (Front)'), req.idFrontDataUrl);
+            else openProofLightboxModal(bi('🪪 صورة البطاقة الشخصية (الظهر)', '🪪 National ID (Back)'), req.idBackDataUrl);
+          };
+        });
+
+        document.querySelectorAll('[data-approve-fam-link]').forEach((btn) => {
+          btn.onclick = function () {
+            const req = (db.familyLinkRequests || []).find((r) => r.id === btn.getAttribute('data-approve-fam-link'));
+            if (!req) return;
+            const accA = (db.accounts || []).find((a) => a.id === req.requesterAccountId);
+            const accB = (db.accounts || []).find((a) => a.id === req.targetSpouseAccountId);
+            if (!accA || !accB) {
+              showToast(bi('تعذر العثور على أحد الحسابين للربط', 'One of the spouse accounts was not found'));
+              return;
+            }
+            req.status = 'APPROVED';
+            req.reviewedAtMillis = Date.now();
+            accA.spouseAccountId = accB.id;
+            accB.spouseAccountId = accA.id;
+            if (typeof accA.allowSpouseViewPersonalRecords !== 'boolean') accA.allowSpouseViewPersonalRecords = false;
+            if (typeof accB.allowSpouseViewPersonalRecords !== 'boolean') accB.allowSpouseViewPersonalRecords = false;
+            if (db.account && db.account.id === accA.id) db.account = accA;
+            if (db.account && db.account.id === accB.id) db.account = accB;
+            saveState(db);
+            showToast(bi('تمت الموافقة وربط الأسرة بنجاح (يظهر الأبناء تلقائياً مع بقاء السجل الشخصي خاصاً)', 'Approved spouse link & shared children automatically'));
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-reject-fam-link]').forEach((btn) => {
+          btn.onclick = function () {
+            const req = (db.familyLinkRequests || []).find((r) => r.id === btn.getAttribute('data-reject-fam-link'));
+            if (!req) return;
+            req.status = 'REJECTED';
+            req.reviewedAtMillis = Date.now();
+            saveState(db);
+            showToast(bi('تم رفض طلب ربط الأسرة', 'Family link request rejected'));
+            renderApp();
+          };
+        });
+
         bindNotificationStatusCard(document);
         bindPasswordToggleButtons(document);
       }
@@ -10552,6 +11446,13 @@
           };
         });
 
+        document.querySelectorAll('[data-doc-family-link]').forEach((btn) => {
+          btn.onclick = function () {
+            const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-doc-family-link'));
+            if (acc) openFamilyLinkRequestModal(acc, 'عيادة ' + doc.doctorName);
+          };
+        });
+
         function applyDelay(mins) {
           doc.currentDelayMinutes += mins;
           db.slots.forEach((s) => {
@@ -10649,6 +11550,32 @@
       };
       document.getElementById('btnNotifications').onclick = openNotificationsModal;
       document.getElementById('btnAccount').onclick = function () { openAccountModal(); };
+
+      // Secret 5-tap Super Admin Trigger exclusively on Header Brand Logo (#hdrBrandLogo)
+      let adminLogoTapCount = 0;
+      let adminLogoTapWindowStart = 0;
+      const hdrBrandLogo = document.getElementById('hdrBrandLogo');
+      if (hdrBrandLogo) {
+        hdrBrandLogo.onclick = function () {
+          const now = Date.now();
+          if (now - adminLogoTapWindowStart > 3000) {
+            adminLogoTapCount = 1;
+            adminLogoTapWindowStart = now;
+          } else {
+            adminLogoTapCount += 1;
+          }
+          if (adminLogoTapCount >= 5) {
+            adminLogoTapCount = 0;
+            if (ui.isAdminLoggedIn) {
+              ui.roleMode = 'ADMIN';
+              try { localStorage.setItem(ADMIN_ROLE_ACTIVE_KEY, '1'); } catch (e) {}
+              renderApp();
+            } else {
+              openAdminPinModal();
+            }
+          }
+        };
+      }
 
       document.getElementById('bottomNav').querySelectorAll('.nav-item').forEach((btn) => {
         btn.onclick = function () {
@@ -10776,11 +11703,11 @@
         }
       });
 
-      // Clear any stale legacy SW caches automatically while preserving clean v1.0.0 cache
+      // Clear any stale legacy SW caches automatically while preserving clean v1.0.0 rev3 cache
       if ('caches' in window && caches.keys) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== 'teb-alhajayzah-v1.0.0-clean') {
+            if (k !== 'teb-alhajayzah-v1.0.0-rev3') {
               caches.delete(k).catch(function () {});
             }
           });
@@ -10797,9 +11724,10 @@
         });
       }
 
-      // Initialize App & Real-Time Multi-Device Cloud Sync immediately on startup
+      // Initialize App, Record Real Web Hit & Real-Time Multi-Device Cloud Sync immediately on startup
       setGlobalLoading(true, bi('جاري تجهيز منصة طب الحجايزة...', 'Loading Teb Al-Hajayzah...'));
       pruneExpiredHeavyAttachmentsWeb(db);
+      recordWebVisitorHitOnce();
       renderApp();
       startRealtimeCloudSync();
       setTimeout(checkUpcomingSlotRemindersWeb, 3000);
