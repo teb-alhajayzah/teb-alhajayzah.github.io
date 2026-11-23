@@ -1256,6 +1256,28 @@ class TebViewModel(
         }
     }
 
+    fun activatePatientByClinicPhone(phoneQuery: String, onSuccess: (PatientAccountEntity) -> Unit = {}) {
+        val doc = uiState.value.loggedInDoctor ?: return
+        viewModelScope.launch {
+            val res = repository.activatePatientByClinicPhone(phoneQuery, doc.doctorName)
+            res.onSuccess { updatedAcc ->
+                if (_clinicLastSearchQuery.value.isNotBlank()) {
+                    _clinicPatientSearchResults.value = repository.searchAccountsByPhoneForClinic(_clinicLastSearchQuery.value)
+                }
+                onSuccess(updatedAcc)
+                _snackbarMessages.tryEmit(
+                    bi(
+                        uiState.value.isEn,
+                        "✓ تم توثيق وتفعيل حساب ${updatedAcc.fullName} (${updatedAcc.phone}) بواسطة ${updatedAcc.verifiedBy}",
+                        "✓ Verified ${updatedAcc.fullName} (${updatedAcc.phone}) by ${updatedAcc.verifiedBy}",
+                    )
+                )
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "لم يتم العثور على مريض مسجل بهذا الرقم")
+            }
+        }
+    }
+
     fun setAccountVerifiedByAdmin(accountId: String, verified: Boolean) {
         viewModelScope.launch {
             repository.setAccountVerificationByAdmin(accountId, verified)
@@ -1821,16 +1843,23 @@ class TebViewModel(
         patientName: String,
         patientPhone: String,
         body: String,
+        isWarning: Boolean = false,
         onSent: () -> Unit = {},
     ) {
         viewModelScope.launch {
-            repository.sendAdminReplyToPatient(patientAccountId, patientName, patientPhone, body)
+            repository.sendAdminReplyToPatient(patientAccountId, patientName, patientPhone, body, isWarning)
                 .onSuccess {
                     onSent()
-                    _snackbarMessages.tryEmit(bi(uiState.value.isEn, "✓ تم إرسال رد الإدارة للمريض", "✓ Admin reply sent to patient"))
+                    _snackbarMessages.tryEmit(
+                        if (isWarning) {
+                            bi(uiState.value.isEn, "⚠️ تم إرسال التحذير الإداري للمريض $patientName فوراً", "⚠️ Admin warning sent to $patientName")
+                        } else {
+                            bi(uiState.value.isEn, "✓ تم إرسال رد الإدارة للمريض", "✓ Admin reply sent to patient")
+                        }
+                    )
                 }
                 .onFailure { err ->
-                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرد")
+                    _snackbarMessages.tryEmit(err.message ?: "تعذر إرسال الرسالة")
                 }
         }
     }

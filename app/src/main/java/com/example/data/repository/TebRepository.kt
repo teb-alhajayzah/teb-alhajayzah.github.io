@@ -587,11 +587,20 @@ class TebRepository(
         }
     }
 
+    private fun formatClinicVerificationSource(doctorName: String): String {
+        val cleanDoc = doctorName.trim().ifEmpty { "العيادة" }
+        return when {
+            cleanDoc.startsWith("عيادة") -> cleanDoc
+            cleanDoc.startsWith("د.") || cleanDoc.startsWith("د/") || cleanDoc.startsWith("دكتور") || cleanDoc.startsWith("Dr", ignoreCase = true) ->
+                "عيادة $cleanDoc"
+            else -> "عيادة د. $cleanDoc"
+        }
+    }
+
     suspend fun activatePatientByClinic(accountId: String, doctorName: String): Result<PatientAccountEntity> {
         val acc = dao.getAccountById(accountId)
             ?: return Result.failure(IllegalStateException("الحساب غير موجود"))
-        val cleanDoc = doctorName.trim().ifEmpty { "العيادة" }
-        val source = if (cleanDoc.startsWith("عيادة")) cleanDoc else "عيادة $cleanDoc"
+        val source = formatClinicVerificationSource(doctorName)
         val now = System.currentTimeMillis()
         dao.markAccountPhoneVerified(accountId, source, now)
         val updated = dao.getAccountById(accountId) ?: acc.copy(
@@ -603,12 +612,34 @@ class TebRepository(
         return Result.success(updated)
     }
 
+    suspend fun activatePatientByClinicPhone(rawPhone: String, doctorName: String): Result<PatientAccountEntity> {
+        val cleanText = toAsciiDigits(rawPhone).trim()
+        val qDigits = normalizePhoneDigits(cleanText)
+        if (qDigits.length < 3) {
+            return Result.failure(IllegalArgumentException("يرجى إدخال رقم هاتف مريض صحيح (3 أرقام على الأقل)"))
+        }
+        val accounts = dao.getAllAccountsOnce()
+        val exactMatch = accounts.firstOrNull { acc ->
+            val accDigits = normalizePhoneDigits(acc.phone)
+            accDigits.isNotEmpty() && accDigits == qDigits
+        }
+        val partialMatch = if (qDigits.length >= 6) {
+            accounts.firstOrNull { acc ->
+                val accDigits = normalizePhoneDigits(acc.phone)
+                accDigits.isNotEmpty() && (accDigits.contains(qDigits) || qDigits.contains(accDigits))
+            }
+        } else null
+        val target = exactMatch ?: partialMatch
+            ?: return Result.failure(IllegalStateException("لم يتم العثور على مريض مسجل بهذا الرقم"))
+        return activatePatientByClinic(target.id, doctorName)
+    }
+
     suspend fun setAccountVerificationByAdmin(accountId: String, verified: Boolean) {
         val now = System.currentTimeMillis()
         dao.setAccountVerificationStatus(
             accountId = accountId,
             isVerified = verified,
-            verifiedBy = if (verified) "الإدارة" else "",
+            verifiedBy = if (verified) "المدير العام" else "",
             verifiedAtMillis = if (verified) now else 0L,
             otpUsed = verified,
         )
@@ -2430,6 +2461,37 @@ class TebRepository(
         dao.insertFamilyMember(selfMember)
         pushDocAsync("accounts", account.id) { FirestoreCloudSyncService.accountToJson(account) }
         pushDocAsync("family_members", selfMember.id) { FirestoreCloudSyncService.familyMemberToJson(selfMember) }
+        val adminRegMsg = "👤 عميل جديد سجل الآن: ${account.fullName} - ${account.phone}"
+        val adminNotif = DelayNotificationEntity(
+            doctorId = "",
+            doctorName = "تسجيل عميل جديد",
+            clinicName = "العملاء الجدد",
+            delayMinutes = 0,
+            message = adminRegMsg,
+            createdAtMillis = nowMillis,
+            isRead = false,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = account.id,
+            senderLabel = "تسجيل عميل جديد",
+        )
+        val notifRowId = dao.insertNotification(adminNotif)
+        val savedNotif = adminNotif.copy(id = notifRowId)
+        pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+            FirestoreCloudSyncService.notificationToJson(savedNotif)
+        }
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "👤 عميل جديد سجل الآن — طب الحجايزة",
+            body = "${account.fullName} - ${account.phone}",
+        )
+        dispatchWorkerPushAsync(
+            eventType = "NEW_USER_REGISTERED",
+            title = "👤 عميل جديد سجل الآن",
+            body = "${account.fullName} - ${account.phone}",
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = account.id,
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
         appContext.tebDataStore.edit { prefs ->
             prefs[activeAccountKey] = accountId
             prefs[activeMemberKey] = selfMemberId
@@ -2626,10 +2688,17 @@ class TebRepository(
         patientName: String,
         patientPhone: String,
         body: String,
+        isWarning: Boolean = false,
     ): Result<DirectMessageEntity> {
         val cleanBody = body.trim()
         if (cleanBody.isEmpty()) {
-            return Result.failure(IllegalArgumentException("يرجى كتابة الرد أولاً"))
+            return Result.failure(IllegalArgumentException("يرجى كتابة الرسالة أولاً"))
+        }
+        val now = System.currentTimeMillis()
+        val finalBody = if (isWarning) {
+            if (cleanBody.startsWith("⚠️")) cleanBody else "⚠️ [تحذير إداري] $cleanBody"
+        } else {
+            cleanBody
         }
         val msg = DirectMessageEntity(
             id = "msg_${UUID.randomUUID()}",
@@ -2641,15 +2710,57 @@ class TebRepository(
             doctorName = "",
             clinicName = "",
             senderRole = MessageSenderRole.ADMIN,
-            senderName = "إدارة منصة طب الحجايزة",
-            body = cleanBody,
-            createdAtMillis = System.currentTimeMillis(),
+            senderName = if (isWarning) "⚠️ تحذير إداري — المدير العام" else "المدير العام — إدارة طب الحجايزة",
+            body = finalBody,
+            createdAtMillis = now,
             isReadByPatient = false,
             isReadByClinic = true,
             isReadByAdmin = true,
         )
         dao.insertDirectMessage(msg)
         pushDocAsync("messages", msg.id) { FirestoreCloudSyncService.messageToJson(msg) }
+
+        if (isWarning) {
+            val warnNotif = DelayNotificationEntity(
+                doctorId = "",
+                doctorName = "المدير العام",
+                clinicName = "إدارة منصة طب الحجايزة",
+                delayMinutes = 0,
+                message = "⚠️ تحذير إداري من المدير العام: $cleanBody",
+                createdAtMillis = now,
+                isRead = false,
+                targetAudience = NotificationAudience.PATIENT,
+                targetId = patientAccountId,
+                senderLabel = "⚠️ تحذير إداري من المدير العام",
+            )
+            val notifId = dao.insertNotification(warnNotif)
+            val savedWarn = warnNotif.copy(id = notifId)
+            pushDocAsync("notifications", "notif_${savedWarn.id}_${savedWarn.createdAtMillis}") {
+                FirestoreCloudSyncService.notificationToJson(savedWarn)
+            }
+            TebNotificationHelper.showHighPriorityNotification(
+                context = appContext,
+                title = "⚠️ تحذير إداري — طب الحجايزة",
+                body = cleanBody,
+            )
+            dispatchWorkerPushAsync(
+                eventType = "ADMIN_WARNING",
+                title = "⚠️ تحذير إداري من المدير العام",
+                body = cleanBody,
+                targetAudience = NotificationAudience.PATIENT,
+                targetId = patientAccountId,
+                namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+            )
+        } else {
+            dispatchWorkerPushAsync(
+                eventType = "DIRECT_MESSAGE",
+                title = "💬 رسالة من إدارة طب الحجايزة",
+                body = finalBody,
+                targetAudience = NotificationAudience.PATIENT,
+                targetId = patientAccountId,
+                namespacePath = CloudNamespacePaths.MESSAGES,
+            )
+        }
         return Result.success(msg)
     }
 
