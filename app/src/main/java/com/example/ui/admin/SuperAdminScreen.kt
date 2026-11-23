@@ -351,15 +351,15 @@ fun SuperAdminDashboardScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = bi(isEn, "لوحة التحكم الشاملة (Super Admin)", "Super Admin Control Panel"),
+                                    text = bi(isEn, "مرحباً بك، ${state.brandConfig.adminOwnerName}", "Welcome, ${state.brandConfig.adminOwnerNameEn}"),
                                     style = MaterialTheme.typography.titleLarge,
                                     color = Color.White,
                                 )
                                 Text(
                                     text = bi(
                                         isEn,
-                                        "إدارة كاملة للمنصة — ${state.brandConfig.adminOwnerName}",
-                                        "Full Platform Control — ${state.brandConfig.adminOwnerNameEn}",
+                                        "الإدارة العامة لمنصة طب الحجايزة (Super Admin)",
+                                        "General Administration — Teb Al-Hajayzah Platform",
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.92f),
@@ -375,98 +375,6 @@ fun SuperAdminDashboardScreen(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(bi(isEn, "خروج وتأمين", "Lock & Exit"))
                             }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    AdminMetricBox(
-                        label = bi(isEn, "العملاء والمشتركين", "Users"),
-                        value = state.allAccounts.size.toString(),
-                        modifier = Modifier.weight(1f),
-                        testTagName = "admin_metric_users",
-                        onClick = { selectedTab = 5 },
-                    )
-                    AdminMetricBox(
-                        label = bi(isEn, "عيادات / مستشفى", "Clinics"),
-                        value = state.doctors.size.toString(),
-                        modifier = Modifier.weight(1f),
-                        testTagName = "admin_metric_clinics",
-                        onClick = { selectedTab = 0 },
-                    )
-                    AdminMetricBox(
-                        label = bi(isEn, "حجوزات نشطة", "Bookings"),
-                        value = bookedSlots.size.toString(),
-                        modifier = Modifier.weight(1f),
-                        testTagName = "admin_metric_bookings",
-                        onClick = {
-                            selectedTab = 2
-                            activeBookingsExpanded = true
-                        },
-                    )
-                    AdminMetricBox(
-                        label = bi(isEn, "أرقام محظورة", "Blocked"),
-                        value = state.blockedPhones.size.toString(),
-                        modifier = Modifier.weight(1f),
-                        testTagName = "admin_metric_blocked",
-                        onClick = {
-                            selectedTab = 2
-                            blockPhoneExpanded = true
-                        },
-                    )
-                }
-            }
-
-            item {
-                val vs = state.visitorStats
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.35f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("admin_visitor_stats_card"),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = bi(isEn, "📊 إحصائيات الزيارات الحية للمنصة (APK vs Web)", "📊 Live Platform Visitor Stats (APK vs Web)"),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TealPrimary,
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            VisitorStatTile(
-                                title = bi(isEn, "اليوم", "Today"),
-                                total = vs.todayTotal,
-                                apk = vs.todayApk,
-                                web = vs.todayWeb,
-                                modifier = Modifier.weight(1f),
-                            )
-                            VisitorStatTile(
-                                title = bi(isEn, "الأسبوع", "Week"),
-                                total = vs.weekTotal,
-                                apk = vs.weekApk,
-                                web = vs.weekWeb,
-                                modifier = Modifier.weight(1f),
-                            )
-                            VisitorStatTile(
-                                title = bi(isEn, "الشهر", "Month"),
-                                total = vs.monthTotal,
-                                apk = vs.monthApk,
-                                web = vs.monthWeb,
-                                modifier = Modifier.weight(1f),
-                            )
                         }
                     }
                 }
@@ -542,6 +450,98 @@ fun SuperAdminDashboardScreen(
                         },
                         modifier = Modifier.testTag("admin_family_links_tab"),
                     )
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AdminMetricBox(
+                        label = bi(isEn, "العملاء والمشتركين", "Users"),
+                        value = state.allAccounts.size.toString(),
+                        modifier = Modifier.weight(1f),
+                        testTagName = "admin_metric_users",
+                        onClick = { selectedTab = 5 },
+                    )
+                    AdminMetricBox(
+                        label = bi(isEn, "عيادات / مستشفى", "Clinics"),
+                        value = state.doctors.size.toString(),
+                        modifier = Modifier.weight(1f),
+                        testTagName = "admin_metric_clinics",
+                        onClick = { selectedTab = 0 },
+                    )
+                    AdminMetricBox(
+                        label = bi(isEn, "حجوزات نشطة", "Bookings"),
+                        value = bookedSlots.size.toString(),
+                        modifier = Modifier.weight(1f),
+                        testTagName = "admin_metric_bookings",
+                        onClick = {
+                            selectedTab = 2
+                            activeBookingsExpanded = true
+                        },
+                    )
+                    AdminMetricBox(
+                        label = bi(isEn, "أرقام محظورة", "Blocked"),
+                        value = state.blockedPhones.size.toString(),
+                        modifier = Modifier.weight(1f),
+                        testTagName = "admin_metric_blocked",
+                        onClick = {
+                            selectedTab = 2
+                            blockPhoneExpanded = true
+                        },
+                    )
+                }
+            }
+
+            item {
+                val vs = state.visitorStats
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("admin_visitor_stats_card"),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = bi(isEn, "📊 إحصائيات الزيارات الحية للمنصة (APK vs Web)", "📊 Live Platform Visitor Stats (APK vs Web)"),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TealPrimary,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            VisitorStatTile(
+                                title = bi(isEn, "زوار اليوم", "Today"),
+                                total = vs.todayTotal,
+                                apk = vs.todayApk,
+                                web = vs.todayWeb,
+                                modifier = Modifier.weight(1f),
+                            )
+                            VisitorStatTile(
+                                title = bi(isEn, "آخر 7 أيام", "Last 7 Days"),
+                                total = vs.weekTotal,
+                                apk = vs.weekApk,
+                                web = vs.weekWeb,
+                                modifier = Modifier.weight(1f),
+                            )
+                            VisitorStatTile(
+                                title = bi(isEn, "آخر 30 يوماً", "Last 30 Days"),
+                                total = vs.monthTotal,
+                                apk = vs.monthApk,
+                                web = vs.monthWeb,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
             }
 
@@ -800,7 +800,25 @@ fun SuperAdminDashboardScreen(
                             onToggle = { driveStorageExpanded = !driveStorageExpanded },
                             testTagName = "admin_accordion_drive",
                         ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Surface(
+                                    color = SlotAvailableBg,
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, SlotAvailableBorder.copy(alpha = 0.45f)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = bi(
+                                            isEn,
+                                            "كل عيادة تحصل على حساب أساسي (15GB) وحساب ثانوي احتياطي (+15GB) بإجمالي 30GB لحفظ التحاليل والأشعة مع تحويل فوري للسجل الكتابي الدائم.",
+                                            "Each clinic gets a Primary Drive (15GB) + Secondary Drive (+15GB) = 30GB with instant Permanent Medical Log extraction.",
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = SlotAvailableText,
+                                        lineHeight = 20.sp,
+                                        modifier = Modifier.padding(14.dp),
+                                    )
+                                }
                                 if (selectedDriveDoc != null) {
                                     ExposedDropdownMenuBox(
                                         expanded = driveDropdownExpanded,
@@ -2509,17 +2527,30 @@ private fun VisitorStatTile(
         modifier = modifier,
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(total.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = TealPrimary)
             Text(
-                text = "APK: $apk • Web: $web",
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+            )
+            Text(
+                text = total.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = TealPrimary,
+            )
+            Text(
+                text = "(APK: $apk | Web: $web)",
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
             )
         }
     }

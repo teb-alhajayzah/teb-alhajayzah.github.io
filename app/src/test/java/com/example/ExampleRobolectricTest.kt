@@ -1422,8 +1422,49 @@ class ExampleRobolectricTest {
         assertEquals(2, populatedStats.weekApk)
         assertEquals(1, populatedStats.monthWeb)
     }
+
+    @Test
+    fun specialtyClinicalTemplatesCustomFavoritesAndGeneralManagerConfigWork() {
+        assertEquals("طب الحجايزة", AppConfig.defaultBrand.platformNameAr)
+        assertEquals("v1.0.0", AppConfig.defaultBrand.appVersionLabel)
+        assertEquals("132027", AppConfig.defaultBrand.adminPin)
+        assertEquals("المدير العام", AppConfig.defaultBrand.adminOwnerName)
+        assertEquals("General Manager", AppConfig.defaultBrand.adminOwnerNameEn)
+
+        val obgynDoc = com.example.data.local.ClinicDoctorEntity(
+            id = "doc_obgyn_test",
+            doctorName = "د. محمد فكري",
+            specialty = "النساء والتوليد وتأخر الإنجاب",
+            clinicName = "عيادة النساء والتوليد",
+            clinicType = ClinicType.PRIVATE,
+            locationLabel = "قرية الحجايزة",
+            feeEgp = 150,
+            workStartMinutes = 17 * 60,
+            workEndMinutes = 21 * 60,
+            slotDurationMinutes = 20,
+            username = "dr_test1",
+            password = "123",
+        )
+        val obgynDiags = com.example.util.SpecialtyClinicalTemplates.diagnosesForDoctor(obgynDoc)
+        val obgynMeds = com.example.util.SpecialtyClinicalTemplates.medicationsForDoctor(obgynDoc)
+        assertTrue(obgynDiags.any { it.ar.contains("متابعة حمل طبيعي") })
+        assertTrue(obgynDiags.any { it.ar.contains("أنيميا الحمل") })
+        assertTrue(obgynMeds.any { it.tradeName.contains("حمض الفوليك") })
+        assertTrue(obgynMeds.any { it.tradeName.contains("دوفاستون") })
+
+        val pedDoc = obgynDoc.copy(id = "doc_ped_test", specialty = "طب الأطفال وحديثي الولادة")
+        val pedDiags = com.example.util.SpecialtyClinicalTemplates.diagnosesForDoctor(pedDoc)
+        val pedMeds = com.example.util.SpecialtyClinicalTemplates.medicationsForDoctor(pedDoc)
+        assertTrue(pedDiags.any { it.ar.contains("صفراء حديثي الولادة") })
+        assertTrue(pedDiags.any { it.ar.contains("نزلة معوية") })
+        assertTrue(pedMeds.any { it.tradeName.contains("Cetal") })
+        assertTrue(pedMeds.any { it.tradeName.contains("ORS") })
+
+        val customMedKey = com.example.util.SpecialtyClinicalTemplates.encodeCustomMedFav("بانادول إكسترا | Extra", "قرص كل 8 ساعات")
+        val decodedMed = com.example.util.SpecialtyClinicalTemplates.decodeCustomMedFav(customMedKey)
+        assertEquals("بانادول إكسترا   Extra" to "قرص كل 8 ساعات", decodedMed)
+
+        val customDiagKey = com.example.util.SpecialtyClinicalTemplates.encodeCustomDiagFav("التهاب حاد بالمعدة")
+        assertEquals("التهاب حاد بالمعدة", com.example.util.SpecialtyClinicalTemplates.decodeCustomDiagFav(customDiagKey))
+    }
 }
-
-
-
-

@@ -1085,22 +1085,21 @@
 
     .visitor-stats-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-
-    @media (max-width: 540px) {
-      .visitor-stats-grid { grid-template-columns: 1fr; }
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
     }
 
     .visitor-stat-tile {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 10px;
+      padding: 8px 6px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      align-items: center;
+      text-align: center;
+      gap: 3px;
+      min-width: 0;
     }
 
     .admin-accordion {
@@ -1130,12 +1129,13 @@
     }
 
     .admin-accordion-body {
-      padding: 0 14px 14px;
+      padding: 14px 16px 16px;
       border-top: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      padding-top: 12px;
+      gap: 12px;
+      line-height: 1.65;
+      box-sizing: border-box;
     }
 
     .legal-links-bar {
@@ -1640,7 +1640,7 @@
         appVersionLabel: 'v1.0.0',
         apkDownloadUrl: 'https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk',
         medicationsApiUrl: '',
-        adminOwnerName: 'المهندس محمد يوسف',
+        adminOwnerName: 'المدير العام',
         adminPin: '132027',
         globalChatEnabled: true,
         firebaseApiKey: 'AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs',
@@ -2006,6 +2006,197 @@
           else if (spec) keys.add(spec);
         });
         return keys;
+      }
+
+      const CUSTOM_MED_FAV_PREFIX = 'custom_med|';
+      const CUSTOM_DIAG_FAV_PREFIX = 'custom_diag|';
+
+      function encodeCustomMedFavKey(tradeName, dosage) {
+        const cleanName = String(tradeName || '').replace(/\|/g, ' ').trim();
+        const cleanDose = String(dosage || '').replace(/\|/g, ' ').trim() || 'حسب إرشادات الطبيب';
+        return CUSTOM_MED_FAV_PREFIX + cleanName + '|' + cleanDose;
+      }
+
+      function decodeCustomMedFavKey(key) {
+        const s = String(key || '');
+        if (!s.startsWith(CUSTOM_MED_FAV_PREFIX)) return null;
+        const rest = s.slice(CUSTOM_MED_FAV_PREFIX.length);
+        const sep = rest.indexOf('|');
+        const tradeName = (sep >= 0 ? rest.slice(0, sep) : rest).trim();
+        if (!tradeName) return null;
+        const dosage = (sep >= 0 ? rest.slice(sep + 1) : '').trim() || 'حسب إرشادات الطبيب';
+        return { key: s, tradeName, dosage };
+      }
+
+      function encodeCustomDiagFavKey(diagnosis) {
+        return CUSTOM_DIAG_FAV_PREFIX + String(diagnosis || '').replace(/\|/g, ' ').trim();
+      }
+
+      function decodeCustomDiagFavKey(key) {
+        const s = String(key || '');
+        if (!s.startsWith(CUSTOM_DIAG_FAV_PREFIX)) return null;
+        const val = s.slice(CUSTOM_DIAG_FAV_PREFIX.length).trim();
+        return val || null;
+      }
+
+      const SPECIALTY_CLINICAL_TEMPLATES = {
+        obgyn: {
+          diagnoses: [
+            { ar: 'متابعة حمل طبيعي', en: 'Routine Antenatal Follow-up' },
+            { ar: 'أنيميا الحمل', en: 'Anemia in Pregnancy' },
+            { ar: 'التهابات مهبلية', en: 'Vaginal Infection / Vaginitis' },
+            { ar: 'قيء الحمل', en: 'Hyperemesis Gravidarum' },
+            { ar: 'متابعة تبويض', en: 'Ovulation Monitoring' },
+            { ar: 'ارتفاع ضغط الحمل', en: 'Gestational Hypertension' },
+            { ar: 'تكيس المبايض وتأخر الإنجاب', en: 'PCOS & Fertility Follow-up' }
+          ],
+          medications: [
+            { id: 'sug_folic', tradeName: 'حمض الفوليك (Folic Acid)', strength: '5 مجم', defaultDosage: 'قرص صباحاً يومياً' },
+            { id: 'sug_iron_calc', tradeName: 'حديد وكالسيوم للحامل (فيروترون + أوستيوكير)', strength: 'كبسول + أقراص', defaultDosage: 'كبسولة حديد بعد الغداء + قرص كالسيوم مساءً' },
+            { id: 'sug_duphaston', tradeName: 'مثبت حمل دوفاستون (Duphaston)', strength: '10 مجم', defaultDosage: 'قرص كل 12 ساعة' },
+            { id: 'sug_utrogestan', tradeName: 'مثبت حمل يوتروجيستان (Utrogestan)', strength: '200 مجم', defaultDosage: 'كبسولة مساءً يومياً' },
+            { id: 'sug_pregnacare', tradeName: 'فيتامينات الحمل (Pregnacare)', strength: 'كبسول متكامل', defaultDosage: 'كبسولة بعد الوجبة الرئيسية' },
+            { id: 'sug_safe_abx', tradeName: 'مضاد حيوي آمن للحامل (Augmentin)', strength: '1 جم', defaultDosage: 'قرص كل 12 ساعة لمدة 7 أيام' },
+            { id: 'sug_gyno_dakt', tradeName: 'لبوس مهبلي (Gyno-Daktarin)', strength: '400 مجم', defaultDosage: 'لبوسة مساءً لمدة 3 أيام' }
+          ]
+        },
+        pediatrics: {
+          diagnoses: [
+            { ar: 'صفراء حديثي الولادة', en: 'Neonatal Jaundice' },
+            { ar: 'نزلة معوية', en: 'Pediatric Gastroenteritis' },
+            { ar: 'التهاب شعبي وحساسية صدر', en: 'Bronchitis & Chest Allergy' },
+            { ar: 'التهاب لوزتين وحلق', en: 'Acute Tonsillitis & Pharyngitis' },
+            { ar: 'سخونة وتسنين', en: 'Fever & Teething' },
+            { ar: 'نقص فيتامين د وكالسيوم', en: 'Vitamin D & Calcium Deficiency' }
+          ],
+          medications: [
+            { id: 'sug_cetal_syr', tradeName: 'خافض حرارة شراب (Cetal)', strength: '250 مجم/5 مل', defaultDosage: '5 سم كل 6 ساعات عند اللزوم' },
+            { id: 'sug_brufen_syr', tradeName: 'بروفين شراب للأطفال (Brufen)', strength: '100 مجم/5 مل', defaultDosage: '5 سم كل 8 ساعات بعد الأكل' },
+            { id: 'sug_vidrop_drops', tradeName: 'نقط فيتامين د (Vidrop)', strength: '2800 وحدة/مل', defaultDosage: '4 نقط يومياً بالفم' },
+            { id: 'sug_ors', tradeName: 'محلول معالجة الجفاف (Hydrosafe ORS)', strength: 'أكياس', defaultDosage: 'كيس على 200 مل ماء معقم بعد كل إسهال' },
+            { id: 'sug_farcolin', tradeName: 'موسع شعب (Farcolin)', strength: '5 مجم/مل', defaultDosage: 'جلسة بخار صباحاً ومساءً' },
+            { id: 'sug_aug_ped', tradeName: 'أوجمنتين شراب (Augmentin)', strength: '457 مجم/5 مل', defaultDosage: '5 سم كل 12 ساعة لمدة 7 أيام' },
+            { id: 'sug_zyrtec_ped', tradeName: 'زيرتك نقط للحساسية (Zyrtec)', strength: '10 مجم/مل', defaultDosage: '5 نقط مساءً يومياً' }
+          ]
+        },
+        internal_medicine: {
+          diagnoses: [
+            { ar: 'التهاب المعدة وارتجاع المريء', en: 'Gastritis & GERD' },
+            { ar: 'القولون العصبي ومغص', en: 'Irritable Bowel Syndrome' },
+            { ar: 'نزلة معوية وإسهال', en: 'Acute Gastroenteritis' },
+            { ar: 'ارتفاع ضغط الدم', en: 'Essential Hypertension' },
+            { ar: 'متابعة مرض السكر', en: 'Diabetes Mellitus Follow-up' },
+            { ar: 'أنيميا ونقص الحديد', en: 'Iron Deficiency Anemia' }
+          ],
+          medications: [
+            { id: 'sug_controloc', tradeName: 'كونترولوك (Controloc)', strength: '40 مجم', defaultDosage: 'قرص قبل الفطار بنصف ساعة' },
+            { id: 'sug_gaviscon', tradeName: 'جافيسكون شراب (Gaviscon)', strength: 'شراب معلق', defaultDosage: 'ملعقة كبيرة بعد الأكل' },
+            { id: 'sug_colospasmin', tradeName: 'كولوسبازمين فورت', strength: '135 مجم', defaultDosage: 'قرص قبل الأكل 3 مرات' },
+            { id: 'sug_antinal', tradeName: 'أنتينال (Antinal)', strength: '200 مجم', defaultDosage: 'كبسولة كل 6 ساعات لمدة 5 أيام' },
+            { id: 'sug_glucophage', tradeName: 'جلوكوفاج (Glucophage)', strength: '1000 مجم', defaultDosage: 'قرص بعد الغداء يومياً' }
+          ]
+        },
+        orthopedics: {
+          diagnoses: [
+            { ar: 'خشونة الركبة والمفاصل', en: 'Knee Osteoarthritis' },
+            { ar: 'ألم أسفل الظهر وعرق النسا', en: 'Low Back Pain & Sciatica' },
+            { ar: 'التهاب أوتار وشد عضلي', en: 'Tendinitis & Muscle Spasm' },
+            { ar: 'نقص فيتامين د وهشاشة عظام', en: 'Vitamin D & Osteopenia' }
+          ],
+          medications: [
+            { id: 'sug_cataflam', tradeName: 'كتافلام (Cataflam)', strength: '50 مجم', defaultDosage: 'قرص بعد الأكل كل 12 ساعة' },
+            { id: 'sug_dimra', tradeName: 'ديمرا باسط عضلات (Dimra)', strength: '50/500 مجم', defaultDosage: 'قرص كل 8 ساعات بعد الأكل' },
+            { id: 'sug_osteocare', tradeName: 'أوستيوكير كالسيوم (Osteocare)', strength: '400 مجم', defaultDosage: 'قرص بعد الغداء يومياً' },
+            { id: 'sug_voltaren_gel', tradeName: 'فولتارين جل (Voltaren Gel)', strength: '1%', defaultDosage: 'دهان موضعي مرتين يومياً' }
+          ]
+        },
+        cardiology: {
+          diagnoses: [
+            { ar: 'ارتفاع ضغط الدم', en: 'Hypertension Management' },
+            { ar: 'اضطراب ضربات القلب', en: 'Cardiac Arrhythmia' },
+            { ar: 'قصور بالشرايين التاجية', en: 'Ischemic Heart Disease' }
+          ],
+          medications: [
+            { id: 'sug_concor', tradeName: 'كونكور (Concor)', strength: '5 مجم', defaultDosage: 'قرص صباحاً يومياً' },
+            { id: 'sug_aspocid', tradeName: 'أسبوسيد (Aspocid)', strength: '75 مجم', defaultDosage: 'قرص بعد الغداء يومياً' },
+            { id: 'sug_lipitor', tradeName: 'ليبيتور (Lipitor)', strength: '20 مجم', defaultDosage: 'قرص مساءً يومياً' }
+          ]
+        },
+        ent: {
+          diagnoses: [
+            { ar: 'التهاب اللوزتين والحلق', en: 'Acute Tonsillopharyngitis' },
+            { ar: 'التهاب الجيوب الأنفية', en: 'Acute Sinusitis' },
+            { ar: 'التهاب الأذن الوسطى', en: 'Otitis Media' }
+          ],
+          medications: [
+            { id: 'sug_tavanic', tradeName: 'تافانيك (Tavanic)', strength: '500 مجم', defaultDosage: 'قرص يومياً لمدة 7 أيام' },
+            { id: 'sug_clarinase', tradeName: 'كلارينيز (Clarinase)', strength: '5/120 مجم', defaultDosage: 'قرص كل 12 ساعة لمدة 5 أيام' },
+            { id: 'sug_nasonex', tradeName: 'نازونكس بخاخ (Nasonex)', strength: '50 مكجم', defaultDosage: 'بختان في كل فتحة أنف يومياً' }
+          ]
+        },
+        dermatology: {
+          diagnoses: [
+            { ar: 'إكزيما وحساسية جلدية', en: 'Eczema & Contact Dermatitis' },
+            { ar: 'ارتكاريا وحكة جلدية', en: 'Urticaria & Pruritus' }
+          ],
+          medications: [
+            { id: 'sug_fusiderm', tradeName: 'فيوسيدرم كريم (Fusiderm)', strength: '2%', defaultDosage: 'دهان موضعي 3 مرات يومياً' },
+            { id: 'sug_telfast', tradeName: 'تلفاست (Telfast)', strength: '180 مجم', defaultDosage: 'قرص مساءً يومياً' }
+          ]
+        },
+        ophthalmology: {
+          diagnoses: [
+            { ar: 'التهاب ملتحمة العين', en: 'Acute Conjunctivitis' },
+            { ar: 'جفاف وحساسية العين', en: 'Dry Eye & Ocular Allergy' }
+          ],
+          medications: [
+            { id: 'sug_tobradex', tradeName: 'توبراديكس قطرة (Tobradex)', strength: '0.3%/0.1%', defaultDosage: 'قطرة 3 مرات يومياً' },
+            { id: 'sug_systane', tradeName: 'سيستان ألترا (Systane Ultra)', strength: 'قطرة مرطبة', defaultDosage: 'قطرة كل 6 ساعات' }
+          ]
+        },
+        dentistry: {
+          diagnoses: [
+            { ar: 'التهاب عصب الضرس وألم حاد', en: 'Acute Pulpitis & Toothache' },
+            { ar: 'خراج والتهاب اللثة', en: 'Dental Abscess & Gingivitis' }
+          ],
+          medications: [
+            { id: 'sug_aug_dent', tradeName: 'أوجمنتين (Augmentin)', strength: '1 جم', defaultDosage: 'قرص كل 12 ساعة لمدة 7 أيام' },
+            { id: 'sug_flagyl', tradeName: 'فلاجيل (Flagyl)', strength: '500 مجم', defaultDosage: 'قرص كل 8 ساعات لمدة 5 أيام' },
+            { id: 'sug_catafast', tradeName: 'كتافاست فوار (Catafast)', strength: '50 مجم', defaultDosage: 'كيس على نصف كوب ماء عند اللزوم' }
+          ]
+        }
+      };
+
+      function getSpecialtyTemplatesForDoctor(doc) {
+        const diagnoses = [];
+        const medications = [];
+        allDoctorSpecialties(doc).forEach((spec) => {
+          const item = findSpecialtyByNameOrAlias(spec);
+          const tpl = item && (SPECIALTY_CLINICAL_TEMPLATES[item.id] || (item.id === 'eye_care' ? SPECIALTY_CLINICAL_TEMPLATES.ophthalmology : null));
+          if (tpl) {
+            (tpl.diagnoses || []).forEach((d) => {
+              if (!diagnoses.some((x) => x.ar === d.ar)) diagnoses.push(d);
+            });
+            (tpl.medications || []).forEach((m) => {
+              if (!medications.some((x) => x.id === m.id)) medications.push(m);
+            });
+          }
+        });
+        if (diagnoses.length === 0) {
+          diagnoses.push(
+            { ar: 'كشف عام ومتابعة حالة', en: 'General Consultation & Follow-up' },
+            { ar: 'ارتفاع درجة الحرارة والتهاب حاد', en: 'Acute Febrile Infection' },
+            { ar: 'متابعة نتائج التحاليل والأشعة', en: 'Lab & Radiology Review' }
+          );
+        }
+        if (medications.length === 0) {
+          medications.push(
+            { id: 'sug_gen_panadol', tradeName: 'بنادول / باراسيتامول (Paracetamol)', strength: '500 مجم', defaultDosage: 'قرص كل 8 ساعات عند اللزوم' },
+            { id: 'sug_gen_aug', tradeName: 'أوجمنتين (Augmentin)', strength: '1 جم', defaultDosage: 'قرص كل 12 ساعة لمدة 7 أيام' },
+            { id: 'sug_gen_ctrl', tradeName: 'كونترولوك (Controloc)', strength: '40 مجم', defaultDosage: 'قرص قبل الفطار بنصف ساعة' }
+          );
+        }
+        return { diagnoses, medications };
       }
 
       function getDoctorDisplayName(doc, isEnOverride) {
@@ -2513,6 +2704,9 @@
                   parsed.config.adminPin = '132027';
                 }
                 parsed.config.appVersionLabel = 'v1.0.0';
+                if (/محمد يوسف|Mohamed Youssef/i.test(String(parsed.config.adminOwnerName || ''))) {
+                  parsed.config.adminOwnerName = 'المدير العام';
+                }
                 parsed.config.globalChatEnabled = parsed.config.globalChatEnabled !== false;
                 parsed.config.defaultDriveWebAppUrl = String(parsed.config.defaultDriveWebAppUrl || '').trim();
                 parsed.config.fileRetentionDays = normalizeRetentionDaysWeb(parsed.config.fileRetentionDays);
@@ -2983,6 +3177,9 @@
               didOverrideLegacyRemotePin = true;
             }
             merged.appVersionLabel = 'v1.0.0';
+            if (/محمد يوسف|Mohamed Youssef/i.test(String(merged.adminOwnerName || ''))) {
+              merged.adminOwnerName = 'المدير العام';
+            }
             merged.globalChatEnabled = merged.globalChatEnabled !== false;
             merged.defaultDriveWebAppUrl = String(merged.defaultDriveWebAppUrl || '').trim();
             merged.fileRetentionDays = normalizeRetentionDaysWeb(merged.fileRetentionDays);
@@ -6711,8 +6908,9 @@
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
             '<div>' +
               '<div style="font-weight:800;font-size:1.02rem;color:var(--teal-text);">🩺 ' + esc(bi('البيانات الحيوية والأمراض المزمنة (نظرة عامة)', 'Vital Bio & Chronic Conditions Overview')) + '</div>' +
-              '<div style="font-size:0.8rem;color:var(--text-muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
-                '<span>' + esc(mem.fullName) + ' (' + esc(mem.relation) + ')</span>' +
+              '<div style="font-size:0.8rem;color:var(--text-muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;">' +
+                '<span style="font-weight:700;color:var(--text);">' + esc(mem.fullName) + ' (' + esc(mem.relation) + ')</span>' +
+                '<button class="btn btn-green" type="button" data-inline-add-child="1" style="min-height:30px;padding:3px 10px;font-size:0.78rem;border-radius:999px;font-weight:800;">➕ ' + esc(bi('إضافة فرد / ابن', 'Add Child / Member')) + '</button>' +
                 (mem.nationalId ? '<span class="badge" style="background:var(--surface);border:1px solid var(--border);color:var(--teal-text);" dir="ltr">🪪 ' + esc(mem.nationalId) + '</span>' : '') +
                 (isSharedSpouseChild ? '<span class="badge badge-avail">👨‍👩‍👧‍👦 ' + esc(bi('ملف عائلي مشترك', 'Shared Family')) + '</span>' : '') +
               '</div>' +
@@ -6894,6 +7092,7 @@
                     (!isVerified
                       ? '<button class="btn btn-green btn-block" type="button" data-doc-activate-acc="' + esc(acc.id) + '">✓ ' + esc(bi('تفعيل حساب المريض فوراً', 'Activate Patient Account Now')) + '</button>'
                       : '<div style="font-size:0.84rem;color:var(--avail-text);font-weight:700;">✓ ' + esc(bi('الحساب مُفعّل وجاهز لحجز المواعيد في عيادة ' + doc.doctorName, 'Account is verified and ready to book appointments')) + '</div>') +
+                    '<button class="btn btn-outline btn-block" type="button" data-doc-open-account-emr="' + esc(acc.id) + '">📜 ' + esc(bi('السجل الطبي التاريخي الدائم والتحاليل والروشتات', 'Permanent Medical Log, Labs & Rx')) + '</button>' +
                     '<button class="btn btn-outline btn-block" type="button" data-doc-family-link="' + esc(acc.id) + '">👨‍👩‍👧‍👦 ' + esc(bi('رفع طلب ربط أسرة للإدارة (زوج / زوجة)', 'Submit Family Link Request to Admin')) + '</button>' +
                   '</div>';
                 }).join('')) +
@@ -7064,7 +7263,7 @@
           renderNotificationStatusCardHtml('doctor_notif') +
           '<div class="chips-row">' +
             '<button class="chip ' + (ui.doctorTab === 'SLOTS' || !ui.doctorTab ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
-            '<button class="chip ' + (ui.doctorTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT">✅ ' + esc(bi('تفعيل حساب مريض برقم الهاتف', 'Activate Patient by Phone')) + '</button>' +
+            '<button class="chip ' + (ui.doctorTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT">✅ ' + esc(bi('تفعيل / ملف مريض برقم الهاتف', 'Activate / Patient EMR')) + '</button>' +
             '<button class="chip ' + (ui.doctorTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-doc-tab="MESSAGES">💬 ' + esc(bi('رسائل المرضى', 'Patient Messages')) + (unreadClinicMsgs > 0 ? ' (' + unreadClinicMsgs + ')' : '') + '</button>' +
           '</div>' +
           bodyHtml;
@@ -7678,8 +7877,9 @@
             '</div>';
 
           const dualDriveInner =
-            '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;">' +
-              '<div style="font-weight:800;color:#166534;font-size:0.9rem;">🩺 ' + esc(bi('حسابا Google Drive لكل عيادة (حساب أساسي + حساب احتياطي ثانٍ)', '2 Google Drive Accounts per Clinic (Primary + Secondary)')) + '</div>' +
+            '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;line-height:1.7;box-sizing:border-box;overflow-wrap:anywhere;">' +
+              '<div style="font-weight:800;color:#166534;font-size:0.92rem;line-height:1.6;">🩺 ' + esc(bi('حسابا Google Drive لكل عيادة (حساب أساسي 15GB + حساب احتياطي ثانٍ 15GB = 30GB)', '2 Google Drive Accounts per Clinic (Primary + Secondary = 30GB)')) + '</div>' +
+              '<div style="font-size:0.82rem;color:#166534;line-height:1.65;">' + esc(bi('تُحفظ التحاليل والأشعة على سحابة العيادة المختارة مع تدوين فوري ومستقل لنتائجها في السجل الطبي التاريخي الدائم للمريض.', 'Lab & imaging files are archived to clinic Drive while text summaries are logged permanently in patient history.')) + '</div>' +
               (allDocs.length === 0
                 ? '<div style="font-size:0.82rem;color:var(--text-muted);">' + esc(bi('لا توجد عيادات مضافة حالياً.', 'No clinics added yet.')) + '</div>'
                 : '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('اختر العيادة', 'Select Clinic')) +
@@ -7767,41 +7967,10 @@
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
               '<div>' +
                 '<span class="hero-pill">🛡️ ' + esc(bi('الإدارة العليا السرية • محمية بالـ PIN', 'Protected Super Admin • PIN Locked')) + '</span>' +
-                '<h2 style="font-size:1.35rem;margin-top:6px;">' + esc(bi('أهلاً بك، ' + (db.config.adminOwnerName || 'المهندس محمد يوسف'), 'Welcome, ' + (db.config.adminOwnerName || 'Eng. Mohamed Youssef'))) + '</h2>' +
-                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('تحكم كامل في الأطباء، المستشفى، معامل التحاليل، قائمة العملاء، طلبات الأسرة، الحجوزات، الرسائل، وإعدادات المنصة.', 'Full control over clinics, hospital, medical labs, users, family links, bookings, messaging & settings.')) + '</div>' +
+                '<h2 style="font-size:1.35rem;margin-top:6px;">' + esc(bi('مرحباً بك، ' + (db.config.adminOwnerName || 'المدير العام'), 'Welcome, ' + (db.config.adminOwnerName && db.config.adminOwnerName !== 'المدير العام' ? db.config.adminOwnerName : 'General Manager'))) + '</h2>' +
+                '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('الإدارة العامة لمنصة طب الحجايزة — تحكم كامل في الأطباء، المستشفى، معامل التحاليل، العملاء، الحجوزات، الرسائل، والإعدادات.', 'General Administration — Teb Al-Hajayzah Platform: full control over clinics, hospital, labs, users, bookings & settings.')) + '</div>' +
               '</div>' +
               '<button class="btn" id="btnAdminLogout" type="button" style="background:#fff;color:var(--teal);min-height:40px;">🚪 ' + esc(bi('خروج وتأمين', 'Lock & Exit')) + '</button>' +
-            '</div>' +
-          '</section>' +
-
-          '<section class="stats-row-2x2">' +
-            '<button class="stat-box card clickable" type="button" data-admin-metric="CLINICS"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">' + esc(bi('عيادات / مستشفى ←', 'Clinics / Hospital →')) + '</div></button>' +
-            '<button class="stat-box card clickable" type="button" data-admin-metric="USERS"><div class="stat-num" style="color:#3730A3;">' + (db.accounts || []).length + '</div><div style="font-size:0.82rem;">' + esc(bi('العملاء والمشتركين ←', 'Registered Users →')) + '</div></button>' +
-            '<button class="stat-box card clickable" type="button" data-admin-metric="BOOKINGS"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">' + esc(bi('حجوزات نشطة ←', 'Active Bookings →')) + '</div></button>' +
-            '<button class="stat-box card clickable" type="button" data-admin-metric="BLOCKED"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">' + esc(bi('أرقام محظورة ←', 'Blocked Phones →')) + '</div></button>' +
-          '</section>' +
-
-          '<section class="visitor-stats-card">' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
-              '<strong style="font-size:0.96rem;color:var(--teal-text);">📊 ' + esc(bi('إحصائيات الزوار الفعلية الحية (تطبيق APK vs المتصفح Web)', 'Live Real Visitor Stats (Android APK vs Web Browser)')) + '</strong>' +
-              '<span class="badge" style="background:#fff;border:1px solid var(--border);color:var(--text-muted);">' + esc(bi('بيانات حقيقية 100%', '100% Real Data')) + '</span>' +
-            '</div>' +
-            '<div class="visitor-stats-grid">' +
-              '<div class="visitor-stat-tile">' +
-                '<div style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('زوار اليوم', 'Today')) + '</div>' +
-                '<div style="font-size:1.25rem;font-weight:800;color:var(--teal);">' + visitorStats.today.total + '</div>' +
-                '<div style="font-size:0.74rem;color:var(--text-muted);">📱 APK: ' + visitorStats.today.apk + ' • 🌐 Web: ' + visitorStats.today.web + '</div>' +
-              '</div>' +
-              '<div class="visitor-stat-tile">' +
-                '<div style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('آخر 7 أيام', 'Last 7 Days')) + '</div>' +
-                '<div style="font-size:1.25rem;font-weight:800;color:#3730A3;">' + visitorStats.week.total + '</div>' +
-                '<div style="font-size:0.74rem;color:var(--text-muted);">📱 APK: ' + visitorStats.week.apk + ' • 🌐 Web: ' + visitorStats.week.web + '</div>' +
-              '</div>' +
-              '<div class="visitor-stat-tile">' +
-                '<div style="font-size:0.78rem;color:var(--text-muted);">' + esc(bi('آخر 30 يوماً', 'Last 30 Days')) + '</div>' +
-                '<div style="font-size:1.25rem;font-weight:800;color:var(--avail-text);">' + visitorStats.month.total + '</div>' +
-                '<div style="font-size:0.74rem;color:var(--text-muted);">📱 APK: ' + visitorStats.month.apk + ' • 🌐 Web: ' + visitorStats.month.web + '</div>' +
-              '</div>' +
             '</div>' +
           '</section>' +
 
@@ -7813,8 +7982,39 @@
             '<button class="chip ' + (ui.adminTab === 'FAMILY_LINKS' ? 'active' : '') + '" type="button" data-admin-tab="FAMILY_LINKS">👨‍👩‍👧‍👦 ' + esc(bi('طلبات ربط الأسرة', 'Family Links')) + (pendingFamLinkCount > 0 ? ' (' + pendingFamLinkCount + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-admin-tab="MESSAGES">💬 ' + esc(bi('التحكم في الرسائل والإشعارات', 'Messaging & Alerts')) + (unreadAdminInbox > 0 ? ' (' + unreadAdminInbox + ')' : '') + '</button>' +
-            '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('إعدادات المنصة والـ PIN', 'Settings & PIN')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('الإعدادات و Drive و الـ PIN', 'Settings, Drive & PIN')) + '</button>' +
           '</div>' +
+
+          '<section class="stats-row-2x2">' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="CLINICS"><div class="stat-num" style="color:var(--teal);">' + privateDocs.length + ' / ' + hospitalDocs.length + '</div><div style="font-size:0.82rem;">' + esc(bi('عيادات / مستشفى ←', 'Clinics / Hospital →')) + '</div></button>' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="USERS"><div class="stat-num" style="color:#3730A3;">' + (db.accounts || []).length + '</div><div style="font-size:0.82rem;">' + esc(bi('العملاء والمشتركين ←', 'Registered Users →')) + '</div></button>' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="BOOKINGS"><div class="stat-num" style="color:var(--avail-text);">' + allBookings.length + '</div><div style="font-size:0.82rem;">' + esc(bi('حجوزات نشطة ←', 'Active Bookings →')) + '</div></button>' +
+            '<button class="stat-box card clickable" type="button" data-admin-metric="BLOCKED"><div class="stat-num" style="color:var(--booked-text);">' + blockedList.length + '</div><div style="font-size:0.82rem;">' + esc(bi('أرقام محظورة ←', 'Blocked Phones →')) + '</div></button>' +
+          '</section>' +
+
+          '<section class="visitor-stats-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<strong style="font-size:0.94rem;color:var(--teal-text);">📊 ' + esc(bi('إحصائيات الزوار الفعلية الحية (تطبيق APK vs المتصفح Web)', 'Live Real Visitor Stats (Android APK vs Web Browser)')) + '</strong>' +
+              '<span class="badge" style="background:#fff;border:1px solid var(--border);color:var(--text-muted);">' + esc(bi('بيانات حقيقية 100%', '100% Real Data')) + '</span>' +
+            '</div>' +
+            '<div class="visitor-stats-grid">' +
+              '<div class="visitor-stat-tile">' +
+                '<div style="font-size:0.74rem;color:var(--text-muted);white-space:nowrap;">' + esc(bi('زوار اليوم', 'Today')) + '</div>' +
+                '<div style="font-size:1.25rem;font-weight:800;color:var(--teal);line-height:1.15;">' + visitorStats.today.total + '</div>' +
+                '<div style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;" dir="ltr">(APK: ' + visitorStats.today.apk + ' | Web: ' + visitorStats.today.web + ')</div>' +
+              '</div>' +
+              '<div class="visitor-stat-tile">' +
+                '<div style="font-size:0.74rem;color:var(--text-muted);white-space:nowrap;">' + esc(bi('آخر 7 أيام', 'Last 7 Days')) + '</div>' +
+                '<div style="font-size:1.25rem;font-weight:800;color:#3730A3;line-height:1.15;">' + visitorStats.week.total + '</div>' +
+                '<div style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;" dir="ltr">(APK: ' + visitorStats.week.apk + ' | Web: ' + visitorStats.week.web + ')</div>' +
+              '</div>' +
+              '<div class="visitor-stat-tile">' +
+                '<div style="font-size:0.74rem;color:var(--text-muted);white-space:nowrap;">' + esc(bi('آخر 30 يوماً', 'Last 30 Days')) + '</div>' +
+                '<div style="font-size:1.25rem;font-weight:800;color:var(--avail-text);line-height:1.15;">' + visitorStats.month.total + '</div>' +
+                '<div style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;" dir="ltr">(APK: ' + visitorStats.month.apk + ' | Web: ' + visitorStats.month.web + ')</div>' +
+              '</div>' +
+            '</div>' +
+          '</section>' +
 
           tabBodyHtml;
       }
@@ -8077,7 +8277,7 @@
           return (
             '<div class="card" style="background:var(--teal-soft);border:none;padding:12px;">' +
               '<div style="font-weight:800;color:var(--teal-text);">🛡️ ' + esc(bi('بوابة الإدارة العليا المحمية', 'Protected Super Admin Portal')) + '</div>' +
-              '<div style="font-size:0.84rem;color:var(--teal-text);">' + esc(db.config.adminOwnerName || 'المهندس محمد يوسف') + ' • ' + esc(bi('حماية مزدوجة برقم سري (PIN)', 'Double PIN Protection')) + '</div>' +
+              '<div style="font-size:0.84rem;color:var(--teal-text);">' + esc(db.config.adminOwnerName || 'المدير العام') + ' • ' + esc(bi('حماية مزدوجة برقم سري (PIN)', 'Double PIN Protection')) + '</div>' +
             '</div>' +
             (isLocked
               ? '<div class="alert-banner" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);">' +
@@ -9375,14 +9575,70 @@
         const slot = db.slots.find((s) => s.id === slotId);
         const doc = db.doctors.find((d) => d.id === slot.doctorId);
         const docMedKeys = medicationCatalogKeysForDoctor(doc);
+        const docTemplates = getSpecialtyTemplatesForDoctor(doc);
         let filterMode = 'SPECIALTY';
         let medQuery = '';
         let selectedRx = [];
         let rxAttachmentUrl = '';
 
+        function renderQuickSpecialtyBoxes() {
+          const favArr = db.doctorFavorites[doc.id] || [];
+          const favDiagList = favArr.map(decodeCustomDiagFavKey).filter(Boolean);
+          const curDiag = ((document.getElementById('rxDiagnosis') || {}).value || '').trim();
+          const diagBox = document.getElementById('rxQuickDiagChips');
+          if (diagBox) {
+            diagBox.innerHTML =
+              docTemplates.diagnoses.map((d) => {
+                const active = curDiag === d.ar || curDiag === d.en;
+                return '<button class="chip ' + (active ? 'active' : '') + '" type="button" data-pick-diag-ar="' + esc(d.ar) + '" data-pick-diag-en="' + esc(d.en) + '" style="min-height:34px;padding:4px 10px;font-size:0.8rem;">' + esc(bi(d.ar, d.en)) + '</button>';
+              }).join('') +
+              favDiagList.map((fd) => {
+                const active = curDiag === fd;
+                return '<button class="chip ' + (active ? 'active' : '') + '" type="button" data-pick-diag-ar="' + esc(fd) + '" data-pick-diag-en="" style="min-height:34px;padding:4px 10px;font-size:0.8rem;border-color:#F59E0B;">⭐ ' + esc(fd) + '</button>';
+              }).join('');
+            diagBox.querySelectorAll('[data-pick-diag-ar]').forEach((btn) => {
+              btn.onclick = function () {
+                const arVal = btn.getAttribute('data-pick-diag-ar') || '';
+                const enVal = btn.getAttribute('data-pick-diag-en') || '';
+                const inp = document.getElementById('rxDiagnosis');
+                if (inp) inp.value = arVal;
+                const enInp = document.getElementById('rxDiagnosisEn');
+                if (enInp && enVal) enInp.value = enVal;
+                renderQuickSpecialtyBoxes();
+              };
+            });
+          }
+
+          const sugBox = document.getElementById('rxSpecialtyMedsChips');
+          if (sugBox) {
+            sugBox.innerHTML = docTemplates.medications.map((sm) => {
+              const added = selectedRx.some((x) => x.id === sm.id || x.tradeName === sm.tradeName);
+              return '<button class="chip ' + (added ? 'active' : '') + '" type="button" data-sug-med-id="' + esc(sm.id) + '" style="min-height:34px;padding:4px 10px;font-size:0.8rem;">' +
+                (added ? '✓ ' : '+ ') + esc(sm.tradeName) + (sm.strength ? ' (' + esc(sm.strength) + ')' : '') +
+              '</button>';
+            }).join('');
+            sugBox.querySelectorAll('[data-sug-med-id]').forEach((btn) => {
+              btn.onclick = function () {
+                const sm = docTemplates.medications.find((x) => x.id === btn.getAttribute('data-sug-med-id'));
+                if (!sm) return;
+                if (selectedRx.some((x) => x.id === sm.id || x.tradeName === sm.tradeName)) {
+                  showToast(bi('الدواء مضاف بالفعل في الروشتة', 'Medication already added'));
+                  return;
+                }
+                selectedRx.push({ id: sm.id, tradeName: sm.tradeName, strength: sm.strength, dosage: sm.defaultDosage });
+                renderRxModalBody();
+              };
+            });
+          }
+        }
+
         function renderRxModalBody() {
-          const favSet = new Set(db.doctorFavorites[doc.id] || []);
+          const favArr = db.doctorFavorites[doc.id] || [];
+          const favSet = new Set(favArr);
           const q = medQuery.trim().toLowerCase();
+          const customFavMeds = filterMode === 'FAV'
+            ? favArr.map(decodeCustomMedFavKey).filter(Boolean).filter((cm) => !q || cm.tradeName.toLowerCase().includes(q) || cm.dosage.toLowerCase().includes(q))
+            : [];
           const filteredMeds = ui.medications.filter((m) => {
             const matchQ = !q ||
               m.tradeName.toLowerCase().includes(q) ||
@@ -9394,9 +9650,27 @@
             return true;
           });
 
-          document.getElementById('rxCatalogContainer').innerHTML = filteredMeds.length === 0
+          renderQuickSpecialtyBoxes();
+
+          const customFavHtml = customFavMeds.map((cm) => {
+            const isAdded = selectedRx.some((x) => x.tradeName === cm.tradeName);
+            return '<div class="med-item-row">' +
+              '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">' +
+                '<button class="chip" type="button" data-fav-med="' + esc(cm.key) + '" style="min-height:36px;padding:4px 8px;">⭐</button>' +
+                '<div style="min-width:0;">' +
+                  '<div style="font-weight:700;font-size:0.92rem;">' + esc(cm.tradeName) + '</div>' +
+                  '<div style="font-size:0.8rem;color:var(--teal);font-weight:600;">' + esc(cm.dosage) + '</div>' +
+                '</div>' +
+              '</div>' +
+              '<button class="btn ' + (isAdded ? 'btn-green' : 'btn-primary') + '" type="button" data-add-custom-fav="' + esc(cm.key) + '" style="min-height:36px;padding:4px 10px;font-size:0.84rem;" ' + (isAdded ? 'disabled' : '') + '>' +
+                (isAdded ? '✓' : '+ ' + esc(bi('إضافة', 'Add'))) +
+              '</button>' +
+            '</div>';
+          }).join('');
+
+          document.getElementById('rxCatalogContainer').innerHTML = (filteredMeds.length === 0 && customFavMeds.length === 0)
             ? '<div style="text-align:center;padding:16px;color:var(--text-muted);">' + esc(bi('لا توجد أدوية مطابقة', 'No matching medications')) + '</div>'
-            : filteredMeds.map((m) => {
+            : customFavHtml + filteredMeds.map((m) => {
                 const isFav = favSet.has(m.id);
                 const isAdded = selectedRx.some((x) => x.id === m.id);
                 return '<div class="med-item-row">' +
@@ -9439,6 +9713,15 @@
               db.doctorFavorites[doc.id] = arr;
               saveState(db);
               renderRxModalBody();
+            };
+          });
+          document.querySelectorAll('[data-add-custom-fav]').forEach((btn) => {
+            btn.onclick = function () {
+              const decoded = decodeCustomMedFavKey(btn.getAttribute('data-add-custom-fav'));
+              if (decoded && !selectedRx.some((x) => x.tradeName === decoded.tradeName)) {
+                selectedRx.push({ id: 'fav_' + Date.now(), tradeName: decoded.tradeName, strength: '', dosage: decoded.dosage });
+                renderRxModalBody();
+              }
             };
           });
           document.querySelectorAll('[data-add-med]').forEach((btn) => {
@@ -9523,7 +9806,18 @@
           '<div class="badge ' + (ui.isLiveMedsApi ? 'badge-avail' : '') + '" style="background:var(--teal-soft);color:var(--teal-text);">' +
             (ui.isLiveMedsApi ? '☁️ متصل بقاعدة الأدوية المصرية (' + ui.medications.length + ' دواء)' : '💊 ' + esc(bi('قاعدة الأدوية المصرية المدمجة Offline (' + ui.medications.length + ' دواء)', 'Egyptian Drugs Offline DB (' + ui.medications.length + ' items)'))) +
           '</div>' +
-          '<input class="input" id="rxDiagnosis" placeholder="' + esc(bi('التشخيص الطبي (بالعربية أو الإنجليزية) *', 'Diagnosis (AR or EN) *')) + '" />' +
+          '<div class="card" style="padding:12px;background:#F8FCFC;border-color:rgba(13,115,119,0.28);display:flex;flex-direction:column;gap:8px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">' +
+              '<strong style="font-size:0.86rem;color:var(--teal-text);">🩺 ' + esc(bi('اختيار سريع للتشخيص (' + doc.specialty + '):', 'Quick Diagnosis (' + doc.specialty + '):')) + '</strong>' +
+              '<button class="chip" id="btnSaveDiagFav" type="button" style="min-height:30px;padding:3px 10px;font-size:0.78rem;border-color:#F59E0B;">⭐ ' + esc(bi('حفظ التشخيص بالمفضلة', 'Save Diagnosis Fav')) + '</button>' +
+            '</div>' +
+            '<div class="chips-row" id="rxQuickDiagChips"></div>' +
+            '<input class="input" id="rxDiagnosis" placeholder="' + esc(bi('التشخيص الطبي (اختر أعلاه أو اكتب يدوياً) *', 'Diagnosis (pick above or type) *')) + '" />' +
+          '</div>' +
+          '<div class="card" style="padding:12px;background:#F0FDF4;border-color:#86EFAC;display:flex;flex-direction:column;gap:8px;">' +
+            '<strong style="font-size:0.86rem;color:#166534;">💊 ' + esc(bi('أدوية مقترحة ذكياً لتخصص (' + doc.specialty + ') — اضغط للإضافة بالجرعة:', 'Suggested Specialty Meds — Tap to add with dosage:')) + '</strong>' +
+            '<div class="chips-row" id="rxSpecialtyMedsChips"></div>' +
+          '</div>' +
           '<input class="input" id="rxMedSearch" type="search" placeholder="' + esc(bi('ابحث بالاسم التجاري أو المادة الفعالة أو التركيز...', 'Search trade name or active ingredient...')) + '" />' +
           '<div class="chips-row">' +
             '<button class="chip active" id="rxTabSpec" type="button">' + esc(bi('تخصص العيادة', 'Specialty')) + '</button>' +
@@ -9533,10 +9827,13 @@
           '<div class="med-catalog-list" id="rxCatalogContainer"></div>' +
           '<h4>' + esc(bi('الأدوية المختارة بالروشتة', 'Selected Medications')) + '</h4>' +
           '<div id="rxSelectedContainer" style="display:flex;flex-direction:column;gap:8px;"></div>' +
-          '<div style="display:grid;grid-template-columns:1.2fr 1fr auto;gap:6px;">' +
-            '<input class="input" id="customMedName" placeholder="' + esc(bi('دواء خارج القائمة (اختياري)', 'Custom medicine (optional)')) + '" />' +
-            '<input class="input" id="customMedDose" value="قرص كل 12 ساعة" placeholder="' + esc(bi('الجرعة', 'Dosage')) + '" />' +
-            '<button class="btn btn-outline" id="btnAddCustomMed" type="button">+</button>' +
+          '<div style="display:flex;flex-direction:column;gap:6px;">' +
+            '<div style="display:grid;grid-template-columns:1.2fr 1fr auto;gap:6px;">' +
+              '<input class="input" id="customMedName" placeholder="' + esc(bi('دواء خارج القائمة (اختياري)', 'Custom medicine (optional)')) + '" />' +
+              '<input class="input" id="customMedDose" value="قرص كل 12 ساعة" placeholder="' + esc(bi('الجرعة', 'Dosage')) + '" />' +
+              '<button class="btn btn-outline" id="btnAddCustomMed" type="button">+</button>' +
+            '</div>' +
+            '<button class="btn btn-outline" id="btnSaveCustomMedFav" type="button" style="min-height:36px;padding:4px 10px;font-size:0.8rem;align-self:flex-end;">⭐ ' + esc(bi('حفظ الدواء المخصص في مفضلاتي', 'Save Custom Med to Favorites')) + '</button>' +
           '</div>' +
           '<textarea class="textarea" id="rxNotes" placeholder="' + esc(bi('تعليمات وملاحظات إضافية للمريض (اختياري)', 'Additional notes for patient (optional)')) + '"></textarea>' +
           '<button class="btn btn-primary btn-block" id="btnRxGenerateBilingual" type="button" style="background:linear-gradient(135deg,#0D7377 0%,#0F5E8C 100%);">' +
@@ -9559,6 +9856,43 @@
           '<button class="btn btn-primary btn-block" id="btnSaveCompleteRx" type="button">✓ ' + esc(bi('إرسال لملف المريض وإنهاء الكشف', 'Save & Send to Patient Record')) + '</button>',
           function () {
             renderRxModalBody();
+
+            document.getElementById('btnSaveDiagFav').onclick = function () {
+              const dVal = document.getElementById('rxDiagnosis').value.trim();
+              if (!dVal) {
+                showToast(bi('اكتب التشخيص أولاً لحفظه بالمفضلة', 'Enter diagnosis first'));
+                return;
+              }
+              const fk = encodeCustomDiagFavKey(dVal);
+              const arr = db.doctorFavorites[doc.id] || [];
+              if (!arr.includes(fk)) {
+                arr.push(fk);
+                db.doctorFavorites[doc.id] = arr;
+                saveState(db);
+                showToast(bi('تم حفظ التشخيص في مفضلتك ⭐', 'Diagnosis saved to favorites ⭐'));
+              } else {
+                showToast(bi('التشخيص محفوظ بالفعل في مفضلتك', 'Already saved in favorites'));
+              }
+              renderQuickSpecialtyBoxes();
+            };
+
+            document.getElementById('btnSaveCustomMedFav').onclick = function () {
+              const n = document.getElementById('customMedName').value.trim();
+              const d = document.getElementById('customMedDose').value.trim() || 'حسب إرشادات الطبيب';
+              if (!n) {
+                showToast(bi('أدخل اسم الدواء المخصص أولاً لحفظه بالمفضلة', 'Enter custom med name first'));
+                return;
+              }
+              const fk = encodeCustomMedFavKey(n, d);
+              const arr = db.doctorFavorites[doc.id] || [];
+              if (!arr.includes(fk)) {
+                arr.push(fk);
+                db.doctorFavorites[doc.id] = arr;
+                saveState(db);
+              }
+              showToast(bi('تم حفظ الدواء المخصص في مفضلتك ⭐', 'Custom medication saved to favorites ⭐'));
+              renderRxModalBody();
+            };
 
             document.getElementById('rxMedSearch').oninput = function (e) {
               medQuery = e.target.value;
@@ -10031,6 +10365,55 @@
         );
       }
 
+      function openPatientEmrModalByAccountId(accountId, selectedMemberId) {
+        const acc = (db.accounts || []).find((a) => a.id === accountId);
+        if (!acc) return;
+        const members = (db.familyMembers || []).filter((m) =>
+          m.accountId === acc.id || (m.phone && normalizePhoneDigits(m.phone) === normalizePhoneDigits(acc.phone))
+        );
+        const activeMem = members.find((m) => m.id === selectedMemberId) || members[0] || null;
+        const targetName = (activeMem && activeMem.fullName) || acc.fullName;
+        const recs = db.records.filter((r) =>
+          (activeMem && r.familyMemberId === activeMem.id) ||
+          (r.patientName === targetName) ||
+          (!activeMem && acc.phone && normalizePhoneDigits(r.patientPhone) === normalizePhoneDigits(acc.phone))
+        ).sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+        const permLogs = activeMem
+          ? getPermanentLogsForMemberWeb(activeMem)
+          : (db.permanentLogs || []).filter((l) =>
+              l.patientName === targetName ||
+              (acc.phone && normalizePhoneDigits(l.patientPhone) === normalizePhoneDigits(acc.phone))
+            ).slice().sort((a, b) =>
+              ui.permanentLogSortOrder === 'ASC'
+                ? ((a.eventTimestampMillis || 0) - (b.eventTimestampMillis || 0))
+                : ((b.eventTimestampMillis || 0) - (a.eventTimestampMillis || 0))
+            );
+        const switcherHtml = members.length > 1
+          ? '<div class="chips-row" style="margin-bottom:8px;">' +
+              members.map((fm) =>
+                '<button class="chip ' + (activeMem && fm.id === activeMem.id ? 'active' : '') + '" type="button" data-doc-switch-emr-mem="' + esc(fm.id) + '">' + esc(fm.fullName) + ' (' + esc(fm.relation || '') + ')</button>'
+              ).join('') +
+            '</div>'
+          : '';
+        openModal(bi('الملف الطبي: ', 'Medical Record: ') + targetName,
+          switcherHtml +
+          renderDoctorMedicalAlertBannerHtml(activeMem) +
+          renderAiMedicalSummaryCardHtml(targetName, recs, activeMem) +
+          renderPermanentMedicalLogSectionHtml(targetName, permLogs, activeMem) +
+          (recs.length === 0
+            ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد زيارات أو تحاليل مسجلة لهذا المريض.', 'No previous visits or lab reports recorded for this patient.')) + '</div>'
+            : recs.map(renderMedicalRecordCardHtml).join('')),
+          function () {
+            bindSharedRecordActions();
+            document.querySelectorAll('[data-doc-switch-emr-mem]').forEach((btn) => {
+              btn.onclick = function () {
+                openPatientEmrModalByAccountId(accountId, btn.getAttribute('data-doc-switch-emr-mem'));
+              };
+            });
+          }
+        );
+      }
+
       // ================================================================
       // 7. ربط الأحداث (Event Wiring)
       // ================================================================
@@ -10213,6 +10596,10 @@
 
         const medFileAddChildBtn = document.getElementById('btnMedicalFileAddChild');
         if (medFileAddChildBtn) medFileAddChildBtn.onclick = function () { openQuickAddFamilyMemberModal(); };
+
+        document.querySelectorAll('[data-inline-add-child]').forEach((btn) => {
+          btn.onclick = function () { openQuickAddFamilyMemberModal(); };
+        });
 
         const heroRegBtn = document.getElementById('btnHeroRegister');
         if (heroRegBtn) heroRegBtn.onclick = function () { openAccountModal('REGISTER'); };
@@ -11446,6 +11833,12 @@
           };
         });
 
+        document.querySelectorAll('[data-doc-open-account-emr]').forEach((btn) => {
+          btn.onclick = function () {
+            openPatientEmrModalByAccountId(btn.getAttribute('data-doc-open-account-emr'));
+          };
+        });
+
         document.querySelectorAll('[data-doc-family-link]').forEach((btn) => {
           btn.onclick = function () {
             const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-doc-family-link'));
@@ -11703,11 +12096,11 @@
         }
       });
 
-      // Clear any stale legacy SW caches automatically while preserving clean v1.0.0 rev3 cache
+      // Clear any stale legacy SW caches automatically while preserving clean v1.0.0 rev4 cache
       if ('caches' in window && caches.keys) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== 'teb-alhajayzah-v1.0.0-rev3') {
+            if (k !== 'teb-alhajayzah-v1.0.0-rev4') {
               caches.delete(k).catch(function () {});
             }
           });

@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -81,6 +82,7 @@ fun PatientBioOverviewCard(
     isEn: Boolean = false,
     isSharedFamilyMember: Boolean = false,
     onEditClick: () -> Unit,
+    onAddFamilyClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val selectedKeys = remember(member.chronicConditions) {
@@ -137,11 +139,35 @@ fun PatientBioOverviewCard(
                             fontWeight = FontWeight.Bold,
                             color = TealPrimary,
                         )
-                        Text(
-                            text = "${member.fullName} • ${member.relation}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = "${member.fullName} • ${member.relation}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.CenterVertically),
+                            )
+                            if (onAddFamilyClick != null) {
+                                Surface(
+                                    color = Color(0xFF059669).copy(alpha = 0.14f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF059669).copy(alpha = 0.55f)),
+                                    modifier = Modifier
+                                        .clickable(onClick = onAddFamilyClick)
+                                        .testTag("bio_inline_add_child_button"),
+                                ) {
+                                    Text(
+                                        text = bi(isEn, "➕ إضافة فرد / ابن", "➕ Add Member / Child"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF047857),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
                         if (member.nationalId.isNotBlank()) {
                             Text(
                                 text = bi(isEn, "الرقم القومي: ${member.nationalId}", "National ID: ${member.nationalId}"),

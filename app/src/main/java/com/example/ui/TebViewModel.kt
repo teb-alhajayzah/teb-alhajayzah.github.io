@@ -734,7 +734,7 @@ class TebViewModel(
             res.onSuccess {
                 _isAdminLoggedIn.value = true
                 _roleMode.value = AppRoleMode.SUPER_ADMIN
-                _snackbarMessages.tryEmit("مرحباً بك في الإدارة العليا، ${uiState.value.brandConfig.adminOwnerName}")
+                _snackbarMessages.tryEmit("مرحباً بك، المدير العام — الإدارة العامة لمنصة طب الحجايزة")
                 onUnlocked()
             }.onFailure { err ->
                 _snackbarMessages.tryEmit(err.message ?: "الرقم السري غير صحيح")

@@ -29,8 +29,8 @@ data class PlatformBrandConfig(
     val apkDownloadUrl: String = "https://github.com/teb-alhajayzah/teb-alhajayzah.github.io/releases/latest/download/teb-alhajayzah.apk",
     // رابط واجهة الأدوية المصرية المفتوحة (workers.dev)
     val medicationsApiUrl: String = "",
-    val adminOwnerName: String = "المهندس محمد يوسف",
-    val adminOwnerNameEn: String = "Eng. Mohamed Youssef",
+    val adminOwnerName: String = "المدير العام",
+    val adminOwnerNameEn: String = "General Manager",
     val adminUsername: String = "admin",
     val adminPassword: String = "teb2026",
     val adminPin: String = "132027",

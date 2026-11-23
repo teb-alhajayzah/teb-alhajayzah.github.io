@@ -52,6 +52,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -92,6 +93,8 @@ import com.example.util.BilingualMedicalTranslator
 import com.example.util.ImageStorageHelper
 import com.example.util.PrescriptionPrintHelper
 import com.example.util.SpecialtyCatalog
+import com.example.util.SpecialtyClinicalTemplates
+import com.example.util.SuggestedSpecialtyMed
 import com.example.util.TimeUtils
 import java.io.File
 
@@ -181,6 +184,24 @@ fun SmartPrescriptionDialog(
         }
     }
 
+    val quickDiagnoses = remember(doctor.specialty, doctor.additionalSpecialties) {
+        SpecialtyClinicalTemplates.diagnosesForDoctor(doctor)
+    }
+    val suggestedSpecialtyMeds = remember(doctor.specialty, doctor.additionalSpecialties) {
+        SpecialtyClinicalTemplates.medicationsForDoctor(doctor)
+    }
+    val customFavoriteDiagnoses = remember(favoriteMedIds) {
+        favoriteMedIds.mapNotNull { SpecialtyClinicalTemplates.decodeCustomDiagFav(it) }
+    }
+    val customFavoriteMeds = remember(favoriteMedIds, searchQuery) {
+        val q = searchQuery.trim()
+        favoriteMedIds.mapNotNull { key ->
+            SpecialtyClinicalTemplates.decodeCustomMedFav(key)?.let { (name, dose) -> Triple(key, name, dose) }
+        }.filter { (_, name, dose) ->
+            q.isEmpty() || name.contains(q, ignoreCase = true) || dose.contains(q, ignoreCase = true)
+        }
+    }
+
     val filteredMedications = remember(
         medications,
         searchQuery,
@@ -203,6 +224,23 @@ fun SmartPrescriptionDialog(
                 med.specialty.contains(q, ignoreCase = true)
             if (q.isNotEmpty() && medFilterMode != 1) matchesSearch else (matchesMode && matchesSearch)
         }
+    }
+
+    fun addSuggestedMedToRx(sug: SuggestedSpecialtyMed) {
+        val existingIdx = selectedItems.indexOfFirst { it.uid == sug.id || it.tradeName == sug.tradeName }
+        if (existingIdx >= 0) {
+            onShowMessage(bi(isEn, "الدواء مضاف بالفعل إلى الروشتة", "Medication already added"))
+            return
+        }
+        selectedItems.add(
+            SelectedRxItem(
+                uid = sug.id,
+                tradeName = sug.tradeName,
+                strength = sug.strength,
+                dosage = sug.defaultDosage,
+                dosageEn = sug.dosageEn,
+            )
+        )
     }
 
     fun buildMedicationsText(): String {
@@ -357,17 +395,144 @@ fun SmartPrescriptionDialog(
                     }
                 }
 
-                // Diagnosis Field (Arabic or English)
-                OutlinedTextField(
-                    value = diagnosis,
-                    onValueChange = { diagnosis = it },
-                    label = { Text(bi(isEn, "التشخيص الطبي (بالعربية أو الإنجليزية) *", "Medical Diagnosis (AR or EN) *")) },
-                    placeholder = { Text(bi(isEn, "مثال: التهاب بالحلق / Acute Tonsillitis / متابعة حمل...", "e.g., Acute pharyngitis / GERD...")) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("rx_diagnosis_input"),
-                )
+                // Quick Diagnosis Selector (Auto-populated by Doctor Specialty + Saved Favorites)
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = bi(
+                                    isEn,
+                                    "🩺 اختيار سريع للتشخيص (${doctor.specialty}):",
+                                    "🩺 Quick Diagnosis (${doctor.specialty}):",
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = TealPrimary,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            val diagFavKey = diagnosis.trim().takeIf { it.isNotEmpty() }?.let {
+                                SpecialtyClinicalTemplates.encodeCustomDiagFav(it)
+                            }
+                            val isDiagSaved = diagFavKey != null && diagFavKey in favoriteMedIds
+                            TextButton(
+                                onClick = {
+                                    if (diagFavKey == null) {
+                                        onShowMessage(bi(isEn, "اكتب التشخيص أولاً لحفظه بالمفضلة", "Type a diagnosis first"))
+                                    } else {
+                                        onToggleFavorite(diagFavKey)
+                                        onShowMessage(
+                                            if (isDiagSaved) bi(isEn, "تمت الإزالة من تشخيصاتك المفضلة", "Removed from favorite diagnoses")
+                                            else bi(isEn, "تم حفظ التشخيص في مفضلتك ⭐", "Diagnosis saved to favorites ⭐")
+                                        )
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.testTag("rx_save_diag_fav_button"),
+                            ) {
+                                Icon(
+                                    imageVector = if (isDiagSaved) Icons.Filled.Star else Icons.Filled.StarOutline,
+                                    contentDescription = null,
+                                    tint = Color(0xFFD97706),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isDiagSaved) bi(isEn, "محفوظ", "Saved") else bi(isEn, "حفظ بالمفضلة", "Save Fav"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(quickDiagnoses, key = { "qd_${it.ar}" }) { item ->
+                                val selected = diagnosis.trim() == item.ar || diagnosis.trim() == item.en
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        diagnosis = item.ar
+                                        diagnosisEn = item.en
+                                    },
+                                    label = { Text(if (isEn) item.en else item.ar) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = TealPrimary,
+                                        selectedLabelColor = Color.White,
+                                    ),
+                                )
+                            }
+                            items(customFavoriteDiagnoses, key = { "cfd_$it" }) { customDiag ->
+                                val selected = diagnosis.trim() == customDiag
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { diagnosis = customDiag },
+                                    label = { Text("⭐ $customDiag") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Color(0xFFD97706),
+                                        selectedLabelColor = Color.White,
+                                    ),
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = diagnosis,
+                            onValueChange = { diagnosis = it },
+                            label = { Text(bi(isEn, "التشخيص الطبي (اختر أعلاه أو اكتب يدوياً) *", "Medical Diagnosis (pick above or type) *")) },
+                            placeholder = { Text(bi(isEn, "مثال: متابعة حمل طبيعي / نزلة معوية...", "e.g., Antenatal follow-up / Gastroenteritis...")) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("rx_diagnosis_input"),
+                        )
+                    }
+                }
+
+                // Suggested Medications by Doctor Specialty (1-Tap Add with Standard Dose)
+                Surface(
+                    color = SlotAvailableBg.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, SlotAvailableBorder.copy(alpha = 0.45f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = bi(
+                                isEn,
+                                "💊 أدوية مقترحة ذكياً لتخصص (${doctor.specialty}) — اضغط للإضافة الفورية بالجرعة:",
+                                "💊 Suggested Specialty Meds (${doctor.specialty}) — Tap to add with dose:",
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = SlotAvailableText,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(suggestedSpecialtyMeds, key = { it.id }) { sug ->
+                                val isAdded = selectedItems.any { it.uid == sug.id || it.tradeName == sug.tradeName }
+                                FilterChip(
+                                    selected = isAdded,
+                                    onClick = { addSuggestedMedToRx(sug) },
+                                    label = { Text(if (isAdded) "✓ ${sug.tradeName}" else "+ ${sug.tradeName} (${sug.strength})") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = SlotAvailableBorder,
+                                        selectedLabelColor = Color.White,
+                                    ),
+                                    modifier = Modifier.testTag("rx_sug_med_${sug.id}"),
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // Search Egyptian Medications
                 OutlinedTextField(
@@ -454,7 +619,7 @@ fun SmartPrescriptionDialog(
                         .fillMaxWidth()
                         .heightIn(min = 120.dp, max = 220.dp),
                 ) {
-                    if (filteredMedications.isEmpty()) {
+                    if (filteredMedications.isEmpty() && (medFilterMode != 1 || customFavoriteMeds.isEmpty())) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -477,6 +642,59 @@ fun SmartPrescriptionDialog(
                             contentPadding = PaddingValues(10.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
+                            if (medFilterMode == 1 && customFavoriteMeds.isNotEmpty()) {
+                                items(customFavoriteMeds, key = { it.first }) { (favKey, name, dose) ->
+                                    val isAdded = selectedItems.any { it.tradeName == name }
+                                    Card(
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        border = BorderStroke(1.dp, Color(0xFFEAB308).copy(alpha = 0.65f)),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            IconButton(
+                                                onClick = { onToggleFavorite(favKey) },
+                                                modifier = Modifier.size(48.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Star,
+                                                    contentDescription = bi(isEn, "إزالة من المفضلة", "Remove favorite"),
+                                                    tint = Color(0xFFEAB308),
+                                                )
+                                            }
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(dose, style = MaterialTheme.typography.bodySmall, color = TealPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Button(
+                                                onClick = {
+                                                    if (!isAdded) {
+                                                        selectedItems.add(
+                                                            SelectedRxItem(
+                                                                uid = "fav_${favKey.hashCode()}",
+                                                                tradeName = name,
+                                                                strength = "",
+                                                                dosage = dose,
+                                                                dosageEn = BilingualMedicalTranslator.toEnglishDosage(dose),
+                                                            )
+                                                        )
+                                                    }
+                                                },
+                                                enabled = !isAdded,
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                modifier = Modifier.height(40.dp),
+                                            ) {
+                                                Text(if (isAdded) bi(isEn, "مضاف", "Added") else bi(isEn, "إضافة", "Add"))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             items(filteredMedications, key = { it.id }) { med ->
                                 val isFav = med.id in favoriteMedIds
                                 val isAdded = selectedItems.any { it.uid == med.id }
@@ -688,6 +906,37 @@ fun SmartPrescriptionDialog(
                                 modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(Icons.Filled.Add, contentDescription = bi(isEn, "إضافة دواء مخصص", "Add custom drug"), tint = TealPrimary)
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    if (customMedName.isBlank()) {
+                                        onShowMessage(bi(isEn, "أدخل اسم الدواء المخصص لحفظه بالمفضلة", "Enter custom med name first"))
+                                    } else {
+                                        val favKey = SpecialtyClinicalTemplates.encodeCustomMedFav(customMedName, customMedDosage)
+                                        if (favKey !in favoriteMedIds) {
+                                            onToggleFavorite(favKey)
+                                        }
+                                        onShowMessage(bi(isEn, "تم حفظ الدواء المخصص في مفضلتك ⭐", "Custom medication saved to favorites ⭐"))
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .height(40.dp)
+                                    .testTag("rx_save_custom_med_fav_button"),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Star,
+                                    contentDescription = null,
+                                    tint = Color(0xFFD97706),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(bi(isEn, "⭐ حفظ الدواء المخصص في مفضلاتي", "⭐ Save Custom Med to Favorites"), style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }

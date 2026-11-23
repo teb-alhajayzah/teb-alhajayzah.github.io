@@ -376,6 +376,7 @@ fun MedicalFileScreen(
                         isEn = isEn,
                         isSharedFamilyMember = activeMember.accountId != state.activeAccount.id,
                         onEditClick = { showEditBioDialog = true },
+                        onAddFamilyClick = { showAddFamilyMemberDialog = true },
                     )
                 }
 

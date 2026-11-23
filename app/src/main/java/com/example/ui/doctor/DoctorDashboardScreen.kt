@@ -283,6 +283,8 @@ fun DoctorDashboardScreen(
     var slotForReschedule by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForPrescription by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     var slotForEmrView by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
+    var lookupEmrTarget by remember { mutableStateOf<Pair<com.example.data.local.PatientAccountEntity, List<FamilyMemberEntity>>?>(null) }
+    var lookupEmrSelectedMemberId by remember { mutableStateOf<String?>(null) }
     var showScheduleDialog by remember { mutableStateOf(false) }
     var linkRequestAccount by remember { mutableStateOf<com.example.data.local.PatientAccountEntity?>(null) }
 
@@ -348,7 +350,7 @@ fun DoctorDashboardScreen(
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text(bi(isEn, "تفعيل مريض", "Activate"), maxLines = 1) },
+                        text = { Text(bi(isEn, "تفعيل / ملف مريض", "Activate / EMR"), maxLines = 1) },
                         modifier = Modifier.testTag("doctor_activate_patient_tab"),
                     )
                     Tab(
@@ -819,6 +821,24 @@ fun DoctorDashboardScreen(
                                         Text(bi(isEn, "✓ تفعيل حساب المريض فوراً", "✓ Activate Patient Account Now"))
                                     }
                                 }
+                                OutlinedButton(
+                                    onClick = {
+                                        val members = result.familyMembers.ifEmpty {
+                                            state.allFamilyMembers.filter { it.accountId == acc.id }
+                                        }
+                                        lookupEmrTarget = acc to members
+                                        lookupEmrSelectedMemberId = members.firstOrNull()?.id
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("doctor_view_account_emr_${acc.id}"),
+                                ) {
+                                    Icon(Icons.Filled.FolderShared, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(bi(isEn, "📜 السجل الطبي التاريخي والتحاليل والروشتات", "📜 Permanent Medical Log, Labs & Rx"))
+                                }
+
                                 if (acc.linkedSpouseAccountId.isBlank()) {
                                     OutlinedButton(
                                         onClick = { linkRequestAccount = acc },
@@ -1071,6 +1091,39 @@ fun DoctorDashboardScreen(
             onPreviewAttachment = onPreviewAttachment,
             onShowMessage = onShowMessage,
             onDismiss = { slotForEmrView = null },
+        )
+    }
+
+    // Account-level EMR & Permanent Medical Log Viewer from Tab 1
+    val accountEmrPair = lookupEmrTarget
+    if (accountEmrPair != null) {
+        val (targetAcc, membersList) = accountEmrPair
+        val activeEmrMember = membersList.firstOrNull { it.id == lookupEmrSelectedMemberId } ?: membersList.firstOrNull()
+        val displayMemberName = activeEmrMember?.fullName ?: targetAcc.fullName
+        val patientRecords = state.recordsForPatient(
+            familyMemberId = activeEmrMember?.id.orEmpty(),
+            patientName = displayMemberName,
+            patientPhone = targetAcc.phone,
+        )
+        val patientPermanentLogs = state.permanentLogsForPatient(
+            familyMemberId = activeEmrMember?.id.orEmpty(),
+            patientName = displayMemberName,
+            patientPhone = targetAcc.phone,
+        )
+        PatientEmrViewerDialog(
+            patientName = displayMemberName,
+            patientMember = activeEmrMember,
+            familyMembersSwitcher = membersList,
+            onSelectFamilyMember = { lookupEmrSelectedMemberId = it },
+            isAnalyzingAi = activeEmrMember?.id?.let { it in state.analyzingAiMemberIds } == true,
+            brandConfig = state.brandConfig,
+            records = patientRecords,
+            permanentLogs = patientPermanentLogs,
+            isEn = isEn,
+            onRefreshAiSummary = { activeEmrMember?.id?.let(onRefreshAiSummary) },
+            onPreviewAttachment = onPreviewAttachment,
+            onShowMessage = onShowMessage,
+            onDismiss = { lookupEmrTarget = null },
         )
     }
 
@@ -1522,6 +1575,8 @@ private fun ScheduleGeneratorDialog(
 private fun PatientEmrViewerDialog(
     patientName: String,
     patientMember: FamilyMemberEntity?,
+    familyMembersSwitcher: List<FamilyMemberEntity> = emptyList(),
+    onSelectFamilyMember: (String) -> Unit = {},
     isAnalyzingAi: Boolean,
     brandConfig: com.example.config.PlatformBrandConfig,
     records: List<MedicalRecordEntity>,
@@ -1562,6 +1617,24 @@ private fun PatientEmrViewerDialog(
                     }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Filled.Close, contentDescription = bi(isEn, "إغلاق", "Close"))
+                    }
+                }
+
+                if (familyMembersSwitcher.size > 1) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(familyMembersSwitcher, key = { it.id }) { fm ->
+                            val sel = fm.id == patientMember?.id
+                            FilterChip(
+                                selected = sel,
+                                onClick = { onSelectFamilyMember(fm.id) },
+                                label = { Text("${fm.fullName} (${fm.relation})") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = TealPrimary,
+                                    selectedLabelColor = Color.White,
+                                ),
+                            )
+                        }
                     }
                 }
 
