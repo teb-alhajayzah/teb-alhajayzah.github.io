@@ -67,6 +67,10 @@ data class PatientAccountEntity(
     val otpCreatedAtMillis: Long = 0L,
     val otpExpiresAtMillis: Long = 0L,
     val otpUsed: Boolean = false,
+    val linkedSpouseAccountId: String = "",
+    val linkedSpousePhone: String = "",
+    val linkedSpouseName: String = "",
+    val allowSpouseViewPersonalRecords: Boolean = false,
 )
 
 @Entity(tableName = "family_members")
@@ -87,6 +91,7 @@ data class FamilyMemberEntity(
     val aiSummaryEn: String = "",
     val aiSummaryUpdatedAtMillis: Long = 0L,
     val aiSummaryError: String = "",
+    val nationalId: String = "",
 )
 
 @Entity(tableName = "clinic_doctors")
@@ -114,6 +119,38 @@ data class ClinicDoctorEntity(
     val additionalSpecialties: String = "",
     val chatEnabled: Boolean = true,
     val driveWebAppUrl: String = "",
+    val secondaryDriveWebAppUrl: String = "",
+)
+
+object FamilyLinkStatus {
+    const val PENDING = "PENDING"
+    const val APPROVED = "APPROVED"
+    const val REJECTED = "REJECTED"
+}
+
+@Entity(tableName = "family_link_requests")
+data class FamilyLinkRequestEntity(
+    @PrimaryKey val id: String,
+    val requesterAccountId: String,
+    val requesterName: String,
+    val requesterPhone: String,
+    val targetPhone: String,
+    val relation: String = "SPOUSE",
+    val proofMarriageContractUrl: String = "",
+    val proofNationalIdFrontUrl: String = "",
+    val proofNationalIdBackUrl: String = "",
+    val status: String = FamilyLinkStatus.PENDING,
+    val reviewedBy: String = "",
+    val reviewedAtMillis: Long = 0L,
+    val requestedAtMillis: Long = System.currentTimeMillis(),
+    val notes: String = "",
+)
+
+@Entity(tableName = "platform_visitor_hits")
+data class PlatformVisitorHitEntity(
+    @PrimaryKey val id: String,
+    val platform: String, // "APK" or "WEB"
+    val timestampMillis: Long = System.currentTimeMillis(),
 )
 
 @Entity(tableName = "appointment_slots")

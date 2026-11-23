@@ -33,7 +33,7 @@ data class PlatformBrandConfig(
     val adminOwnerNameEn: String = "Eng. Mohamed Youssef",
     val adminUsername: String = "admin",
     val adminPassword: String = "teb2026",
-    val adminPin: String = "202600",
+    val adminPin: String = "132027",
     val globalChatEnabled: Boolean = true,
     // إعدادات الربط السحابي الافتراضية (Firebase Web Config + Cloudflare Worker URL) معزولة تحت مسار teb_alhajayzah
     val firebaseApiKey: String = "AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs",

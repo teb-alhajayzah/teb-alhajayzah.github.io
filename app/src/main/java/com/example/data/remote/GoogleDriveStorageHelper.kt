@@ -34,6 +34,58 @@ object GoogleDriveStorageHelper {
         return ""
     }
 
+    fun resolveCandidateUrls(
+        primaryClinicUrl: String,
+        secondaryClinicUrl: String,
+        platformFallbackUrl: String,
+    ): List<String> {
+        val list = mutableListOf<String>()
+        val p = primaryClinicUrl.trim()
+        if (p.startsWith("https://") || p.startsWith("http://")) list.add(p)
+        val s = secondaryClinicUrl.trim()
+        if ((s.startsWith("https://") || s.startsWith("http://")) && !list.contains(s)) list.add(s)
+        val fb = platformFallbackUrl.trim()
+        if ((fb.startsWith("https://") || fb.startsWith("http://")) && !list.contains(fb)) list.add(fb)
+        return list
+    }
+
+    suspend fun uploadAttachmentWithFallback(
+        candidateUrls: List<String>,
+        localFilePath: String,
+        fileName: String,
+        mimeType: String,
+        clinicId: String,
+        clinicName: String,
+        patientName: String,
+        familyMemberId: String,
+        recordId: String,
+        recordType: String,
+    ): Result<String> {
+        if (candidateUrls.isEmpty()) {
+            return Result.failure(IllegalArgumentException("No Google Drive Web App URL available"))
+        }
+        var lastErr: Throwable? = null
+        for (url in candidateUrls) {
+            val res = uploadAttachmentToDrive(
+                webAppUrl = url,
+                localFilePath = localFilePath,
+                fileName = fileName,
+                mimeType = mimeType,
+                clinicId = clinicId,
+                clinicName = clinicName,
+                patientName = patientName,
+                familyMemberId = familyMemberId,
+                recordId = recordId,
+                recordType = recordType,
+            )
+            if (res.isSuccess) {
+                return res
+            }
+            lastErr = res.exceptionOrNull()
+        }
+        return Result.failure(lastErr ?: IllegalStateException("Drive upload failed on all configured endpoints"))
+    }
+
     suspend fun uploadAttachmentToDrive(
         webAppUrl: String,
         localFilePath: String,

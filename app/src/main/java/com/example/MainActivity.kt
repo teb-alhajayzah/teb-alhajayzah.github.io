@@ -258,7 +258,17 @@ fun TebAlHajayzahAppRoot(
                     hasNewDataBanner = state.hasNewDataBanner,
                     onSelectLanguage = viewModel::setAppLanguage,
                     onRefresh = viewModel::smartRefreshData,
-                    onSwitchRole = viewModel::switchRoleMode,
+                    onSwitchRole = { mode ->
+                        if (mode == AppRoleMode.SUPER_ADMIN) {
+                            if (state.isAdminLoggedIn) {
+                                viewModel.switchRoleMode(AppRoleMode.SUPER_ADMIN)
+                            } else {
+                                showAdminPinDialog = true
+                            }
+                        } else {
+                            viewModel.switchRoleMode(mode)
+                        }
+                    },
                     onOpenNotifications = {
                         showNotificationsDialog = true
                     },

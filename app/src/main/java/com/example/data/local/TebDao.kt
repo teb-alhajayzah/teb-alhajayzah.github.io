@@ -371,4 +371,46 @@ interface TebDao {
 
     @Query("DELETE FROM medical_labs WHERE id = :labId")
     suspend fun deleteLabById(labId: String)
+
+    @Query("UPDATE patient_accounts SET linkedSpouseAccountId = :spouseAccountId, linkedSpousePhone = :spousePhone, linkedSpouseName = :spouseName WHERE id = :accountId")
+    suspend fun updateSpouseLink(accountId: String, spouseAccountId: String, spousePhone: String, spouseName: String)
+
+    @Query("UPDATE patient_accounts SET allowSpouseViewPersonalRecords = :allow WHERE id = :accountId")
+    suspend fun setSpouseViewPermission(accountId: String, allow: Boolean)
+
+    @Query("UPDATE clinic_doctors SET driveWebAppUrl = :primaryUrl, secondaryDriveWebAppUrl = :secondaryUrl WHERE id = :doctorId")
+    suspend fun updateDoctorDriveAccounts(doctorId: String, primaryUrl: String, secondaryUrl: String)
+
+    @Query("SELECT * FROM family_link_requests ORDER BY requestedAtMillis DESC")
+    fun observeFamilyLinkRequests(): Flow<List<FamilyLinkRequestEntity>>
+
+    @Query("SELECT * FROM family_link_requests WHERE requesterAccountId = :accountId ORDER BY requestedAtMillis DESC")
+    fun observeFamilyLinkRequestsForAccount(accountId: String): Flow<List<FamilyLinkRequestEntity>>
+
+    @Query("SELECT * FROM family_link_requests WHERE id = :id LIMIT 1")
+    suspend fun getFamilyLinkRequestById(id: String): FamilyLinkRequestEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFamilyLinkRequest(request: FamilyLinkRequestEntity)
+
+    @Query("UPDATE family_link_requests SET status = :status, reviewedBy = :reviewedBy, reviewedAtMillis = :reviewedAtMillis, notes = :notes WHERE id = :requestId")
+    suspend fun updateFamilyLinkRequestStatus(
+        requestId: String,
+        status: String,
+        reviewedBy: String,
+        reviewedAtMillis: Long,
+        notes: String = "",
+    )
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVisitorHit(hit: PlatformVisitorHitEntity)
+
+    @Query("SELECT COUNT(*) FROM platform_visitor_hits WHERE timestampMillis >= :sinceMillis")
+    suspend fun countVisitorHitsSince(sinceMillis: Long): Int
+
+    @Query("SELECT COUNT(*) FROM platform_visitor_hits WHERE platform = :platform AND timestampMillis >= :sinceMillis")
+    suspend fun countVisitorHitsByPlatformSince(platform: String, sinceMillis: Long): Int
+
+    @Query("SELECT * FROM platform_visitor_hits ORDER BY timestampMillis DESC LIMIT 500")
+    fun observeRecentVisitorHits(): Flow<List<PlatformVisitorHitEntity>>
 }

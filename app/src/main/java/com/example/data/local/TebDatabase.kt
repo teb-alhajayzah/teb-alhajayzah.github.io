@@ -21,8 +21,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MedicalLabEntity::class,
         DirectMessageEntity::class,
         PermanentMedicalLogEntity::class,
+        FamilyLinkRequestEntity::class,
+        PlatformVisitorHitEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -215,6 +217,48 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `secondaryDriveWebAppUrl` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `family_members` ADD COLUMN `nationalId` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `linkedSpouseAccountId` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `linkedSpousePhone` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `linkedSpouseName` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `patient_accounts` ADD COLUMN `allowSpouseViewPersonalRecords` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `family_link_requests` (
+                        `id` TEXT NOT NULL,
+                        `requesterAccountId` TEXT NOT NULL,
+                        `requesterName` TEXT NOT NULL,
+                        `requesterPhone` TEXT NOT NULL,
+                        `targetPhone` TEXT NOT NULL,
+                        `relation` TEXT NOT NULL DEFAULT 'SPOUSE',
+                        `proofMarriageContractUrl` TEXT NOT NULL DEFAULT '',
+                        `proofNationalIdFrontUrl` TEXT NOT NULL DEFAULT '',
+                        `proofNationalIdBackUrl` TEXT NOT NULL DEFAULT '',
+                        `status` TEXT NOT NULL DEFAULT 'PENDING',
+                        `reviewedBy` TEXT NOT NULL DEFAULT '',
+                        `reviewedAtMillis` INTEGER NOT NULL DEFAULT 0,
+                        `requestedAtMillis` INTEGER NOT NULL DEFAULT 0,
+                        `notes` TEXT NOT NULL DEFAULT '',
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `platform_visitor_hits` (
+                        `id` TEXT NOT NULL,
+                        `platform` TEXT NOT NULL,
+                        `timestampMillis` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -238,7 +282,9 @@ abstract class TebDatabase : RoomDatabase() {
                             MIGRATION_9_10,
                             MIGRATION_10_11,
                             MIGRATION_11_12,
+                            MIGRATION_12_13,
                         )
+                        .fallbackToDestructiveMigrationOnDowngrade()
                         .build()
                 }.also { INSTANCE = it }
             }

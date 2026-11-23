@@ -12,6 +12,8 @@ import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.DirectMessageEntity
+import com.example.data.local.FamilyLinkRequestEntity
+import com.example.data.local.FamilyLinkStatus
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
 import com.example.data.local.MedicalRecordEntity
@@ -20,6 +22,7 @@ import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.PermanentLogEventType
 import com.example.data.local.PermanentMedicalLogEntity
+import com.example.data.local.PlatformVisitorHitEntity
 import com.example.data.local.SlotStatus
 import com.example.util.ChronicConditionsCatalog
 import kotlinx.coroutines.Dispatchers
@@ -382,6 +385,7 @@ object FirestoreCloudSyncService {
         put("password", d.password)
         put("chatEnabled", d.chatEnabled)
         put("driveWebAppUrl", d.driveWebAppUrl)
+        put("secondaryDriveWebAppUrl", d.secondaryDriveWebAppUrl)
     }
 
     fun doctorFromJson(j: JSONObject): ClinicDoctorEntity? {
@@ -418,6 +422,7 @@ object FirestoreCloudSyncService {
             additionalSpecialties = addSpec,
             chatEnabled = if (j.has("chatEnabled")) j.optBoolean("chatEnabled", true) else true,
             driveWebAppUrl = j.optString("driveWebAppUrl", "").trim(),
+            secondaryDriveWebAppUrl = j.optString("secondaryDriveWebAppUrl", "").trim(),
         )
     }
 
@@ -459,6 +464,10 @@ object FirestoreCloudSyncService {
         put("otpCreatedAtMillis", a.otpCreatedAtMillis)
         put("otpExpiresAtMillis", a.otpExpiresAtMillis)
         put("otpUsed", a.otpUsed)
+        put("linkedSpouseAccountId", a.linkedSpouseAccountId)
+        put("linkedSpousePhone", a.linkedSpousePhone)
+        put("linkedSpouseName", a.linkedSpouseName)
+        put("allowSpouseViewPersonalRecords", a.allowSpouseViewPersonalRecords)
     }
 
     fun accountFromJson(j: JSONObject): PatientAccountEntity? {
@@ -478,6 +487,10 @@ object FirestoreCloudSyncService {
             otpCreatedAtMillis = j.optLong("otpCreatedAtMillis", 0L),
             otpExpiresAtMillis = j.optLong("otpExpiresAtMillis", 0L),
             otpUsed = if (j.has("otpUsed")) j.optBoolean("otpUsed", false) else false,
+            linkedSpouseAccountId = j.optString("linkedSpouseAccountId", ""),
+            linkedSpousePhone = j.optString("linkedSpousePhone", ""),
+            linkedSpouseName = j.optString("linkedSpouseName", ""),
+            allowSpouseViewPersonalRecords = j.optBoolean("allowSpouseViewPersonalRecords", false),
         )
     }
 
@@ -497,6 +510,7 @@ object FirestoreCloudSyncService {
         put("aiSummaryAr", m.aiSummaryAr)
         put("aiSummaryEn", m.aiSummaryEn)
         put("aiSummaryUpdatedAtMillis", m.aiSummaryUpdatedAtMillis)
+        put("nationalId", m.nationalId)
     }
 
     fun familyMemberFromJson(j: JSONObject): FamilyMemberEntity? {
@@ -529,6 +543,7 @@ object FirestoreCloudSyncService {
             aiSummaryEn = j.optString("aiSummaryEn", ""),
             aiSummaryUpdatedAtMillis = j.optLong("aiSummaryUpdatedAtMillis", 0L),
             aiSummaryError = "",
+            nationalId = j.optString("nationalId", ""),
         )
     }
 
@@ -770,6 +785,61 @@ object FirestoreCloudSyncService {
             usedByPhone = j.optString("usedByPhone", ""),
             usedAtMillis = j.optLong("usedAtMillis", 0L),
             generatedBy = j.optString("generatedBy", "ADMIN"),
+        )
+    }
+
+    fun familyLinkRequestToJson(r: FamilyLinkRequestEntity): JSONObject = JSONObject().apply {
+        put("id", r.id)
+        put("requesterAccountId", r.requesterAccountId)
+        put("requesterName", r.requesterName)
+        put("requesterPhone", r.requesterPhone)
+        put("targetPhone", r.targetPhone)
+        put("relation", r.relation)
+        put("proofMarriageContractUrl", r.proofMarriageContractUrl)
+        put("proofNationalIdFrontUrl", r.proofNationalIdFrontUrl)
+        put("proofNationalIdBackUrl", r.proofNationalIdBackUrl)
+        put("status", r.status)
+        put("reviewedBy", r.reviewedBy)
+        put("reviewedAtMillis", r.reviewedAtMillis)
+        put("requestedAtMillis", r.requestedAtMillis)
+        put("notes", r.notes)
+    }
+
+    fun familyLinkRequestFromJson(j: JSONObject): FamilyLinkRequestEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        val reqId = j.optString("requesterAccountId", "").trim()
+        if (id.isEmpty() || reqId.isEmpty()) return null
+        return FamilyLinkRequestEntity(
+            id = id,
+            requesterAccountId = reqId,
+            requesterName = j.optString("requesterName", ""),
+            requesterPhone = j.optString("requesterPhone", ""),
+            targetPhone = j.optString("targetPhone", ""),
+            relation = j.optString("relation", "SPOUSE"),
+            proofMarriageContractUrl = j.optString("proofMarriageContractUrl", ""),
+            proofNationalIdFrontUrl = j.optString("proofNationalIdFrontUrl", ""),
+            proofNationalIdBackUrl = j.optString("proofNationalIdBackUrl", ""),
+            status = j.optString("status", FamilyLinkStatus.PENDING),
+            reviewedBy = j.optString("reviewedBy", ""),
+            reviewedAtMillis = j.optLong("reviewedAtMillis", 0L),
+            requestedAtMillis = j.optLong("requestedAtMillis", System.currentTimeMillis()),
+            notes = j.optString("notes", ""),
+        )
+    }
+
+    fun visitorHitToJson(h: PlatformVisitorHitEntity): JSONObject = JSONObject().apply {
+        put("id", h.id)
+        put("platform", h.platform)
+        put("timestampMillis", h.timestampMillis)
+    }
+
+    fun visitorHitFromJson(j: JSONObject): PlatformVisitorHitEntity? {
+        val id = j.optString("id", j.optString("_docId", "")).trim()
+        if (id.isEmpty()) return null
+        return PlatformVisitorHitEntity(
+            id = id,
+            platform = j.optString("platform", "APK"),
+            timestampMillis = j.optLong("timestampMillis", System.currentTimeMillis()),
         )
     }
 }

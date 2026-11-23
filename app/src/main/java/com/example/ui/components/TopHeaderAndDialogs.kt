@@ -181,12 +181,21 @@ fun TebTopHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f),
                 ) {
+                    var logoTapCount by remember { mutableIntStateOf(0) }
                     Image(
                         painter = painterResource(id = brandConfig.logoRes),
                         contentDescription = bi(isEn, brandConfig.platformNameAr, brandConfig.platformNameEn),
                         modifier = Modifier
                             .size(34.dp)
-                            .clip(RoundedCornerShape(10.dp)),
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                logoTapCount += 1
+                                if (logoTapCount >= 5) {
+                                    logoTapCount = 0
+                                    onSwitchRole(AppRoleMode.SUPER_ADMIN)
+                                }
+                            }
+                            .testTag("hidden_admin_logo_trigger"),
                         contentScale = ContentScale.Crop,
                     )
                     Spacer(modifier = Modifier.width(6.dp))

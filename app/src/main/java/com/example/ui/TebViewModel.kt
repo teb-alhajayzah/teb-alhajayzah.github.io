@@ -17,11 +17,13 @@ import com.example.data.local.DirectMessageEntity
 import com.example.data.local.DoctorFavoriteMedEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
+import com.example.data.local.FamilyLinkRequestEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.PermanentMedicalLogEntity
+import com.example.data.repository.VisitorStats
 import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
 import com.example.data.repository.LabPatientSearchResult
@@ -105,6 +107,10 @@ data class TebUiState(
     val isBookingSubmitting: Boolean = false,
     val hasNewDataBanner: Boolean = false,
     val analyzingAiMemberIds: Set<String> = emptySet(),
+    val visitorStats: VisitorStats = VisitorStats(),
+    val familyLinkRequests: List<FamilyLinkRequestEntity> = emptyList(),
+    val isPrivacyModalOpen: Boolean = false,
+    val isTermsModalOpen: Boolean = false,
 ) {
     val isEn: Boolean
         get() = appLanguage == AppLanguage.EN
@@ -287,6 +293,9 @@ class TebViewModel(
     private val _clinicLastSearchQuery = MutableStateFlow("")
     private val _hasNewDataBanner = MutableStateFlow(false)
     private val _analyzingAiMemberIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _visitorStats = MutableStateFlow(VisitorStats())
+    private val _isPrivacyModalOpen = MutableStateFlow(false)
+    private val _isTermsModalOpen = MutableStateFlow(false)
     private var _lastLiveWebSignature: String? = null
 
     private val _snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
@@ -301,6 +310,18 @@ class TebViewModel(
             _isSeeded.value = true
             repository.syncWithCloudFirestoreOnce()
         }
+        viewModelScope.launch {
+            repository.recordVisitorHit("APK")
+            _visitorStats.value = repository.getVisitorStats()
+        }
+        viewModelScope.launch {
+            repository.isAdminLoggedInFlow.collect { loggedIn ->
+                _isAdminLoggedIn.value = loggedIn
+                if (loggedIn && _roleMode.value == AppRoleMode.PATIENT) {
+                    _roleMode.value = AppRoleMode.SUPER_ADMIN
+                }
+            }
+        }
         refreshEgyptianMedications(AppConfig.defaultBrand.medicationsApiUrl)
         viewModelScope.launch {
             val (sig, _) = repository.checkLiveWebHasUpdate(AppConfig.defaultBrand.liveWebUrl, null)
@@ -309,6 +330,7 @@ class TebViewModel(
                 delay(20_000L)
                 val cfg = uiState.value.brandConfig
                 repository.syncWithCloudFirestoreOnce()
+                _visitorStats.value = repository.getVisitorStats()
                 if (cfg.medicationsApiUrl.isNotBlank()) {
                     val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
                     _medications.value = result.medications
@@ -350,6 +372,7 @@ class TebViewModel(
         val loggedInLabId: String?,
         val adminFailedAttempts: Int,
         val adminLockoutUntilMillis: Long,
+        val familyLinkRequests: List<FamilyLinkRequestEntity>,
     )
 
     private data class ClinicDataBundle(
@@ -409,8 +432,9 @@ class TebViewModel(
         repository.loggedInDoctorIdFlow,
         repository.loggedInLabIdFlow,
         repository.adminSecurityFlow,
-    ) { loggedDocId, loggedLabId, sec ->
-        listOf(loggedDocId, loggedLabId, sec.first, sec.second)
+        repository.familyLinkRequestsFlow,
+    ) { loggedDocId, loggedLabId, sec, reqs ->
+        listOf(loggedDocId, loggedLabId, sec.first, sec.second, reqs)
     }
 
     private val accountBundleFlow = combine(accountIdsFlow, authCredsFlow) { ids, creds ->
@@ -425,6 +449,7 @@ class TebViewModel(
             loggedInLabId = creds[1] as String?,
             adminFailedAttempts = creds[2] as Int,
             adminLockoutUntilMillis = creds[3] as Long,
+            familyLinkRequests = creds[4] as List<FamilyLinkRequestEntity>,
         )
     }
 
@@ -468,6 +493,9 @@ class TebViewModel(
         _clinicPatientSearchResults,
         _hasNewDataBanner,
         _analyzingAiMemberIds,
+        _visitorStats,
+        _isPrivacyModalOpen,
+        _isTermsModalOpen,
     ) { values ->
         values.toList()
     }
@@ -499,6 +527,9 @@ class TebViewModel(
         val hasBanner = adminOps[4] as Boolean
         @Suppress("UNCHECKED_CAST")
         val analyzingIds = adminOps[5] as Set<String>
+        val vStats = adminOps[6] as VisitorStats
+        val privacyOpen = adminOps[7] as Boolean
+        val termsOpen = adminOps[8] as Boolean
 
         TebUiState(
             isReady = sel.isSeeded,
@@ -540,6 +571,10 @@ class TebViewModel(
             isBookingSubmitting = medBundle.isBookingSubmitting,
             hasNewDataBanner = hasBanner,
             analyzingAiMemberIds = analyzingIds,
+            visitorStats = vStats,
+            isPrivacyModalOpen = privacyOpen,
+            isTermsModalOpen = termsOpen,
+            familyLinkRequests = acc.familyLinkRequests,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -708,9 +743,95 @@ class TebViewModel(
     }
 
     fun logoutAdmin() {
+        viewModelScope.launch {
+            repository.setAdminLoggedIn(false)
+        }
         _isAdminLoggedIn.value = false
         _roleMode.value = AppRoleMode.PATIENT
         _snackbarMessages.tryEmit("تم قفل والخروج من لوحة الإدارة")
+    }
+
+    fun openPrivacyPolicyModal() {
+        _isPrivacyModalOpen.value = true
+    }
+
+    fun dismissPrivacyPolicyModal() {
+        _isPrivacyModalOpen.value = false
+    }
+
+    fun openTermsOfUseModal() {
+        _isTermsModalOpen.value = true
+    }
+
+    fun dismissTermsOfUseModal() {
+        _isTermsModalOpen.value = false
+    }
+
+    fun submitFamilyLinkRequest(
+        requesterAccountId: String,
+        targetPhone: String,
+        relation: String,
+        proofMarriageContractUrl: String = "",
+        proofNationalIdFrontUrl: String = "",
+        proofNationalIdBackUrl: String = "",
+        onSuccess: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val res = repository.submitFamilyLinkRequest(
+                requesterAccountId = requesterAccountId,
+                targetPhone = targetPhone,
+                relation = relation,
+                proofMarriageContractUrl = proofMarriageContractUrl,
+                proofNationalIdFrontUrl = proofNationalIdFrontUrl,
+                proofNationalIdBackUrl = proofNationalIdBackUrl,
+            )
+            res.onSuccess {
+                _snackbarMessages.tryEmit("تم إرسال طلب ربط الأسرة للإدارة للمراجعة والاعتماد")
+                onSuccess()
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "فشل إرسال طلب ربط الأسرة")
+            }
+        }
+    }
+
+    fun approveFamilyLinkRequest(requestId: String) {
+        viewModelScope.launch {
+            val res = repository.approveFamilyLinkRequest(requestId)
+            res.onSuccess {
+                _snackbarMessages.tryEmit("تم اعتماد ربط الحسابين بنجاح وتفعيل ظهور الأبناء المشتركين")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "فشل اعتماد طلب الربط")
+            }
+        }
+    }
+
+    fun rejectFamilyLinkRequest(requestId: String, notes: String = "") {
+        viewModelScope.launch {
+            val res = repository.rejectFamilyLinkRequest(requestId, notes = notes)
+            res.onSuccess {
+                _snackbarMessages.tryEmit("تم رفض طلب ربط الأسرة")
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: "فشل رفض طلب الربط")
+            }
+        }
+    }
+
+    fun setSpouseViewPermission(accountId: String, allow: Boolean) {
+        viewModelScope.launch {
+            repository.setSpouseViewPermission(accountId, allow)
+            if (allow) {
+                _snackbarMessages.tryEmit("تم السماح للطرف الآخر بالاطلاع على ملفك الطبي الشخصي")
+            } else {
+                _snackbarMessages.tryEmit("تم حجب ملفك الطبي الشخصي عن الطرف الآخر")
+            }
+        }
+    }
+
+    fun updateDoctorDriveAccounts(doctorId: String, primaryUrl: String, secondaryUrl: String) {
+        viewModelScope.launch {
+            repository.updateDoctorDriveAccounts(doctorId, primaryUrl, secondaryUrl)
+            _snackbarMessages.tryEmit("تم حفظ وتحديث حسابات Google Drive للعيادة")
+        }
     }
 
     fun updateBrandConfig(

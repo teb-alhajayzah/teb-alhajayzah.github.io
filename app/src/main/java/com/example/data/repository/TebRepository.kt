@@ -22,6 +22,8 @@ import com.example.data.local.ClinicType
 import com.example.data.local.DelayNotificationEntity
 import com.example.data.local.DirectMessageEntity
 import com.example.data.local.DoctorFavoriteMedEntity
+import com.example.data.local.FamilyLinkRequestEntity
+import com.example.data.local.FamilyLinkStatus
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
 import com.example.data.local.MedicalRecordEntity
@@ -31,6 +33,7 @@ import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.PermanentLogEventType
 import com.example.data.local.PermanentMedicalLogEntity
+import com.example.data.local.PlatformVisitorHitEntity
 import com.example.data.local.SlotStatus
 import com.example.data.local.TebDao
 import com.example.ai.GeminiMedicalAnalyzer
@@ -38,6 +41,7 @@ import com.example.data.medications.EgyptianMedicationService
 import com.example.data.medications.MedicationFetchResult
 import com.example.ui.AppLanguage
 import com.example.util.BilingualMedicalTranslator
+import kotlinx.coroutines.flow.combine
 import com.example.util.ChronicConditionsCatalog
 import com.example.util.ImageStorageHelper
 import com.example.util.MedicalSummaryAnalyzer
@@ -76,6 +80,18 @@ data class RemoteVersionCheckResult(
     val latestVersionCode: Int,
     val apkDownloadUrl: String,
     val reachable: Boolean,
+)
+
+data class VisitorStats(
+    val todayTotal: Int = 1,
+    val todayApk: Int = 1,
+    val todayWeb: Int = 0,
+    val weekTotal: Int = 1,
+    val weekApk: Int = 1,
+    val weekWeb: Int = 0,
+    val monthTotal: Int = 1,
+    val monthApk: Int = 1,
+    val monthWeb: Int = 0,
 )
 
 class TebRepository(
@@ -121,6 +137,16 @@ class TebRepository(
     private val cfgFileRetentionDaysKey = intPreferencesKey("cfg_file_retention_days")
     private val appLanguageKey = stringPreferencesKey("app_language")
     private val seededRealDoctorsKey = booleanPreferencesKey("seeded_real_doctors_v1")
+    private val adminLoggedInKey = booleanPreferencesKey("admin_logged_in_v1")
+
+    val isAdminLoggedInFlow: Flow<Boolean> = appContext.tebDataStore.data
+        .map { prefs -> prefs[adminLoggedInKey] ?: false }
+
+    suspend fun setAdminLoggedIn(loggedIn: Boolean) {
+        appContext.tebDataStore.edit { prefs ->
+            prefs[adminLoggedInKey] = loggedIn
+        }
+    }
 
     val appLanguageFlow: Flow<AppLanguage> = appContext.tebDataStore.data
         .map { prefs -> AppLanguage.fromCode(prefs[appLanguageKey]) }
@@ -192,9 +218,37 @@ class TebRepository(
     val allDoctorFavoritesFlow: Flow<List<DoctorFavoriteMedEntity>> = dao.observeAllDoctorFavorites()
     val blockedPhonesFlow: Flow<List<BlockedPhoneEntity>> = dao.observeBlockedPhones()
     val activationCodesFlow: Flow<List<ActivationOtpCodeEntity>> = dao.observeAllActivationCodes()
+    val familyLinkRequestsFlow: Flow<List<FamilyLinkRequestEntity>> = dao.observeFamilyLinkRequests()
+
+    fun observeFamilyLinkRequestsForAccount(accountId: String): Flow<List<FamilyLinkRequestEntity>> =
+        dao.observeFamilyLinkRequestsForAccount(accountId)
 
     fun observeFamilyMembers(accountId: String): Flow<List<FamilyMemberEntity>> =
-        dao.observeFamilyMembers(accountId)
+        combine(
+            dao.observeFamilyMembers(accountId),
+            dao.observeAllAccounts(),
+            dao.observeAllFamilyMembers(),
+        ) { myMembers, allAccounts, allMembers ->
+            val currentAccount = allAccounts.firstOrNull { it.id == accountId }
+            val spouseId = currentAccount?.linkedSpouseAccountId.orEmpty()
+            if (spouseId.isBlank()) {
+                myMembers
+            } else {
+                val spouseAccount = allAccounts.firstOrNull { it.id == spouseId }
+                val spouseMembers = allMembers.filter { it.accountId == spouseId }
+                val childrenFromSpouse = spouseMembers.filter { mem ->
+                    val r = mem.relation.lowercase()
+                    !r.contains("نفس") && !r.contains("أنا") && !r.contains("self") &&
+                    (r.contains("ابن") || r.contains("ابنة") || r.contains("طفل") || r.contains("son") || r.contains("daughter") || r.contains("child") || !r.contains("زوج"))
+                }
+                val spouseSelfRecord = if (spouseAccount?.allowSpouseViewPersonalRecords == true) {
+                    spouseMembers.filter { it.relation.contains("نفس") || it.relation.contains("أنا") || it.relation.contains("self") || it.relation.contains("زوج") }
+                } else {
+                    emptyList()
+                }
+                (myMembers + childrenFromSpouse + spouseSelfRecord).distinctBy { it.id }
+            }
+        }
 
     fun observeSlotsForDoctor(doctorId: String): Flow<List<AppointmentSlotEntity>> =
         dao.observeSlotsForDoctor(doctorId)
@@ -238,6 +292,7 @@ class TebRepository(
             appContext.tebDataStore.edit { editable ->
                 editable[adminFailedAttemptsKey] = 0
                 editable[adminLockoutUntilKey] = 0L
+                editable[adminLoggedInKey] = true
             }
             return Result.success(Unit)
         }
@@ -1751,6 +1806,25 @@ class TebRepository(
                         if (parsed.isNotEmpty()) dao.insertPermanentLogs(parsed)
                     }
                 }
+
+                // 12) مزامنة طلبات ربط الأسرة (teb_alhajayzah/data/family_link_requests)
+                FirestoreCloudSyncService.listCollection(brand, "family_link_requests")?.let { remoteReqs ->
+                    val localReqs = dao.observeFamilyLinkRequests().first()
+                    if (remoteReqs.isEmpty() && localReqs.isNotEmpty()) {
+                        localReqs.forEach { r ->
+                            FirestoreCloudSyncService.upsertDocument(brand, "family_link_requests", r.id, FirestoreCloudSyncService.familyLinkRequestToJson(r))
+                        }
+                    } else {
+                        val parsed = remoteReqs.mapNotNull { FirestoreCloudSyncService.familyLinkRequestFromJson(it) }
+                        parsed.forEach { dao.insertFamilyLinkRequest(it) }
+                    }
+                }
+
+                // 13) مزامنة إحصائيات الزيارات (teb_alhajayzah/data/visitor_hits)
+                FirestoreCloudSyncService.listCollection(brand, "visitor_hits")?.let { remoteHits ->
+                    val parsed = remoteHits.mapNotNull { FirestoreCloudSyncService.visitorHitFromJson(it) }
+                    parsed.forEach { dao.insertVisitorHit(it) }
+                }
                 true
             }.getOrDefault(false)
         }
@@ -2242,6 +2316,7 @@ class TebRepository(
         relation: String,
         age: Int,
         phone: String,
+        nationalId: String = "",
     ): FamilyMemberEntity {
         val newMember = FamilyMemberEntity(
             id = "mem_${UUID.randomUUID()}",
@@ -2250,6 +2325,7 @@ class TebRepository(
             relation = relation.trim(),
             age = age,
             phone = phone.trim(),
+            nationalId = toAsciiDigits(nationalId).trim(),
         )
         dao.insertFamilyMember(newMember)
         pushDocAsync("family_members", newMember.id) { FirestoreCloudSyncService.familyMemberToJson(newMember) }
@@ -2854,13 +2930,17 @@ class TebRepository(
         cloudScope.launch {
             runCatching {
                 val brand = brandConfigFlow.first()
-                val targetUrl = GoogleDriveStorageHelper.resolveWebAppUrl(
-                    clinicDriveUrl = clinicDriveUrl,
-                    platformFallbackDriveUrl = brand.defaultDriveWebAppUrl,
+                val doctor = if (record.doctorId.isNotBlank()) dao.getDoctorById(record.doctorId) else null
+                val primary = doctor?.driveWebAppUrl?.takeIf { it.isNotBlank() } ?: clinicDriveUrl
+                val secondary = doctor?.secondaryDriveWebAppUrl.orEmpty()
+                val candidateUrls = GoogleDriveStorageHelper.resolveCandidateUrls(
+                    primaryClinicUrl = primary,
+                    secondaryClinicUrl = secondary,
+                    platformFallbackUrl = brand.defaultDriveWebAppUrl,
                 )
-                if (targetUrl.isBlank()) return@launch
-                GoogleDriveStorageHelper.uploadAttachmentToDrive(
-                    webAppUrl = targetUrl,
+                if (candidateUrls.isEmpty()) return@launch
+                GoogleDriveStorageHelper.uploadAttachmentWithFallback(
+                    candidateUrls = candidateUrls,
                     localFilePath = record.attachmentPath,
                     fileName = record.attachmentName,
                     mimeType = record.attachmentMimeType,
@@ -2908,6 +2988,146 @@ class TebRepository(
             pruned++
         }
         return pruned
+    }
+
+    suspend fun submitFamilyLinkRequest(
+        requesterAccountId: String,
+        targetPhone: String,
+        relation: String = "SPOUSE",
+        proofMarriageContractUrl: String = "",
+        proofNationalIdFrontUrl: String = "",
+        proofNationalIdBackUrl: String = "",
+    ): Result<FamilyLinkRequestEntity> {
+        val cleanPhone = toAsciiDigits(targetPhone).trim()
+        val requester = dao.getAccountById(requesterAccountId)
+            ?: return Result.failure(IllegalStateException("حساب مقدم الطلب غير مسجل"))
+        if (requester.phone == cleanPhone) {
+            return Result.failure(IllegalArgumentException("لا يمكن ربط الحساب بنفس رقم الهاتف"))
+        }
+        val targetAccount = dao.findAccountByPhone(cleanPhone)
+            ?: return Result.failure(IllegalArgumentException("لم يتم العثور على حساب مسجل برقم هاتف الطرف الآخر ($cleanPhone). يرجى التأكد من تسجيله أولاً."))
+
+        val req = FamilyLinkRequestEntity(
+            id = "flr_${UUID.randomUUID()}",
+            requesterAccountId = requesterAccountId,
+            requesterName = requester.fullName,
+            requesterPhone = requester.phone,
+            targetPhone = cleanPhone,
+            relation = relation,
+            proofMarriageContractUrl = proofMarriageContractUrl,
+            proofNationalIdFrontUrl = proofNationalIdFrontUrl,
+            proofNationalIdBackUrl = proofNationalIdBackUrl,
+            status = FamilyLinkStatus.PENDING,
+            requestedAtMillis = System.currentTimeMillis(),
+        )
+        dao.insertFamilyLinkRequest(req)
+        pushDocAsync("family_link_requests", req.id) { FirestoreCloudSyncService.familyLinkRequestToJson(req) }
+        return Result.success(req)
+    }
+
+    suspend fun approveFamilyLinkRequest(
+        requestId: String,
+        reviewerName: String = "المدير العام",
+    ): Result<Unit> {
+        val req = dao.getFamilyLinkRequestById(requestId)
+            ?: return Result.failure(IllegalStateException("طلب الربط غير موجود"))
+        val requester = dao.getAccountById(req.requesterAccountId)
+            ?: return Result.failure(IllegalStateException("حساب مقدم الطلب غير مسجل"))
+        val target = dao.findAccountByPhone(req.targetPhone)
+            ?: return Result.failure(IllegalStateException("حساب الطرف الآخر غير موجود"))
+
+        val now = System.currentTimeMillis()
+        dao.updateFamilyLinkRequestStatus(requestId, FamilyLinkStatus.APPROVED, reviewerName, now)
+
+        dao.updateSpouseLink(requester.id, target.id, target.phone, target.fullName)
+        dao.updateSpouseLink(target.id, requester.id, requester.phone, requester.fullName)
+
+        pushDocAsync("family_link_requests", requestId) {
+            FirestoreCloudSyncService.familyLinkRequestToJson(
+                req.copy(status = FamilyLinkStatus.APPROVED, reviewedBy = reviewerName, reviewedAtMillis = now)
+            )
+        }
+        val updatedReq = dao.getAccountById(requester.id)
+        if (updatedReq != null) pushDocAsync("patient_accounts", updatedReq.id) { FirestoreCloudSyncService.accountToJson(updatedReq) }
+        val updatedTarget = dao.getAccountById(target.id)
+        if (updatedTarget != null) pushDocAsync("patient_accounts", updatedTarget.id) { FirestoreCloudSyncService.accountToJson(updatedTarget) }
+        return Result.success(Unit)
+    }
+
+    suspend fun rejectFamilyLinkRequest(
+        requestId: String,
+        reviewerName: String = "المدير العام",
+        notes: String = "",
+    ): Result<Unit> {
+        val req = dao.getFamilyLinkRequestById(requestId)
+            ?: return Result.failure(IllegalStateException("طلب الربط غير موجود"))
+        val now = System.currentTimeMillis()
+        dao.updateFamilyLinkRequestStatus(requestId, FamilyLinkStatus.REJECTED, reviewerName, now, notes)
+        pushDocAsync("family_link_requests", requestId) {
+            FirestoreCloudSyncService.familyLinkRequestToJson(
+                req.copy(status = FamilyLinkStatus.REJECTED, reviewedBy = reviewerName, reviewedAtMillis = now, notes = notes)
+            )
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun setSpouseViewPermission(accountId: String, allow: Boolean): Result<Unit> {
+        dao.setSpouseViewPermission(accountId, allow)
+        val updated = dao.getAccountById(accountId)
+        if (updated != null) {
+            pushDocAsync("patient_accounts", updated.id) { FirestoreCloudSyncService.accountToJson(updated) }
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun updateDoctorDriveAccounts(doctorId: String, primaryUrl: String, secondaryUrl: String): Result<Unit> {
+        dao.updateDoctorDriveAccounts(doctorId, primaryUrl.trim(), secondaryUrl.trim())
+        val doc = dao.getDoctorById(doctorId)
+        if (doc != null) {
+            pushDocAsync("doctors", docId = doctorId) { FirestoreCloudSyncService.doctorToJson(doc) }
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun recordVisitorHit(platform: String = "APK") {
+        val hit = PlatformVisitorHitEntity(
+            id = "hit_${UUID.randomUUID()}",
+            platform = platform,
+            timestampMillis = System.currentTimeMillis(),
+        )
+        dao.insertVisitorHit(hit)
+        pushDocAsync("visitor_hits", hit.id) { FirestoreCloudSyncService.visitorHitToJson(hit) }
+    }
+
+    suspend fun getVisitorStats(): VisitorStats {
+        val now = System.currentTimeMillis()
+        val startOfDay = now - (now % 86_400_000L)
+        val startOfWeek = now - (7L * 86_400_000L)
+        val startOfMonth = now - (30L * 86_400_000L)
+
+        val todayTotal = dao.countVisitorHitsSince(startOfDay)
+        val todayApk = dao.countVisitorHitsByPlatformSince("APK", startOfDay)
+        val todayWeb = dao.countVisitorHitsByPlatformSince("WEB", startOfDay)
+
+        val weekTotal = dao.countVisitorHitsSince(startOfWeek)
+        val weekApk = dao.countVisitorHitsByPlatformSince("APK", startOfWeek)
+        val weekWeb = dao.countVisitorHitsByPlatformSince("WEB", startOfWeek)
+
+        val monthTotal = dao.countVisitorHitsSince(startOfMonth)
+        val monthApk = dao.countVisitorHitsByPlatformSince("APK", startOfMonth)
+        val monthWeb = dao.countVisitorHitsByPlatformSince("WEB", startOfMonth)
+
+        return VisitorStats(
+            todayTotal = todayTotal.coerceAtLeast(1),
+            todayApk = todayApk.coerceAtLeast(1),
+            todayWeb = todayWeb,
+            weekTotal = weekTotal.coerceAtLeast(todayTotal.coerceAtLeast(1)),
+            weekApk = weekApk.coerceAtLeast(todayApk.coerceAtLeast(1)),
+            weekWeb = weekWeb,
+            monthTotal = monthTotal.coerceAtLeast(weekTotal.coerceAtLeast(1)),
+            monthApk = monthApk.coerceAtLeast(weekApk.coerceAtLeast(1)),
+            monthWeb = monthWeb,
+        )
     }
 
     companion object {
