@@ -496,6 +496,44 @@ fun LiveWebPortalScreen(
                             },
                             "AndroidNotifBridge",
                         )
+                        addJavascriptInterface(
+                            object {
+                                @JavascriptInterface
+                                fun isAndroidApp(): Boolean = true
+
+                                @JavascriptInterface
+                                fun getAppVersion(): String = BuildConfig.VERSION_NAME
+
+                                @JavascriptInterface
+                                fun getAppVersionCode(): Int = BuildConfig.VERSION_CODE
+
+                                @JavascriptInterface
+                                fun isNotificationPermissionGranted(): Boolean =
+                                    TebNotificationHelper.hasNotificationPermission(ctx)
+
+                                @JavascriptInterface
+                                fun showNativeNotification(title: String, body: String): Boolean =
+                                    TebNotificationHelper.showHighPriorityNotification(
+                                        context = ctx,
+                                        title = title,
+                                        body = body,
+                                    )
+
+                                @JavascriptInterface
+                                fun requestNotificationPermission() {
+                                    bridgeScope.launch(Dispatchers.Main) {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                            TebNotificationHelper.isRuntimeNotificationPermissionRequired(ctx)
+                                        ) {
+                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            TebNotificationHelper.openAppNotificationSettings(ctx)
+                                        }
+                                    }
+                                }
+                            },
+                            "AndroidBridge",
+                        )
                         setDownloadListener { url, _, contentDisposition, mimeType, _ ->
                             if (!url.isNullOrBlank()) {
                                 if (url.startsWith("data:", ignoreCase = true)) {
@@ -517,6 +555,14 @@ fun LiveWebPortalScreen(
                             }
                         }
                         webChromeClient = object : WebChromeClient() {
+                            override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
+                                try {
+                                    request?.grant(request.resources)
+                                } catch (_: Exception) {
+                                    // Ignore if already handled
+                                }
+                            }
+
                             override fun onShowFileChooser(
                                 webView: WebView?,
                                 filePathCallback: ValueCallback<Array<Uri>>?,

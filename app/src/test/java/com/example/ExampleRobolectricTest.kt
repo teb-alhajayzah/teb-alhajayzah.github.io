@@ -533,7 +533,7 @@ class ExampleRobolectricTest {
         repository.setAccountVerificationByAdmin(accB.id, true)
         val adminVerifiedB = repository.allAccountsFlow.first().first { it.id == accB.id }
         assertTrue(adminVerifiedB.isPhoneVerified)
-        assertEquals("الإدارة", adminVerifiedB.verifiedBy)
+        assertEquals("المدير العام", adminVerifiedB.verifiedBy)
 
         val editRes = repository.updateAccountByAdmin(
             accountId = accB.id,
@@ -1466,5 +1466,87 @@ class ExampleRobolectricTest {
 
         val customDiagKey = com.example.util.SpecialtyClinicalTemplates.encodeCustomDiagFav("التهاب حاد بالمعدة")
         assertEquals("التهاب حاد بالمعدة", com.example.util.SpecialtyClinicalTemplates.decodeCustomDiagFav(customDiagKey))
+    }
+
+    @Test
+    fun newUserAdminAlertClinicPhoneActivationAdminWarningAndDriveCleanupWork() = runBlocking {
+        repository.ensureSeeded()
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
+        // 1. Registering a new patient immediately creates an ADMIN notification
+        val newAcc = repository.registerPatientAccount(
+            fullName = "علاء الدين مصطفى",
+            phone = "01044556677",
+            nationalId = "",
+            password = "1357",
+        ).getOrThrow()
+
+        val adminAlerts = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.ADMIN &&
+                it.targetId == newAcc.id
+        }
+        assertEquals(1, adminAlerts.size)
+        assertTrue(adminAlerts.first().message.contains("علاء الدين مصطفى"))
+        assertTrue(adminAlerts.first().message.contains("01044556677"))
+
+        // 2. Doctor activates patient account directly by phone number -> sets verifiedBy = "عيادة د. ..."
+        val activatedByClinic = repository.activatePatientByClinicPhone(
+            rawPhone = "٠١٠٤٤٥٥٦٦٧٧",
+            doctorName = "محمد فكري",
+        ).getOrThrow()
+        assertTrue(activatedByClinic.isPhoneVerified)
+        assertEquals("عيادة د. محمد فكري", activatedByClinic.verifiedBy)
+
+        // 3. Super Admin sends a warning message to patient -> creates warning chat bubble & targeted PATIENT notification
+        val warnMsg = repository.sendAdminReplyToPatient(
+            patientAccountId = newAcc.id,
+            patientName = newAcc.fullName,
+            patientPhone = newAcc.phone,
+            body = "يرجى عدم تكرار الحجز الوهمي وإلا سيتم إيقاف الحساب",
+            isWarning = true,
+        ).getOrThrow()
+        assertTrue(warnMsg.body.contains("[تحذير إداري]"))
+
+        val patientWarnNotifs = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.PATIENT &&
+                it.targetId == newAcc.id
+        }
+        assertTrue(patientWarnNotifs.any { it.message.contains("تحذير إداري") })
+
+        // 4. Storage 90% alert & manual heavy attachment cleanup preserve permanent_medical_logs 100%
+        repository.emitStorage90PercentAlert("عيادة د. محمد فكري — Drive #1", 92)
+        val storageAlerts = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.ADMIN &&
+                it.message.contains("92%")
+        }
+        assertEquals(1, storageAlerts.size)
+
+        val member = repository.observeFamilyMembers(newAcc.id).first().first()
+        val attachmentsDir = java.io.File(context.filesDir, "medical_images").apply { mkdirs() }
+        val heavyFile = java.io.File(attachmentsDir, "heavy_mri.pdf").apply { writeText("%PDF-1.4 heavy") }
+        val rec = repository.addPatientUploadedAttachment(
+            familyMemberId = member.id,
+            patientName = member.fullName,
+            patientPhone = newAcc.phone,
+            title = "أشعة رنين مغناطيسي",
+            notes = "سليمة ولا توجد مشاكل",
+            attachmentPath = heavyFile.absolutePath,
+            attachmentMimeType = "application/pdf",
+            attachmentName = "heavy_mri.pdf",
+        )
+        val logsBefore = repository.allPermanentLogsFlow.first().filter { it.familyMemberId == member.id }
+        assertEquals(1, logsBefore.size)
+
+        val cleanedCount = repository.cleanHeavyAttachmentsForStorageTarget("__ALL__")
+        assertEquals(1, cleanedCount)
+        assertFalse(heavyFile.exists())
+
+        val recAfterClean = db.tebDao().getMedicalRecordById(rec.id)!!
+        assertEquals("", recAfterClean.attachmentPath)
+        assertEquals("", recAfterClean.driveFileUrl)
+
+        val logsAfterClean = repository.allPermanentLogsFlow.first().filter { it.familyMemberId == member.id }
+        assertEquals(1, logsAfterClean.size)
+        assertEquals(logsBefore.first().id, logsAfterClean.first().id)
     }
 }

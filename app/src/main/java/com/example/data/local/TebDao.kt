@@ -205,6 +205,12 @@ interface TebDao {
     @Query("SELECT * FROM medical_records WHERE attachmentPath != '' AND createdAtMillis < :cutoffMillis")
     suspend fun getMedicalRecordsWithAttachmentsOlderThan(cutoffMillis: Long): List<MedicalRecordEntity>
 
+    @Query("SELECT * FROM medical_records WHERE attachmentPath != '' OR driveFileUrl != ''")
+    suspend fun getAllMedicalRecordsWithAttachments(): List<MedicalRecordEntity>
+
+    @Query("UPDATE medical_records SET attachmentPath = '', attachmentMimeType = '', attachmentName = '', driveFileUrl = '' WHERE id = :recordId")
+    suspend fun clearAllAttachmentRefsForRecord(recordId: String)
+
     @Query("SELECT * FROM permanent_medical_logs ORDER BY eventTimestampMillis DESC")
     fun observeAllPermanentLogs(): Flow<List<PermanentMedicalLogEntity>>
 

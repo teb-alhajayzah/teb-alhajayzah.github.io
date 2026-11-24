@@ -72,6 +72,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -100,9 +102,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -1524,14 +1528,18 @@ data class DirectChatTarget(
 fun NotificationsDialog(
     notifications: List<DelayNotificationEntity>,
     directMessages: List<DirectMessageEntity> = emptyList(),
+    allAccounts: List<PatientAccountEntity> = emptyList(),
     roleMode: AppRoleMode = AppRoleMode.PATIENT,
     activeAccount: PatientAccountEntity? = null,
     loggedInDoctor: ClinicDoctorEntity? = null,
     isEn: Boolean = false,
     onMarkAllRead: () -> Unit = {},
     onOpenChatThread: (DirectChatTarget) -> Unit = {},
+    onActivateAccount: (accountId: String) -> Unit = {},
+    onRegenerateOtp: (accountId: String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
+    val clipboardManager = LocalClipboardManager.current
     val activeThreads = remember(directMessages, roleMode, activeAccount?.id, loggedInDoctor?.id) {
         when (roleMode) {
             AppRoleMode.PATIENT -> {
@@ -1780,7 +1788,10 @@ fun NotificationsDialog(
                                             modifier = Modifier.size(20.dp),
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
                                             if (alert.senderLabel.isNotBlank()) {
                                                 Text(
                                                     text = alert.senderLabel,
@@ -1794,6 +1805,62 @@ fun NotificationsDialog(
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = if (!alert.isRead) DelayWarningText else MaterialTheme.colorScheme.onSurface,
                                             )
+                                            val matchedAccount = if (roleMode == AppRoleMode.SUPER_ADMIN) {
+                                                allAccounts.firstOrNull { acc ->
+                                                    (acc.phone.isNotBlank() && alert.message.contains(acc.phone)) ||
+                                                        (acc.fullName.isNotBlank() && alert.message.contains(acc.fullName))
+                                                }
+                                            } else null
+
+                                            if (matchedAccount != null) {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                ) {
+                                                    if (!matchedAccount.isPhoneVerified) {
+                                                        Button(
+                                                            onClick = { onActivateAccount(matchedAccount.id) },
+                                                            colors = ButtonDefaults.buttonColors(containerColor = SlotAvailableBorder),
+                                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                            modifier = Modifier.height(32.dp),
+                                                        ) {
+                                                            Text(bi(isEn, "✅ توثيق فوري", "Verify Now"), style = MaterialTheme.typography.labelSmall)
+                                                        }
+                                                        OutlinedButton(
+                                                            onClick = {
+                                                                val msg = "أهلاً بك في منصة طب الحجايزة. كود تفعيل حسابك هو: ${matchedAccount.otpCode} (صالح لمدة 24 ساعة)."
+                                                                clipboardManager.setText(AnnotatedString(msg))
+                                                            },
+                                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                            modifier = Modifier.height(32.dp),
+                                                        ) {
+                                                            Text(bi(isEn, "🔑 كود OTP", "Copy OTP"), style = MaterialTheme.typography.labelSmall)
+                                                        }
+                                                    }
+                                                    Button(
+                                                        onClick = {
+                                                            onDismiss()
+                                                            onOpenChatThread(
+                                                                DirectChatTarget(
+                                                                    threadType = ChatThreadType.PATIENT_ADMIN,
+                                                                    viewerRole = MessageSenderRole.ADMIN,
+                                                                    title = "${matchedAccount.fullName} (${bi(isEn, "دعم فني", "Support")})",
+                                                                    subtitle = matchedAccount.phone,
+                                                                    patientAccountId = matchedAccount.id,
+                                                                    patientName = matchedAccount.fullName,
+                                                                    patientPhone = matchedAccount.phone,
+                                                                )
+                                                            )
+                                                        },
+                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                        modifier = Modifier.height(32.dp),
+                                                    ) {
+                                                        Text(bi(isEn, "💬 مراسلة / تحذير", "Chat / Warn"), style = MaterialTheme.typography.labelSmall)
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1837,10 +1904,11 @@ fun DirectChatDialog(
     onDeleteMessage: (messageId: String) -> Unit = {},
     onClearThread: (() -> Unit)? = null,
     onMarkThreadRead: () -> Unit,
-    onSendMessage: (body: String, onDone: () -> Unit) -> Unit,
+    onSendMessage: (body: String, isWarning: Boolean, onDone: () -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var draftBody by remember { mutableStateOf("") }
+    var isWarningDraft by remember { mutableStateOf(false) }
     val threadMessages = remember(messages, target) {
         messages.filter { msg ->
             msg.threadType == target.threadType && when (target.threadType) {
@@ -1963,6 +2031,44 @@ fun DirectChatDialog(
                         ) {
                             items(threadMessages, key = { it.id }) { msg ->
                                 val isMine = msg.senderRole == target.viewerRole
+                                val isWarningMsg = msg.body.contains("[تحذير إداري]") ||
+                                    (msg.senderRole == MessageSenderRole.ADMIN && msg.body.startsWith("⚠️"))
+                                val bubbleBg = if (isWarningMsg) {
+                                    Color(0xFFFEF2F2)
+                                } else if (isMine) {
+                                    TealPrimary
+                                } else {
+                                    Color.White
+                                }
+                                val bubbleBorder = if (isWarningMsg) {
+                                    BorderStroke(1.5.dp, Color(0xFFEF4444))
+                                } else if (isMine) {
+                                    null
+                                } else {
+                                    BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+                                }
+                                val authorColor = if (isWarningMsg) {
+                                    Color(0xFFB91C1C)
+                                } else if (isMine) {
+                                    Color.White.copy(alpha = 0.9f)
+                                } else {
+                                    TealPrimary
+                                }
+                                val bodyColor = if (isWarningMsg) {
+                                    Color(0xFF7F1D1D)
+                                } else if (isMine) {
+                                    Color.White
+                                } else {
+                                    Color(0xFF0F172A)
+                                }
+                                val timeColor = if (isWarningMsg) {
+                                    Color(0xFFB91C1C).copy(alpha = 0.75f)
+                                } else if (isMine) {
+                                    Color.White.copy(alpha = 0.72f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
@@ -1984,30 +2090,43 @@ fun DirectChatDialog(
                                         }
                                     }
                                     Surface(
-                                        color = if (isMine) TealPrimary else Color.White,
+                                        color = bubbleBg,
                                         shape = RoundedCornerShape(14.dp),
-                                        border = if (isMine) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+                                        border = bubbleBorder,
                                         modifier = Modifier.fillMaxWidth(0.82f),
                                     ) {
                                         Column(
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                             verticalArrangement = Arrangement.spacedBy(3.dp),
                                         ) {
-                                            Text(
-                                                text = msg.senderName,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isMine) Color.White.copy(alpha = 0.9f) else TealPrimary,
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                if (isWarningMsg) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Warning,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFFDC2626),
+                                                        modifier = Modifier.size(14.dp),
+                                                    )
+                                                }
+                                                Text(
+                                                    text = if (isWarningMsg) bi(isEn, "⚠️ تحذير إداري (${msg.senderName})", "⚠️ Admin Warning (${msg.senderName})") else msg.senderName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = authorColor,
+                                                )
+                                            }
                                             Text(
                                                 text = msg.body,
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = if (isMine) Color.White else Color(0xFF0F172A),
+                                                color = bodyColor,
                                             )
                                             Text(
                                                 text = timeFmt.format(Date(msg.createdAtMillis)),
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = if (isMine) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = timeColor,
                                             )
                                         }
                                     }
@@ -2032,6 +2151,32 @@ fun DirectChatDialog(
                     }
                 }
 
+                if (target.viewerRole == MessageSenderRole.ADMIN) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = !isWarningDraft,
+                            onClick = { isWarningDraft = false },
+                            label = { Text(bi(isEn, "💬 رسالة عادية", "💬 Normal Message")) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = TealPrimary,
+                                selectedLabelColor = Color.White,
+                            ),
+                        )
+                        FilterChip(
+                            selected = isWarningDraft,
+                            onClick = { isWarningDraft = true },
+                            label = { Text(bi(isEn, "⚠️ رسالة تحذير إداري", "⚠️ Admin Warning")) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFDC2626),
+                                selectedLabelColor = Color.White,
+                            ),
+                        )
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2040,7 +2185,15 @@ fun DirectChatDialog(
                     OutlinedTextField(
                         value = draftBody,
                         onValueChange = { draftBody = it },
-                        placeholder = { Text(bi(isEn, "اكتب رسالتك هنا...", "Type your message...")) },
+                        placeholder = {
+                            Text(
+                                if (isWarningDraft) {
+                                    bi(isEn, "اكتب نص التحذير الإداري للعميل...", "Type admin warning message...")
+                                } else {
+                                    bi(isEn, "اكتب رسالتك هنا...", "Type your message...")
+                                }
+                            )
+                        },
                         maxLines = 3,
                         modifier = Modifier
                             .weight(1f)
@@ -2050,10 +2203,18 @@ fun DirectChatDialog(
                         onClick = {
                             if (draftBody.isNotBlank()) {
                                 val textToSend = draftBody
-                                onSendMessage(textToSend) { draftBody = "" }
+                                onSendMessage(textToSend, isWarningDraft) {
+                                    draftBody = ""
+                                    isWarningDraft = false
+                                }
                             }
                         },
                         enabled = draftBody.isNotBlank(),
+                        colors = if (isWarningDraft) {
+                            ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White)
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        },
                         modifier = Modifier
                             .height(54.dp)
                             .testTag("direct_chat_send_button"),

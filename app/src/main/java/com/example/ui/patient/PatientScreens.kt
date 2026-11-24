@@ -126,6 +126,7 @@ fun PatientHomeScreen(
     onOpenOtpAccountDialog: () -> Unit,
     onChatWithClinic: (String) -> Unit = {},
     onCheckAppUpdate: () -> Unit = {},
+    onChatWithAdmin: () -> Unit = {},
     onOpenPrivacyPolicy: () -> Unit = {},
     onOpenTermsOfUse: () -> Unit = {},
     onShowMessage: (String) -> Unit,
@@ -149,7 +150,7 @@ fun PatientHomeScreen(
         }.sortedBy { it.effectiveMinutes }
     }
 
-    val latestDelay = state.notifications.firstOrNull()
+    val latestDelay = state.visibleNotificationsForCurrentRole().firstOrNull()
     var homeSearchQuery by rememberSaveable { mutableStateOf("") }
     val normalizedHomeQuery = homeSearchQuery.trim().lowercase()
 
@@ -473,29 +474,57 @@ fun PatientHomeScreen(
             }
 
             if (latestDelay != null) {
+                val isWarning = latestDelay.senderLabel.contains("تحذير") || latestDelay.message.contains("تحذير")
+                val cardBg = if (isWarning) Color(0xFFFEF2F2) else DelayWarningBg
+                val cardBorder = if (isWarning) Color(0xFFEF4444) else DelayWarningBorder
+                val cardText = if (isWarning) Color(0xFF991B1B) else DelayWarningText
                 item {
                     Surface(
-                        color = DelayWarningBg,
+                        color = cardBg,
                         shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.5.dp, DelayWarningBorder),
+                        border = BorderStroke(1.5.dp, cardBorder),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment = Alignment.Top,
                         ) {
                             Icon(
                                 Icons.Filled.Warning,
-                                contentDescription = "تنبيه تأخير",
-                                tint = DelayWarningBorder,
+                                contentDescription = if (isWarning) "تحذير إداري" else "تنبيه تأخير",
+                                tint = cardBorder,
                                 modifier = Modifier.size(28.dp),
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = latestDelay.message,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = DelayWarningText,
-                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                if (isWarning || latestDelay.senderLabel.isNotBlank()) {
+                                    Text(
+                                        text = if (isWarning) bi(isEn, "⚠️ رسالة تحذير إداري من المدير العام", "⚠️ Admin Warning from Platform Management") else latestDelay.senderLabel,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isWarning) Color(0xFFDC2626) else TealPrimary,
+                                    )
+                                }
+                                Text(
+                                    text = latestDelay.message,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = cardText,
+                                )
+                                if (isWarning && state.activeAccount != null) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Button(
+                                        onClick = onChatWithAdmin,
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(34.dp),
+                                    ) {
+                                        Text(bi(isEn, "💬 الرد على الإدارة الآن", "Reply to Admin"), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
                         }
                     }
                 }

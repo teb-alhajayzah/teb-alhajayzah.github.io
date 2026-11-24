@@ -3120,6 +3120,79 @@ class TebRepository(
         return pruned
     }
 
+    /**
+     * تفريغ وتنظيف الملفات الثقيلة (PDF / صور) يدوياً لحساب تخزين معيّن أو للعيادة
+     * مع الحفاظ التام على السجلات الطبية الكتابية الدائمة مدى الحياة (permanent_medical_logs = 100% محفوظة).
+     */
+    suspend fun cleanHeavyAttachmentsForStorageTarget(storageTargetId: String): Int {
+        val allWithAttachments = dao.getAllMedicalRecordsWithAttachments()
+        if (allWithAttachments.isEmpty()) return 0
+        val doctorsById = dao.observeDoctors().first().associateBy { it.id }
+        val targetRecords = allWithAttachments.filter { rec ->
+            when {
+                storageTargetId.isBlank() || storageTargetId == "__ALL__" -> true
+                storageTargetId == "__FALLBACK__" -> {
+                    val doc = doctorsById[rec.doctorId]
+                    rec.doctorId.isBlank() || doc == null || doc.driveWebAppUrl.isBlank()
+                }
+                else -> rec.doctorId == storageTargetId
+            }
+        }
+        var cleaned = 0
+        targetRecords.forEach { rec ->
+            val oldPath = rec.attachmentPath
+            dao.clearAllAttachmentRefsForRecord(rec.id)
+            if (oldPath.isNotBlank() && dao.countRecordsUsingAttachmentPath(oldPath) == 0) {
+                ImageStorageHelper.deleteInternalFile(appContext, oldPath)
+            }
+            dao.getMedicalRecordById(rec.id)?.let { updatedRec ->
+                pushDocAsync("records", updatedRec.id) { FirestoreCloudSyncService.recordToJson(updatedRec) }
+            }
+            cleaned++
+        }
+        return cleaned
+    }
+
+    suspend fun emitStorage90PercentAlert(accountLabel: String, usedPercent: Int) {
+        val cleanLabel = accountLabel.trim().ifBlank { "التخزين السحابي" }
+        val pct = usedPercent.coerceIn(90, 100)
+        val alertMsg = "⚠️ تنبيه امتلاء التخزين: حساب $cleanLabel وصل إلى $pct%"
+        val recentAlerts = dao.observeNotifications().first().take(30)
+        if (recentAlerts.any { it.targetAudience == NotificationAudience.ADMIN && it.message == alertMsg }) {
+            return
+        }
+        val notif = DelayNotificationEntity(
+            doctorId = "",
+            doctorName = cleanLabel,
+            clinicName = cleanLabel,
+            delayMinutes = 0,
+            message = alertMsg,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = "",
+            senderLabel = "مراقب السحابة (Google Drive)",
+            createdAtMillis = System.currentTimeMillis(),
+            isRead = false,
+        )
+        val insertedId = dao.insertNotification(notif)
+        val savedNotif = notif.copy(id = insertedId)
+        pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+            FirestoreCloudSyncService.notificationToJson(savedNotif)
+        }
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "⚠️ تنبيه امتلاء تخزين Google Drive",
+            body = alertMsg,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "STORAGE_WARNING_90",
+            title = "⚠️ تنبيه امتلاء تخزين Google Drive",
+            body = alertMsg,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = "",
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
+    }
+
     suspend fun submitFamilyLinkRequest(
         requesterAccountId: String,
         targetPhone: String,

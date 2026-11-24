@@ -3394,6 +3394,9 @@
 
       function isNotifPermissionGrantedWeb() {
         try {
+          if (window.AndroidBridge && typeof window.AndroidBridge.isNotificationPermissionGranted === 'function') {
+            return Boolean(window.AndroidBridge.isNotificationPermissionGranted());
+          }
           if (window.AndroidNotifBridge && typeof window.AndroidNotifBridge.hasPermission === 'function') {
             return Boolean(window.AndroidNotifBridge.hasPermission());
           }
@@ -3408,6 +3411,10 @@
         const cleanBody = String(body || '');
         if (!cleanBody) return false;
         try {
+          if (window.AndroidBridge && typeof window.AndroidBridge.showNativeNotification === 'function') {
+            window.AndroidBridge.showNativeNotification(cleanTitle, cleanBody);
+            return true;
+          }
           if (window.AndroidNotifBridge && typeof window.AndroidNotifBridge.showNotification === 'function') {
             return Boolean(window.AndroidNotifBridge.showNotification(cleanTitle, cleanBody));
           }
@@ -5323,6 +5330,99 @@
         return pruned;
       }
 
+      const DRIVE_ACCOUNT_CAPACITY_BYTES = 15 * 1024 * 1024 * 1024; // 15 GB
+
+      function estimateRecordHeavyBytesWeb(rec) {
+        if (!rec) return 0;
+        const dataUrl = String(rec.attachmentDataUrl || '');
+        if (dataUrl.length > 0) {
+          const commaIdx = dataUrl.indexOf(',');
+          const b64Len = commaIdx >= 0 ? (dataUrl.length - commaIdx - 1) : dataUrl.length;
+          return Math.max(1024, Math.floor(b64Len * 0.75));
+        }
+        if (rec.driveFileUrl && String(rec.driveFileUrl).trim()) {
+          // Archived remote attachment estimate when inline base64 was cleared locally
+          return (rec.attachmentMimeType === 'application/pdf') ? (1200 * 1024) : (650 * 1024);
+        }
+        return 0;
+      }
+
+      function getStorageTargetForRecordWeb(rec) {
+        if (!rec) return 'platform_fallback';
+        if (rec.storageTargetId) return rec.storageTargetId;
+        const docId = String(rec.doctorId || '').trim();
+        if (docId) {
+          const docObj = (db && db.doctors ? db.doctors : []).find((d) => d.id === docId);
+          if (docObj && docObj.driveWebAppUrl) return 'clinic_' + docObj.id + '_primary';
+          if (docObj && docObj.secondaryDriveWebAppUrl) return 'clinic_' + docObj.id + '_secondary';
+        }
+        return 'platform_fallback';
+      }
+
+      function computeDriveUsageWeb(storageTargetId) {
+        const recs = (db && Array.isArray(db.records)) ? db.records : [];
+        let usedBytes = 0;
+        let filesCount = 0;
+        recs.forEach((r) => {
+          if (!r) return;
+          const bytes = estimateRecordHeavyBytesWeb(r);
+          if (bytes <= 0) return;
+          if (getStorageTargetForRecordWeb(r) === storageTargetId) {
+            usedBytes += bytes;
+            filesCount += 1;
+          }
+        });
+        const usedGb = usedBytes / (1024 * 1024 * 1024);
+        const pct = usedBytes > 0 ? Math.min(100, Math.max(1, Math.round((usedBytes / DRIVE_ACCOUNT_CAPACITY_BYTES) * 100))) : 0;
+        return { usedBytes: usedBytes, usedGb: usedGb, pct: pct, filesCount: filesCount };
+      }
+
+      function maybeEmitStorage90AlertWeb(accountLabel, pct) {
+        if (pct < 90) return;
+        if (!tebCloudRuntime.storage90Alerted) tebCloudRuntime.storage90Alerted = {};
+        if (tebCloudRuntime.storage90Alerted[accountLabel]) return;
+        tebCloudRuntime.storage90Alerted[accountLabel] = true;
+        const msg = '⚠️ تنبيه امتلاء التخزين: حساب ' + accountLabel + ' وصل إلى ' + pct + '% — يرجى تفريغ الملفات الثقيلة أو ربط حساب Drive إضافي.';
+        const alreadyInList = (db.notifications || []).some((n) => n && n.targetAudience === 'ADMIN' && String(n.message || '').indexOf('حساب ' + accountLabel + ' وصل إلى') >= 0 && (Date.now() - (Number(n.createdAtMillis) || 0)) < 3600000);
+        if (!alreadyInList) {
+          db.notifications.unshift({
+            id: Date.now(),
+            message: msg,
+            isRead: false,
+            targetAudience: 'ADMIN',
+            targetId: 'storage_90',
+            senderLabel: bi('تنبيه سعة Google Drive', 'Google Drive Storage Alert'),
+            createdAtMillis: Date.now()
+          });
+          saveState(db);
+          triggerPlatformNotification('⚠️ تنبيه امتلاء التخزين', msg, 'storage_90_' + accountLabel);
+          dispatchWorkerPush('STORAGE_WARNING_90', '⚠️ تنبيه امتلاء التخزين', msg, 'ADMIN', '', CLOUD_PATHS.notifications);
+        }
+      }
+
+      function cleanHeavyAttachmentsForStorageTargetWeb(storageTargetId) {
+        if (!db || !Array.isArray(db.records)) return 0;
+        let cleaned = 0;
+        db.records.forEach((rec) => {
+          if (!rec) return;
+          if (getStorageTargetForRecordWeb(rec) !== storageTargetId) return;
+          const hasHeavy = Boolean(rec.attachmentDataUrl || rec.driveFileUrl || rec.attachmentName);
+          if (hasHeavy) {
+            rec.attachmentDataUrl = '';
+            rec.attachmentMimeType = '';
+            rec.attachmentName = '';
+            rec.driveFileUrl = '';
+            rec.extractedText = '';
+            cleaned += 1;
+          }
+        });
+        if (cleaned > 0) {
+          // السجل الطبي التاريخي الدائم (db.permanentLogs) لا يُمس نهائياً ويظل محفوظاً للأبد 100%
+          saveState(db);
+        }
+        return cleaned;
+      }
+
       function toAsciiDigits(raw) {
         return String(raw || '')
           .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
@@ -5439,7 +5539,7 @@
         return '<div class="card" data-notif-status-card="' + esc(tag) + '" style="background:' + boxBg + ';border:1.5px solid ' + badgeBg + ';padding:12px;display:flex;flex-direction:column;gap:8px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
             '<strong style="color:' + textClr + ';font-size:0.95rem;">🔔 ' + esc(bi('حالة الإشعارات والتنبيهات', 'Notification & Alert Status')) + '</strong>' +
-            '<span class="badge" style="background:' + badgeBg + ';color:#fff;">' + esc(granted ? bi('مفعّلة ✓', 'Enabled ✓') : bi('غير مفعّلة', 'Disabled')) + '</span>' +
+            '<span class="badge" style="background:' + badgeBg + ';color:#fff;">' + esc(granted ? bi('مفعّلة ومسموحة ✓', 'Enabled & Allowed ✓') : bi('غير مفعّلة', 'Disabled')) + '</span>' +
           '</div>' +
           '<div style="font-size:0.82rem;color:var(--text-muted);line-height:1.45;">' +
             esc(bi(
@@ -5459,6 +5559,10 @@
       function bindNotificationStatusCard(scopeEl) {
         (scopeEl || document).querySelectorAll('[data-enable-notif]').forEach((btn) => {
           btn.onclick = async function () {
+            if (window.AndroidBridge && typeof window.AndroidBridge.requestNotificationPermission === 'function') {
+              window.AndroidBridge.requestNotificationPermission();
+              return;
+            }
             if (window.AndroidNotifBridge && typeof window.AndroidNotifBridge.requestPermission === 'function') {
               window.AndroidNotifBridge.requestPermission();
               return;
@@ -5481,9 +5585,15 @@
         });
         (scopeEl || document).querySelectorAll('[data-test-notif]').forEach((btn) => {
           btn.onclick = async function () {
-            if (!isNotifPermissionGrantedWeb() && window.AndroidNotifBridge && typeof window.AndroidNotifBridge.requestPermission === 'function') {
-              window.AndroidNotifBridge.requestPermission();
-              return;
+            if (!isNotifPermissionGrantedWeb()) {
+              if (window.AndroidBridge && typeof window.AndroidBridge.requestNotificationPermission === 'function') {
+                window.AndroidBridge.requestNotificationPermission();
+                return;
+              }
+              if (window.AndroidNotifBridge && typeof window.AndroidNotifBridge.requestPermission === 'function') {
+                window.AndroidNotifBridge.requestPermission();
+                return;
+              }
             }
             if (!isNotifPermissionGrantedWeb() && typeof Notification !== 'undefined' && typeof Notification.requestPermission === 'function') {
               try {
@@ -6590,7 +6700,7 @@
               .sort((a, b) => (a.startMinutes + a.delayMinutes) - (b.startMinutes + b.delayMinutes))
           : [];
 
-        const latestDelay = db.notifications[0];
+        const latestDelay = getVisibleNotificationsForRole()[0] || null;
         const privateCount = db.doctors.filter((d) => d.clinicType === 'PRIVATE').length;
         const hospitalCount = db.doctors.filter((d) => d.clinicType === 'HOSPITAL').length;
         const specsSet = new Set();
@@ -6716,7 +6826,17 @@
             ? '<button type="button" class="alert-banner" id="btnHomeOtpWarning" style="cursor:pointer;width:100%;text-align:start;">🔐 ' + esc(bi('حسابك قيد التفعيل: يرجى إدخال رمز التحقق (OTP) المكون من 6 أرقام لتفعيل حجز المواعيد. اضغط هنا للتأكيد.', 'Account pending verification: enter the 6-digit OTP code to unlock bookings. Tap to verify.')) + '</button>'
             : '') +
 
-          (latestDelay ? '<div class="alert-banner">⚠️ ' + esc(latestDelay.message) + '</div>' : '') +
+          (latestDelay
+            ? (function () {
+                const isAdminWarn = String(latestDelay.message || '').indexOf('تحذير') >= 0 || String(latestDelay.senderLabel || '').indexOf('تحذير') >= 0;
+                return '<div class="alert-banner" style="' + (isAdminWarn ? 'background:#FEF2F2;border-color:#DC2626;color:#991B1B;flex-direction:column;align-items:stretch;' : '') + '">' +
+                  '<div>' + (isAdminWarn ? '⚠️ ' : '🔔 ') + esc(latestDelay.message) + '</div>' +
+                  (isAdminWarn && db.account
+                    ? '<div style="display:flex;justify-content:flex-end;margin-top:4px;"><button class="btn btn-danger-outline" id="btnHomeReplyAdminWarning" type="button" style="min-height:36px;padding:4px 12px;font-size:0.82rem;background:#fff;">💬 ' + esc(bi('الرد على الإدارة الآن', 'Reply to Admin Now')) + '</button></div>'
+                    : '') +
+                '</div>';
+              })()
+            : '') +
 
           accountSectionHtml +
 
@@ -7258,7 +7378,18 @@
               '<h2>' + esc(bi('لوحة تحكم عيادة ' + getDoctorDisplayName(doc, false), 'Clinic Dashboard — ' + getDoctorDisplayName(doc, true))) + '</h2>' +
               '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وتفعيل حسابات المرضى.', 'Manage clinic schedule, walk-in bookings, delays, and direct patient activation.')) + '</div>' +
             '</div>' +
-            '<button class="btn btn-danger-outline" id="btnDoctorLogout" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+              '<button class="btn btn-outline" id="btnDoctorChatAdminTop" type="button" style="min-height:40px;padding:6px 12px;">📩 ' + esc(bi('مراسلة وتواصل مع الإدارة العامة', 'Message Super Admin')) + '</button>' +
+              '<button class="btn btn-danger-outline" id="btnDoctorLogout" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
+            '</div>' +
+          '</section>' +
+          '<section class="card" style="background:linear-gradient(135deg,#ECFDF5 0%,#F0FDF4 100%);border:1.5px solid #16A34A;display:flex;flex-direction:column;gap:8px;">' +
+            '<div style="font-weight:800;color:#166534;font-size:1rem;">✅ ' + esc(bi('تفعيل وتوثيق حساب مريض جديد', 'Verify & Activate New Patient Account')) + '</div>' +
+            '<div style="font-size:0.82rem;color:#15803D;">' + esc(bi('أدخل رقم هاتف المريض المسجل لتفعيل حسابه فوراً بضغطة واحدة باسم عيادتك.', 'Enter registered patient phone to verify their account immediately in your clinic.')) + '</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+              '<input class="input" id="docTopQuickActivatePhone" type="tel" inputmode="numeric" placeholder="' + esc(bi('رقم هاتف المريض (مثال: 010...)', 'Patient phone number...')) + '" dir="ltr" style="flex:1;min-width:180px;background:#fff;" />' +
+              '<button class="btn btn-green" id="btnDocTopQuickActivate" type="button" style="min-height:46px;">' + esc(bi('توثيق الحساب فوراً ✓', 'Verify Account Now ✓')) + '</button>' +
+            '</div>' +
           '</section>' +
           renderNotificationStatusCardHtml('doctor_notif') +
           '<div class="chips-row">' +
@@ -7410,6 +7541,7 @@
                 '<span>🔑 ' + esc(bi('كلمة المرور:', 'Password:')) + ' <strong dir="ltr">' + esc(doc.password || '1234') + '</strong></span>' +
               '</div>' +
               '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
+                '<button class="btn btn-primary" type="button" data-admin-chat-doc="' + esc(doc.id) + '" style="min-height:42px;">💬 ' + esc(bi('مراسلة العيادة', 'Message Clinic')) + '</button>' +
                 '<button class="btn btn-outline" type="button" data-admin-edit-doc="' + esc(doc.id) + '" style="flex:1;min-height:42px;">✏️ ' + esc(bi('تعديل البيانات والمواعيد', 'Edit Data & Schedule')) + '</button>' +
                 '<button class="btn btn-danger-outline" type="button" data-admin-delete-doc="' + esc(doc.id) + '" style="min-height:42px;">🗑️ ' + esc(bi('حذف نهائي', 'Delete')) + '</button>' +
               '</div>' +
@@ -7559,7 +7691,12 @@
                 ).join(''))
           );
         } else if (ui.adminTab === 'USERS') {
-          const allUsers = (db.accounts || []).slice();
+          const allUsers = (db.accounts || []).slice().sort((a, b) => {
+            const av = a.isPhoneVerified !== false ? 1 : 0;
+            const bv = b.isPhoneVerified !== false ? 1 : 0;
+            if (av !== bv) return av - bv; // غير الموثق يظهر أولاً دائماً
+            return (Number(b.otpCreatedAtMillis) || 0) - (Number(a.otpCreatedAtMillis) || 0);
+          });
           const uq = (ui.adminUsersQuery || '').trim().toLowerCase();
           const uqDigits = normalizePhoneDigits(uq);
           const filteredUsers = allUsers.filter((acc) => {
@@ -7581,87 +7718,72 @@
 
           const usersInner =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
-              '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('عرض وإدارة جميع حسابات المرضى، أفراد أسرهم، حالة التفعيل، وجهة التفعيل.', 'Manage all patient accounts, family members, activation status & source.')) + '</div>' +
+              '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('يظهر العملاء بانتظار التوثيق في الأعلى مع أزرار كود التفعيل OTP والتوثيق الفوري والمراسلة/التحذير.', 'Unverified accounts appear first with OTP controls, 1-click verification, and direct messaging/warning.')) + '</div>' +
               '<div style="display:flex;gap:6px;">' +
                 '<span class="badge badge-avail">' + esc(bi('موثق: ', 'Verified: ')) + verifiedTotal + '</span>' +
-                '<span class="badge badge-booked">' + esc(bi('غير موثق: ', 'Unverified: ')) + unverifiedTotal + '</span>' +
+                '<span class="badge badge-booked">' + esc(bi('بانتظار التوثيق: ', 'Pending Verification: ')) + unverifiedTotal + '</span>' +
               '</div>' +
             '</div>' +
             '<input class="input" id="adminUsersSearch" value="' + esc(ui.adminUsersQuery || '') + '" placeholder="' + esc(bi('ابحث بالاسم أو رقم الهاتف أو فرد العائلة...', 'Search by name, phone, or family member...')) + '" />' +
             '<div class="chips-row" style="padding:0;">' +
               '<button class="chip ' + (ui.adminUsersFilter === 'ALL' ? 'active' : '') + '" type="button" data-admin-users-filter="ALL">' + esc(bi('الكل (' + allUsers.length + ')', 'All (' + allUsers.length + ')')) + '</button>' +
+              '<button class="chip ' + (ui.adminUsersFilter === 'UNVERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="UNVERIFIED">⚠️ ' + esc(bi('بانتظار التوثيق (' + unverifiedTotal + ')', 'Pending (' + unverifiedTotal + ')')) + '</button>' +
               '<button class="chip ' + (ui.adminUsersFilter === 'VERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="VERIFIED">✓ ' + esc(bi('موثق (' + verifiedTotal + ')', 'Verified (' + verifiedTotal + ')')) + '</button>' +
-              '<button class="chip ' + (ui.adminUsersFilter === 'UNVERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="UNVERIFIED">⏳ ' + esc(bi('غير موثق (' + unverifiedTotal + ')', 'Unverified (' + unverifiedTotal + ')')) + '</button>' +
             '</div>' +
             (filteredUsers.length === 0
               ? '<div style="text-align:center;color:var(--text-muted);padding:10px;">' + esc(bi('لا يوجد عملاء مسجلون أو مطابقون للبحث.', 'No registered users match your filter.')) + '</div>'
-              : '<div class="users-table-wrap">' +
-                  '<table class="users-table">' +
-                    '<thead><tr>' +
-                      '<th>' + esc(bi('الاسم الكامل', 'Full Name')) + '</th>' +
-                      '<th>' + esc(bi('رقم الهاتف', 'Phone')) + '</th>' +
-                      '<th>' + esc(bi('أفراد الأسرة', 'Family')) + '</th>' +
-                      '<th>' + esc(bi('حالة الحساب وكود التفعيل (24 ساعة)', 'Status & 24h OTP Code')) + '</th>' +
-                      '<th>' + esc(bi('جهة التفعيل', 'Verified By')) + '</th>' +
-                      '<th>' + esc(bi('إجراءات الإدارة', 'Admin Actions')) + '</th>' +
-                    '</tr></thead>' +
-                    '<tbody>' +
-                      filteredUsers.map((acc) => {
-                        const isVer = acc.isPhoneVerified !== false;
-                        const famList = (db.familyMembers || []).filter((m) => m.accountId === acc.id || normalizePhoneDigits(m.phone) === normalizePhoneDigits(acc.phone));
-                        const famSummary = famList.length > 0
-                          ? famList.map((m) => esc(m.fullName) + ' <span style="color:var(--text-muted);font-size:0.78rem;">(' + esc(m.relation.split(' ')[0]) + ')</span>').join('<br/>')
-                          : '<span style="color:var(--text-muted);">—</span>';
-                        const verSource = isVer ? getVerificationSourceLabel(acc) : '—';
-                        const nowMs = Date.now();
-                        const otpExpired = isAccountOtpExpired(acc, nowMs);
-                        const otpRemLabel = formatOtpRemainingDuration(acc.otpExpiresAtMillis, nowMs);
-                        const otpAdminCell = isVer
-                          ? '<span class="badge badge-avail">' + esc(bi('موثق ✓', 'Verified ✓')) + '</span>'
-                          : '<div style="display:flex;flex-direction:column;gap:4px;">' +
-                              '<span class="badge badge-booked" style="width:fit-content;">' + esc(bi('غير موثق', 'Unverified')) + '</span>' +
-                              '<div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;padding:4px 8px;">' +
-                                '<div style="font-size:0.74rem;color:var(--warn-text);">' + esc(bi('كود التفعيل:', 'OTP Code:')) + '</div>' +
-                                '<strong dir="ltr" style="font-size:1rem;letter-spacing:2px;color:var(--teal-text);">' + esc(acc.otpCode || '------') + '</strong>' +
-                                '<div style="font-size:0.72rem;color:' + (otpExpired ? 'var(--booked-text)' : 'var(--avail-text)') + ';font-weight:700;">' +
-                                  (otpExpired ? '⏰ ' : '⏳ ') + esc(otpRemLabel) +
-                                '</div>' +
+              : '<div style="display:flex;flex-direction:column;gap:10px;">' +
+                  filteredUsers.map((acc) => {
+                    const isVer = acc.isPhoneVerified !== false;
+                    const famList = (db.familyMembers || []).filter((m) => m.accountId === acc.id || normalizePhoneDigits(m.phone) === normalizePhoneDigits(acc.phone));
+                    const famSummary = famList.length > 0
+                      ? famList.map((m) => esc(m.fullName) + ' (' + esc(m.relation.split(' ')[0]) + ')').join(' • ')
+                      : '—';
+                    const verSource = isVer ? getVerificationSourceLabel(acc) : '—';
+                    const nowMs = Date.now();
+                    const otpExpired = isAccountOtpExpired(acc, nowMs);
+                    const otpRemLabel = formatOtpRemainingDuration(acc.otpExpiresAtMillis, nowMs);
+                    return '<div class="card" style="' + (!isVer ? 'border:1.8px solid #DC2626;background:#FFFBFB;' : 'border:1px solid var(--border);') + 'display:flex;flex-direction:column;gap:10px;">' +
+                      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                        '<div>' +
+                          '<div style="font-weight:800;font-size:1.06rem;">👤 ' + esc(acc.fullName) + '</div>' +
+                          '<div style="font-size:0.86rem;color:var(--text-muted);" dir="ltr">📱 ' + esc(acc.phone) + (acc.nationalId ? ' • 🪪 ' + esc(acc.nationalId) : '') + '</div>' +
+                          '<div style="font-size:0.8rem;color:var(--teal-text);margin-top:3px;">👨‍👩‍👧 ' + esc(bi('أفراد الأسرة: ', 'Family: ')) + famSummary + '</div>' +
+                        '</div>' +
+                        (!isVer
+                          ? '<span class="badge" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;font-weight:800;">' + esc(bi('⚠️ بانتظار التوثيق (غير مفعل)', '⚠️ Pending Verification')) + '</span>'
+                          : '<span class="badge badge-avail">' + esc(bi('موثق ✓ — ' + verSource, 'Verified ✓ — ' + verSource)) + '</span>') +
+                      '</div>' +
+                      (!isVer
+                        ? '<div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;">' +
+                            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                              '<div>' +
+                                '<div style="font-size:0.78rem;color:var(--warn-text);font-weight:700;">🔑 ' + esc(bi('كود التفعيل الخاص بالعميل (صالح 24 ساعة):', 'Customer Activation OTP (24h):')) + '</div>' +
+                                '<strong dir="ltr" style="font-size:1.25rem;letter-spacing:3px;color:var(--teal-text);">' + esc(acc.otpCode || '------') + '</strong>' +
+                                '<div style="font-size:0.76rem;color:' + (otpExpired ? '#B91C1C' : '#15803D') + ';font-weight:700;">' + (otpExpired ? '⏰ ' : '⏳ ') + esc(otpRemLabel) + '</div>' +
                               '</div>' +
-                            '</div>';
-                        return '<tr>' +
-                          '<td><strong>' + esc(acc.fullName) + '</strong>' + (acc.nationalId ? '<div style="font-size:0.76rem;color:var(--text-muted);" dir="ltr">' + esc(acc.nationalId) + '</div>' : '') + '</td>' +
-                          '<td dir="ltr"><strong>' + esc(acc.phone) + '</strong></td>' +
-                          '<td>' + famSummary + '</td>' +
-                          '<td>' + otpAdminCell + '</td>' +
-                          '<td><span style="font-weight:700;color:' + (isVer ? 'var(--teal-text)' : 'var(--text-muted)') + ';">' + esc(verSource) + '</span></td>' +
-                          '<td>' +
-                            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-                              (!isVer
-                                ? '<button class="btn btn-green" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">' +
-                                    esc(bi('توثيق الحساب فوراً ✓', 'Verify Account Now ✓')) +
-                                  '</button>' +
-                                  '<button class="btn btn-blue" type="button" data-admin-copy-otp="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">📋 ' +
-                                    esc(bi('نسخ كود التفعيل', 'Copy OTP Code')) +
-                                  '</button>' +
-                                  '<button class="btn btn-outline" type="button" data-admin-regen-otp="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🔄 ' +
-                                    esc(bi('توليد كود 24س', 'Regen 24h')) +
-                                  '</button>'
-                                : '<button class="btn btn-outline" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">' +
-                                    esc(bi('إلغاء التفعيل', 'Unverify')) +
-                                  '</button>') +
-                              '<button class="btn btn-outline" type="button" data-admin-edit-user="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">✏️ ' + esc(bi('تعديل', 'Edit')) + '</button>' +
-                              '<button class="btn btn-danger-outline" type="button" data-admin-delete-user="' + esc(acc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🗑️ ' + esc(bi('حذف', 'Delete')) + '</button>' +
+                              '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                                '<button class="btn btn-outline" type="button" data-admin-regen-otp="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;background:#fff;">🔑 ' + esc(bi('عرض / توليد كود OTP (24 ساعة)', 'Show / Regen 24h OTP')) + '</button>' +
+                                '<button class="btn btn-blue" type="button" data-admin-copy-otp="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">📋 ' + esc(bi('نسخ الكود ورسالة التفعيل', 'Copy Code & Message')) + '</button>' +
+                              '</div>' +
                             '</div>' +
-                          '</td>' +
-                        '</tr>';
-                      }).join('') +
-                    '</tbody>' +
-                  '</table>' +
+                          '</div>'
+                        : '') +
+                      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                        (!isVer
+                          ? '<button class="btn btn-green" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="flex:1;min-height:42px;">✅ ' + esc(bi('توثيق الحساب فوراً (بدون كود)', 'Verify Immediately (No Code)')) + '</button>'
+                          : '<button class="btn btn-outline" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">' + esc(bi('إلغاء التفعيل', 'Unverify')) + '</button>') +
+                        '<button class="btn btn-warn" type="button" data-admin-chat-user="' + esc(acc.id) + '" style="flex:1;min-height:42px;">💬 ' + esc(bi('مراسلة / إرسال تحذير', 'Message / Send Warning')) + '</button>' +
+                        '<button class="btn btn-outline" type="button" data-admin-edit-user="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">✏️ ' + esc(bi('تعديل', 'Edit')) + '</button>' +
+                        '<button class="btn btn-danger-outline" type="button" data-admin-delete-user="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">🗑️ ' + esc(bi('حذف', 'Delete')) + '</button>' +
+                      '</div>' +
+                    '</div>';
+                  }).join('') +
                 '</div>');
           tabBodyHtml = renderAdminAccordionHtml(
             'usersList',
             bi('👥 قائمة العملاء والمشتركين (' + allUsers.length + ')', '👥 Registered Users & Patients (' + allUsers.length + ')'),
-            bi('موثق: ' + verifiedTotal + ' • غير موثق: ' + unverifiedTotal, 'Verified: ' + verifiedTotal + ' • Unverified: ' + unverifiedTotal),
+            bi('موثق: ' + verifiedTotal + ' • بانتظار التوثيق: ' + unverifiedTotal, 'Verified: ' + verifiedTotal + ' • Pending: ' + unverifiedTotal),
             usersInner
           );
         } else if (ui.adminTab === 'MESSAGES') {
@@ -7876,10 +7998,35 @@
               '<button class="btn btn-primary" id="btnAdmSaveCfg" type="button">💾 ' + esc(bi('حفظ كافة الإعدادات', 'Save Settings')) + '</button>' +
             '</div>';
 
+          function renderDriveMeterCardHtml(storageTargetId, accountTitle) {
+            const u = computeDriveUsageWeb(storageTargetId);
+            if (u.pct >= 90) maybeEmitStorage90AlertWeb(accountTitle, u.pct);
+            const isDanger = u.pct >= 90;
+            const barClr = isDanger ? '#DC2626' : (u.pct >= 70 ? '#D97706' : '#16A34A');
+            const bgClr = isDanger ? '#FEF2F2' : '#FFFFFF';
+            const borderClr = isDanger ? '#DC2626' : '#BBF7D0';
+            return '<div style="background:' + bgClr + ';border:1.5px solid ' + borderClr + ';border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                '<strong style="font-size:0.86rem;color:' + (isDanger ? '#991B1B' : '#166534') + ';">' + esc(accountTitle) + '</strong>' +
+                '<span class="badge" style="background:' + barClr + ';color:#fff;" dir="ltr">' + u.pct + '% — ' + u.usedGb.toFixed(2) + ' GB / 15 GB</span>' +
+              '</div>' +
+              '<div style="width:100%;height:10px;background:#E2E8F0;border-radius:999px;overflow:hidden;">' +
+                '<div style="width:' + Math.max(u.pct > 0 ? 2 : 0, u.pct) + '%;height:100%;background:' + barClr + ';border-radius:999px;transition:width 0.25s;"></div>' +
+              '</div>' +
+              (isDanger
+                ? '<div style="font-size:0.78rem;color:#B91C1C;font-weight:800;">⚠️ ' + esc(bi('تحذير: السعة وصلت إلى ' + u.pct + '% — يُنصح بالتنظيف الآن!', 'Warning: Storage reached ' + u.pct + '% — cleanup recommended!')) + '</div>'
+                : '') +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                '<span style="font-size:0.76rem;color:var(--text-muted);">' + esc(bi('ملفات ثقيلة حالية: ' + u.filesCount + ' • السجل الطبي المكتوب محفوظ للأبد 100%', 'Heavy files: ' + u.filesCount + ' • Written medical log 100% preserved')) + '</span>' +
+                '<button class="btn btn-danger-outline" type="button" data-admin-clean-drive="' + esc(storageTargetId) + '" data-clean-label="' + esc(accountTitle) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;background:#fff;">🧹 ' + esc(bi('تفريغ وتنظيف الملفات الثقيلة الآن', 'Clean Heavy Files Now')) + '</button>' +
+              '</div>' +
+            '</div>';
+          }
+
           const dualDriveInner =
             '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;line-height:1.7;box-sizing:border-box;overflow-wrap:anywhere;">' +
               '<div style="font-weight:800;color:#166534;font-size:0.92rem;line-height:1.6;">🩺 ' + esc(bi('حسابا Google Drive لكل عيادة (حساب أساسي 15GB + حساب احتياطي ثانٍ 15GB = 30GB)', '2 Google Drive Accounts per Clinic (Primary + Secondary = 30GB)')) + '</div>' +
-              '<div style="font-size:0.82rem;color:#166534;line-height:1.65;">' + esc(bi('تُحفظ التحاليل والأشعة على سحابة العيادة المختارة مع تدوين فوري ومستقل لنتائجها في السجل الطبي التاريخي الدائم للمريض.', 'Lab & imaging files are archived to clinic Drive while text summaries are logged permanently in patient history.')) + '</div>' +
+              '<div style="font-size:0.82rem;color:#166534;line-height:1.65;">' + esc(bi('تُحفظ التحاليل والأشعة على سحابة العيادة المختارة مع تدوين فوري ومستقل لنتائجها في السجل الطبي التاريخي الدائم للمريض (محفوظ 100% عند التنظيف).', 'Lab & imaging files are archived to clinic Drive while written history stays permanently preserved 100%.')) + '</div>' +
               (allDocs.length === 0
                 ? '<div style="font-size:0.82rem;color:var(--text-muted);">' + esc(bi('لا توجد عيادات مضافة حالياً.', 'No clinics added yet.')) + '</div>'
                 : '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('اختر العيادة', 'Select Clinic')) +
@@ -7892,22 +8039,26 @@
                   '<label style="font-size:0.8rem;font-weight:700;">1️⃣ ' + esc(bi('رابط حساب Google Drive الأساسي (Apps Script URL)', 'Primary Google Drive Apps Script URL')) +
                     '<input class="input" id="admDriveClinicPrimary" value="' + esc(selectedDriveDoc ? (selectedDriveDoc.driveWebAppUrl || '') : '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" />' +
                   '</label>' +
+                  renderDriveMeterCardHtml('clinic_' + selectedDriveDoc.id + '_primary', getClinicDisplayName(selectedDriveDoc) + ' — Drive #1') +
                   '<label style="font-size:0.8rem;font-weight:700;">2️⃣ ' + esc(bi('رابط حساب Google Drive الثاني الاحتياطي (Secondary Apps Script URL)', 'Secondary Backup Google Drive Apps Script URL')) +
                     '<input class="input" id="admDriveClinicSecondary" value="' + esc(selectedDriveDoc ? (selectedDriveDoc.secondaryDriveWebAppUrl || '') : '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" />' +
                   '</label>' +
+                  renderDriveMeterCardHtml('clinic_' + selectedDriveDoc.id + '_secondary', getClinicDisplayName(selectedDriveDoc) + ' — Drive #2') +
                   '<button class="btn btn-primary btn-block" id="btnSaveClinicDriveUrls" type="button">💾 ' + esc(bi('حفظ ومزامنة حسابي Drive للعيادة', 'Save Clinic 2 Drive Accounts')) + '</button>') +
               '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">' +
-                allDocs.map((d) =>
-                  '<div style="font-size:0.78rem;display:flex;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #BBF7D0;">' +
+                allDocs.map((d) => {
+                  const u1 = computeDriveUsageWeb('clinic_' + d.id + '_primary');
+                  return '<div style="font-size:0.78rem;display:flex;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #BBF7D0;">' +
                     '<strong>' + esc(getDoctorDisplayName(d)) + '</strong>' +
-                    '<span style="color:#166534;">' + (d.driveWebAppUrl ? '1✓ ' : '1✕ ') + (d.secondaryDriveWebAppUrl ? '2✓' : '2—') + '</span>' +
-                  '</div>'
-                ).join('') +
+                    '<span style="color:#166534;">' + (d.driveWebAppUrl ? '1✓ ' : '1✕ ') + (d.secondaryDriveWebAppUrl ? '2✓ ' : '2— ') + '(' + u1.pct + '%)</span>' +
+                  '</div>';
+                }).join('') +
               '</div>' +
             '</div>' +
             '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('الرابط الاحتياطي العام للمنصة (Fallback Apps Script Web App URL)', 'Platform Fallback Google Drive Web App URL')) +
               '<input class="input" id="admSetDefaultDriveUrl" value="' + esc(cfg.defaultDriveWebAppUrl || '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" />' +
             '</label>' +
+            renderDriveMeterCardHtml('platform_fallback', bi('حساب Google Drive الاحتياطي العام للمنصة', 'Platform Fallback Google Drive')) +
             '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('مدة الاحتفاظ بالملفات الثقيلة (PDF / صور) قبل الحذف التلقائي:', 'Heavy File Retention Duration:')) +
               '<select class="select" id="admSetRetentionDays">' +
                 '<option value="90"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 90 ? ' selected' : '') + '>' + esc(bi('90 يوماً (3 أشهر)', '90 Days (3 Months)')) + '</option>' +
@@ -8640,7 +8791,20 @@
               db.familyMembers.push(newSelfMem);
               db.activeMemberId = newSelfMem.id;
 
+              const regAlertMsg = '👤 عميل جديد سجل الآن: ' + fullName + ' - ' + phone + ' (OTP: ' + newAcc.otpCode + ')';
+              db.notifications.unshift({
+                id: nowMs,
+                message: regAlertMsg,
+                isRead: false,
+                targetAudience: 'ADMIN',
+                targetId: newAccId,
+                senderLabel: bi('تسجيل عميل جديد', 'New Customer Registration'),
+                createdAtMillis: nowMs
+              });
+
               saveState(db);
+              triggerPlatformNotification('👤 عميل جديد — طب الحجايزة', regAlertMsg, 'new_user_' + newAccId);
+              dispatchWorkerPush('NEW_USER_REGISTERED', '👤 عميل جديد سجل الآن', regAlertMsg, 'ADMIN', newAccId, CLOUD_PATHS.users);
               authMode = 'NONE';
               showToast(bi('تم إنشاء الحساب وتوليد كود تفعيل صالح لمدة 24 ساعة! اطلبه عبر واتساب أو فعّل من العيادة.', 'Account created with a 24h activation code! Request it via WhatsApp or verify at clinic.'));
               refreshAccountModal();
@@ -9264,18 +9428,22 @@
           return m.senderRole === 'ADMIN';
         }
 
+        let isAdminWarningMode = false;
+
         function renderChatHtml() {
           const msgs = (db.messages || []).filter(matchesThread).sort((a, b) => a.createdAtMillis - b.createdAtMillis);
           const listHtml = msgs.length === 0
             ? '<div style="text-align:center;color:var(--text-muted);padding:24px 8px;">' + esc(bi('ابدأ المحادثة الآن بكتابة رسالتك بالأسفل.', 'Start the conversation by typing your message below.')) + '</div>'
             : msgs.map((m) => {
                 const mine = isMine(m);
+                const isWarn = String(m.body || '').indexOf('[تحذير إداري]') >= 0 || String(m.body || '').indexOf('⚠️ تحذير') >= 0;
+                const warnBubbleStyle = isWarn ? 'background:#FEF2F2;color:#991B1B;border:1.5px solid #DC2626;' : '';
                 const delBtnHtml = viewerRole === 'ADMIN'
                   ? '<button type="button" data-chat-del-msg="' + esc(m.id) + '" title="' + esc(bi('حذف الرسالة', 'Delete Message')) + '" style="background:none;border:none;cursor:pointer;font-size:0.9rem;padding:2px 6px;min-width:36px;min-height:36px;color:inherit;">🗑️</button>'
                   : '';
-                return '<div class="chat-bubble ' + (mine ? 'mine' : 'theirs') + '">' +
+                return '<div class="chat-bubble ' + (mine ? 'mine' : 'theirs') + '" style="' + warnBubbleStyle + '">' +
                   '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:2px;">' +
-                    '<span style="font-size:0.74rem;font-weight:700;opacity:0.9;">' + esc(m.senderName || '') + '</span>' +
+                    '<span style="font-size:0.74rem;font-weight:700;opacity:0.9;">' + (isWarn ? '⚠️ ' : '') + esc(m.senderName || '') + '</span>' +
                     delBtnHtml +
                   '</div>' +
                   '<div style="white-space:pre-wrap;">' + esc(m.body) + '</div>' +
@@ -9287,11 +9455,18 @@
                 '<button class="btn btn-danger-outline" id="btnDirectChatClearAll" type="button" style="min-height:38px;padding:4px 12px;font-size:0.82rem;">🗑️ ' + esc(bi('مسح المحادثة بالكامل', 'Clear Entire Thread')) + '</button>' +
               '</div>'
             : '';
+          const adminTypeSelectorHtml = viewerRole === 'ADMIN'
+            ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">' +
+                '<button type="button" class="chip ' + (!isAdminWarningMode ? 'active' : '') + '" id="btnChatTypeNormal" style="flex:1;">💬 ' + esc(bi('رسالة عادية', 'Normal Message')) + '</button>' +
+                '<button type="button" class="chip ' + (isAdminWarningMode ? 'active' : '') + '" id="btnChatTypeWarn" style="flex:1;' + (isAdminWarningMode ? 'background:#DC2626;border-color:#DC2626;color:#fff;' : 'color:#991B1B;border-color:#FCA5A5;') + '">⚠️ ' + esc(bi('رسالة تحذير إداري', 'Admin Warning')) + '</button>' +
+              '</div>'
+            : '';
           return clearAllHtml +
             '<div class="chat-thread-list" id="chatThreadList">' + listHtml + '</div>' +
+            adminTypeSelectorHtml +
             '<div style="display:flex;gap:8px;align-items:center;">' +
-              '<input class="input" id="chatComposerInput" placeholder="' + esc(bi('اكتب رسالتك هنا...', 'Type your message...')) + '" style="flex:1;" />' +
-              '<button class="btn btn-primary" id="btnSendChatMessage" type="button" style="min-height:46px;">📤 ' + esc(bi('إرسال', 'Send')) + '</button>' +
+              '<input class="input" id="chatComposerInput" placeholder="' + esc(isAdminWarningMode ? bi('اكتب نص التحذير الإداري...', 'Type administrative warning...') : bi('اكتب رسالتك هنا...', 'Type your message...')) + '" style="flex:1;' + (isAdminWarningMode ? 'border-color:#DC2626;' : '') + '" />' +
+              '<button class="btn ' + (isAdminWarningMode ? 'btn-danger-outline' : 'btn-primary') + '" id="btnSendChatMessage" type="button" style="min-height:46px;' + (isAdminWarningMode ? 'background:#DC2626;color:#fff;' : '') + '">' + (isAdminWarningMode ? '⚠️ ' + esc(bi('إرسال تحذير', 'Send Warning')) : '📤 ' + esc(bi('إرسال', 'Send'))) + '</button>' +
             '</div>';
         }
 
@@ -9311,6 +9486,11 @@
           }
 
           if (viewerRole === 'ADMIN') {
+            const normTypeBtn = document.getElementById('btnChatTypeNormal');
+            const warnTypeBtn = document.getElementById('btnChatTypeWarn');
+            if (normTypeBtn) normTypeBtn.onclick = function () { isAdminWarningMode = false; rerenderModalChat(); };
+            if (warnTypeBtn) warnTypeBtn.onclick = function () { isAdminWarningMode = true; rerenderModalChat(); };
+
             document.querySelectorAll('[data-chat-del-msg]').forEach((delBtn) => {
               delBtn.onclick = function () {
                 const msgId = delBtn.getAttribute('data-chat-del-msg');
@@ -9346,7 +9526,10 @@
               ? (target.patientName || (db.account && db.account.fullName) || bi('مريض', 'Patient'))
               : (viewerRole === 'DOCTOR'
                   ? (target.doctorName || bi('العيادة', 'Clinic'))
-                  : (db.config.adminOwnerName || bi('الإدارة العليا', 'Super Admin')));
+                  : (db.config.adminOwnerName || bi('المدير العام', 'General Manager')));
+            const finalBody = (viewerRole === 'ADMIN' && isAdminWarningMode && txt.indexOf('[تحذير إداري]') < 0)
+              ? ('⚠️ [تحذير إداري] ' + txt)
+              : txt;
             pushDirectMessage({
               threadType: target.threadType,
               senderRole: senderRole,
@@ -9356,8 +9539,25 @@
               patientPhone: target.patientPhone || '',
               doctorId: target.doctorId || '',
               doctorName: target.doctorName || '',
-              body: txt
+              body: finalBody
             });
+            if (viewerRole === 'ADMIN' && isAdminWarningMode) {
+              const aud = target.threadType === 'CLINIC_ADMIN' ? 'CLINIC' : 'PATIENT';
+              const tid = target.threadType === 'CLINIC_ADMIN' ? (target.doctorId || '') : (target.patientAccountId || '');
+              const nowMs = Date.now();
+              db.notifications.unshift({
+                id: nowMs,
+                message: finalBody,
+                isRead: false,
+                targetAudience: aud,
+                targetId: tid,
+                senderLabel: bi('⚠️ تحذير إداري من المدير العام', '⚠️ Warning from General Manager'),
+                createdAtMillis: nowMs
+              });
+              saveState(db);
+              triggerPlatformNotification('⚠️ تحذير إداري — طب الحجايزة', finalBody, 'warn_' + nowMs);
+              dispatchWorkerPush('ADMIN_WARNING', '⚠️ تحذير إداري — طب الحجايزة', finalBody, aud, tid, CLOUD_PATHS.notifications);
+            }
             rerenderModalChat();
             const reInp = document.getElementById('chatComposerInput');
             if (reInp) reInp.focus();
@@ -9477,12 +9677,25 @@
           const alertsHtml = visibleAlerts.length === 0
             ? '<div style="padding:14px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد إشعارات أو تنبيهات حالياً.', 'No alerts or notifications right now.')) + '</div>'
             : '<h4 style="margin-top:4px;">🔔 ' + esc(bi('الإشعارات والتنبيهات', 'Alerts & Broadcasts')) + '</h4>' +
-              visibleAlerts.map((n) =>
-                '<div class="alert-banner" style="' + (n.isRead ? 'opacity:0.82;' : 'border-width:2px;') + '">' +
+              visibleAlerts.map((n) => {
+                const matchedAcc = (roleMode === 'ADMIN' && n.targetAudience === 'ADMIN' && n.targetId)
+                  ? (db.accounts || []).find((a) => a.id === n.targetId)
+                  : null;
+                const isWarnNotif = String(n.message || '').indexOf('تحذير') >= 0 || String(n.senderLabel || '').indexOf('تحذير') >= 0;
+                return '<div class="alert-banner" style="flex-direction:column;align-items:stretch;' + (isWarnNotif ? 'background:#FEF2F2;border-color:#DC2626;color:#991B1B;' : '') + (n.isRead ? 'opacity:0.86;' : 'border-width:2px;') + '">' +
                   (n.senderLabel ? '<div style="font-size:0.76rem;font-weight:800;margin-bottom:2px;">' + esc(n.senderLabel) + '</div>' : '') +
                   '<div>' + esc(n.message) + '</div>' +
-                '</div>'
-              ).join('');
+                  (matchedAcc
+                    ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' +
+                        (matchedAcc.isPhoneVerified === false
+                          ? '<button class="btn btn-green" type="button" data-notif-verify-acc="' + esc(matchedAcc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">✅ ' + esc(bi('توثيق فوري', 'Verify Now')) + '</button>' +
+                            '<button class="btn btn-blue" type="button" data-notif-copy-otp="' + esc(matchedAcc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🔑 ' + esc(bi('كود OTP', 'OTP Code')) + '</button>'
+                          : '') +
+                        '<button class="btn btn-warn" type="button" data-notif-chat-acc="' + esc(matchedAcc.id) + '" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">💬 ' + esc(bi('مراسلة / تحذير', 'Chat / Warn')) + '</button>' +
+                      '</div>'
+                    : '') +
+                '</div>';
+              }).join('');
 
           return markAllBtnHtml + threadsHtml + alertsHtml;
         }
@@ -9510,6 +9723,39 @@
               const key = btn.getAttribute('data-notif-open-thread');
               const t = threads.find((x) => x.key === key);
               if (t) openDirectChatModal(t);
+            };
+          });
+          document.querySelectorAll('[data-notif-verify-acc]').forEach((btn) => {
+            btn.onclick = function () {
+              const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-notif-verify-acc'));
+              if (!acc) return;
+              markAccountVerified(acc, db.config.adminOwnerName || 'المدير العام');
+              saveState(db);
+              showToast(bi('تم توثيق حساب ' + acc.fullName + ' فوراً', 'Verified ' + acc.fullName));
+              const body = document.getElementById('modalBody');
+              if (body) { body.innerHTML = renderNotificationsBody(); mountNotificationsHandlers(); }
+              renderApp();
+            };
+          });
+          document.querySelectorAll('[data-notif-copy-otp]').forEach((btn) => {
+            btn.onclick = function () {
+              const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-notif-copy-otp'));
+              if (!acc) return;
+              if (isAccountOtpExpired(acc)) { assignFreshUserOtp(acc, db); saveState(db); }
+              const msg = 'مرحباً ' + acc.fullName + '، كود تفعيل حسابك في منصة طب الحجايزة هو: ' + acc.otpCode + ' (صالح لمدة 24 ساعة).';
+              copyTextToClipboard(msg, function () { showToast(bi('تم نسخ كود التفعيل ورسالة الترحيب (' + acc.otpCode + ')', 'Copied OTP & message')); });
+            };
+          });
+          document.querySelectorAll('[data-notif-chat-acc]').forEach((btn) => {
+            btn.onclick = function () {
+              const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-notif-chat-acc'));
+              if (!acc) return;
+              openDirectChatModal({
+                threadType: 'PATIENT_ADMIN',
+                patientAccountId: acc.id,
+                patientName: acc.fullName,
+                patientPhone: acc.phone
+              });
             };
           });
         }
@@ -10620,6 +10866,22 @@
           };
         }
 
+        const replyAdminWarnBtn = document.getElementById('btnHomeReplyAdminWarning');
+        if (replyAdminWarnBtn) {
+          replyAdminWarnBtn.onclick = function () {
+            if (!db.account) {
+              openAccountModal('LOGIN');
+              return;
+            }
+            openDirectChatModal({
+              threadType: 'PATIENT_ADMIN',
+              patientAccountId: db.account.id,
+              patientName: db.account.fullName,
+              patientPhone: db.account.phone
+            });
+          };
+        }
+
         document.querySelectorAll('[data-goto-tab]').forEach((btn) => {
           btn.onclick = function () {
             ui.patientTab = btn.getAttribute('data-goto-tab');
@@ -11115,6 +11377,18 @@
           };
         }
 
+        document.querySelectorAll('[data-admin-chat-doc]').forEach((btn) => {
+          btn.onclick = function () {
+            const doc = db.doctors.find((d) => d.id === btn.getAttribute('data-admin-chat-doc'));
+            if (!doc) return;
+            openDirectChatModal({
+              threadType: 'CLINIC_ADMIN',
+              doctorId: doc.id,
+              doctorName: getDoctorDisplayName(doc)
+            });
+          };
+        });
+
         document.querySelectorAll('[data-admin-edit-doc]').forEach((btn) => {
           btn.onclick = function () {
             const doc = db.doctors.find((d) => d.id === btn.getAttribute('data-admin-edit-doc'));
@@ -11304,9 +11578,9 @@
               saveState(db);
               showToast(bi('تم إلغاء تفعيل حساب ' + target.fullName, 'Unverified ' + target.fullName));
             } else {
-              markAccountVerified(target, 'الإدارة');
+              markAccountVerified(target, db.config.adminOwnerName || 'المدير العام');
               saveState(db);
-              showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' فوراً بواسطة الإدارة', 'Verified ' + target.fullName + ' immediately'));
+              showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' فوراً بواسطة المدير العام', 'Verified ' + target.fullName + ' immediately'));
             }
             renderApp();
           };
@@ -11323,8 +11597,9 @@
               saveState(db);
               renderApp();
             }
-            copyTextToClipboard(target.otpCode, function () {
-              showToast(bi('تم نسخ كود التفعيل (' + target.otpCode + ') الخاص بـ ' + target.fullName + ' الصالح لمدة 24 ساعة', 'Copied OTP code (' + target.otpCode + ') for ' + target.fullName));
+            const readyMsg = 'مرحباً ' + target.fullName + '، تم استلام طلب تسجيلك في منصة طب الحجايزة الطبية.\nكود التفعيل الخاص بك هو: ' + target.otpCode + '\n(صالح لمدة 24 ساعة لتفعيل الحجز والملف الطبي)';
+            copyTextToClipboard(readyMsg, function () {
+              showToast(bi('تم نسخ الكود ورسالة التفعيل (' + target.otpCode + ') بنجاح ✓', 'Copied OTP code & activation message (' + target.otpCode + ')'));
             });
           };
         });
@@ -11339,6 +11614,20 @@
             saveState(db);
             showToast(bi('تم تجديد كود ' + target.fullName + ' (' + target.otpCode + ') لمدة 24 ساعة', 'Renewed 24h OTP (' + target.otpCode + ')'));
             renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-admin-chat-user]').forEach((btn) => {
+          btn.onclick = function () {
+            const accId = btn.getAttribute('data-admin-chat-user');
+            const target = (db.accounts || []).find((a) => a.id === accId);
+            if (!target) return;
+            openDirectChatModal({
+              threadType: 'PATIENT_ADMIN',
+              patientAccountId: target.id,
+              patientName: target.fullName,
+              patientPhone: target.phone
+            });
           };
         });
 
@@ -11650,6 +11939,21 @@
           };
         }
 
+        document.querySelectorAll('[data-admin-clean-drive]').forEach((btn) => {
+          btn.onclick = function () {
+            const targetId = btn.getAttribute('data-admin-clean-drive');
+            const label = btn.getAttribute('data-clean-label') || targetId;
+            if (!targetId) return;
+            const cleaned = cleanHeavyAttachmentsForStorageTargetWeb(targetId);
+            showToast(
+              cleaned > 0
+                ? bi('تم تفريغ ' + cleaned + ' ملف ثقيل من ' + label + ' مع بقاء السجل الطبي المكتوب محفوظاً 100%', 'Cleaned ' + cleaned + ' heavy files from ' + label + ' (written history 100% preserved)')
+                : bi('لا توجد ملفات ثقيلة حالياً في ' + label + ' — التخزين فارغ ونظيف ✓', 'No heavy files currently in ' + label)
+            );
+            renderApp();
+          };
+        });
+
         document.querySelectorAll('[data-preview-proof]').forEach((btn) => {
           btn.onclick = function () {
             const req = (db.familyLinkRequests || []).find((r) => r.id === btn.getAttribute('data-preview-proof'));
@@ -11721,6 +12025,40 @@
               doctorId: doc.id,
               doctorName: getDoctorDisplayName(doc)
             });
+          };
+        }
+
+        const docChatAdmTopBtn = document.getElementById('btnDoctorChatAdminTop');
+        if (docChatAdmTopBtn) {
+          docChatAdmTopBtn.onclick = function () {
+            openDirectChatModal({
+              threadType: 'CLINIC_ADMIN',
+              doctorId: doc.id,
+              doctorName: getDoctorDisplayName(doc)
+            });
+          };
+        }
+
+        const topQuickActBtn = document.getElementById('btnDocTopQuickActivate');
+        if (topQuickActBtn) {
+          topQuickActBtn.onclick = function () {
+            const inp = document.getElementById('docTopQuickActivatePhone');
+            const rawPhone = inp ? inp.value.trim() : '';
+            const digits = normalizePhoneDigits(rawPhone);
+            if (digits.length < 6) {
+              showToast(bi('يرجى إدخال رقم هاتف المريض أولاً', 'Please enter patient phone number first'));
+              return;
+            }
+            const target = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === digits || normalizePhoneDigits(a.phone).endsWith(digits));
+            if (!target) {
+              showToast(bi('لم يتم العثور على حساب مسجل بهذا الرقم', 'No registered patient account found with this phone'));
+              return;
+            }
+            const clinicSource = 'عيادة د. ' + String(doc.doctorName || '').replace(/^د\.?\s*/i, '').trim();
+            markAccountVerified(target, clinicSource);
+            saveState(db);
+            showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' بنجاح (' + clinicSource + ') ✓', 'Verified ' + target.fullName + ' (' + clinicSource + ') ✓'));
+            renderApp();
           };
         }
 
@@ -11816,7 +12154,7 @@
             const accId = btn.getAttribute('data-doc-activate-acc');
             const target = (db.accounts || []).find((a) => a.id === accId);
             if (!target) return;
-            const clinicSource = 'عيادة ' + doc.doctorName;
+            const clinicSource = 'عيادة د. ' + String(doc.doctorName || '').replace(/^د\.?\s*/i, '').trim();
             markAccountVerified(target, clinicSource);
             saveState(db);
             ui.docActivateResults = (db.accounts || []).filter((acc) => {

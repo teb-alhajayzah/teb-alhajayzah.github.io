@@ -108,6 +108,7 @@ import com.example.ui.theme.SlotCompletedBg
 import com.example.ui.theme.SlotCompletedBorder
 import com.example.ui.theme.SlotCompletedText
 import com.example.ui.theme.TealPrimary
+import com.example.ui.theme.TealPrimaryDark
 import com.example.util.SpecialtyCatalog
 import com.example.util.TimeUtils
 
@@ -249,6 +250,7 @@ fun DoctorDashboardScreen(
     onToggleFavoriteMed: (doctorId: String, medicationId: String) -> Unit,
     onSearchPatientsForActivation: (phoneQuery: String) -> Unit,
     onActivatePatientByClinic: (accountId: String) -> Unit,
+    onActivatePatientByClinicPhone: (phoneQuery: String) -> Unit = {},
     onSubmitFamilyLinkRequest: (
         requesterAccountId: String,
         targetPhone: String,
@@ -287,6 +289,14 @@ fun DoctorDashboardScreen(
     var lookupEmrSelectedMemberId by remember { mutableStateOf<String?>(null) }
     var showScheduleDialog by remember { mutableStateOf(false) }
     var linkRequestAccount by remember { mutableStateOf<com.example.data.local.PatientAccountEntity?>(null) }
+    var quickActivationPhone by remember { mutableStateOf("") }
+    val unreadAdminRepliesCount = remember(state.directMessages, activeDoctor.id) {
+        state.directMessages.count {
+            it.doctorId == activeDoctor.id &&
+                it.threadType == ChatThreadType.CLINIC_ADMIN &&
+                !it.isReadByClinic
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -328,6 +338,113 @@ fun DoctorDashboardScreen(
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(bi(isEn, "خروج", "Sign Out"))
+                    }
+                }
+            }
+
+            item {
+                Button(
+                    onClick = {
+                        onOpenChatThread(
+                            DirectChatTarget(
+                                threadType = ChatThreadType.CLINIC_ADMIN,
+                                viewerRole = MessageSenderRole.CLINIC,
+                                title = bi(isEn, "الإدارة العليا للمنصة", "Super Admin Support"),
+                                subtitle = activeDoctor.clinicName,
+                                doctorId = activeDoctor.id,
+                            )
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimaryDark),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("doctor_contact_admin_btn"),
+                ) {
+                    Icon(Icons.Filled.SupportAgent, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(bi(isEn, "📩 مراسلة وتواصل مع الإدارة العامة", "📩 Contact Super Admin"))
+                    if (unreadAdminRepliesCount > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                            Text(unreadAdminRepliesCount.toString())
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlotAvailableBg),
+                    border = BorderStroke(1.5.dp, SlotAvailableBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("doctor_top_quick_activate_card"),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.VerifiedUser,
+                                contentDescription = null,
+                                tint = SlotAvailableText,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = bi(isEn, "✅ تفعيل وتوثيق حساب مريض جديد", "✅ Instant Patient Activation"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = SlotAvailableText,
+                            )
+                        }
+                        Text(
+                            text = bi(
+                                isEn,
+                                "أدخل رقم هاتف المريض لتفعيله فوراً واعتماده باسم عيادتك دون الحاجة لكود OTP:",
+                                "Enter patient phone to instantly activate under your clinic name without OTP:",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = quickActivationPhone,
+                                onValueChange = { quickActivationPhone = it },
+                                placeholder = { Text("01xxxxxxxxx") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("doctor_top_quick_phone_input"),
+                            )
+                            Button(
+                                onClick = {
+                                    if (quickActivationPhone.isNotBlank()) {
+                                        val p = quickActivationPhone
+                                        onActivatePatientByClinicPhone(p)
+                                        quickActivationPhone = ""
+                                    }
+                                },
+                                enabled = quickActivationPhone.isNotBlank(),
+                                colors = ButtonDefaults.buttonColors(containerColor = SlotAvailableBorder),
+                                modifier = Modifier
+                                    .height(52.dp)
+                                    .testTag("doctor_top_quick_activate_btn"),
+                            ) {
+                                Text(bi(isEn, "توثيق الحساب فوراً ✓", "Verify Now ✓"))
+                            }
+                        }
                     }
                 }
             }

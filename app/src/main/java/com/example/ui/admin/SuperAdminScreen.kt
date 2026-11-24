@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -63,6 +64,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
@@ -74,6 +76,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -99,6 +102,7 @@ import com.example.data.local.FamilyLinkRequestEntity
 import com.example.data.local.FamilyLinkStatus
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
+import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.SlotStatus
@@ -210,6 +214,9 @@ fun SuperAdminDashboardScreen(
     onRejectFamilyLinkRequest: (requestId: String, notes: String) -> Unit = { _, _ -> },
     onUpdateDoctorDriveAccounts: (doctorId: String, primaryUrl: String, secondaryUrl: String) -> Unit = { _, _, _ -> },
     onPreviewAttachment: (AttachmentPreviewTarget) -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
+    onCleanClinicHeavyFiles: (doctorId: String) -> Unit = {},
+    onReportStorage90Alert: (accountLabel: String, usedPercent: Int) -> Unit = { _, _ -> },
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -324,7 +331,7 @@ fun SuperAdminDashboardScreen(
                 acc.verifiedBy.contains(uq, true) ||
                 members.any { it.fullName.contains(uq, true) }
             verifiedOk && queryOk
-        }
+        }.sortedWith(compareBy<PatientAccountEntity> { it.isPhoneVerified }.thenByDescending { it.otpCreatedAtMillis }.thenBy { it.fullName })
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -365,15 +372,44 @@ fun SuperAdminDashboardScreen(
                                     color = Color.White.copy(alpha = 0.92f),
                                 )
                             }
-                            Button(
-                                onClick = onLogoutAdmin,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = TealPrimary),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.testTag("admin_logout_button"),
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(bi(isEn, "خروج وتأمين", "Lock & Exit"))
+                                IconButton(
+                                    onClick = onOpenNotifications,
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .testTag("admin_bell_button"),
+                                ) {
+                                    BadgedBox(
+                                        badge = {
+                                            val count = state.unreadSupportInboxCountForAdmin()
+                                            if (count > 0) {
+                                                Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                                    Text(count.toString())
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Notifications,
+                                            contentDescription = bi(isEn, "الإشعارات", "Notifications"),
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                    }
+                                }
+                                Button(
+                                    onClick = onLogoutAdmin,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = TealPrimary),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.testTag("admin_logout_button"),
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(bi(isEn, "خروج وتأمين", "Lock & Exit"))
+                                }
                             }
                         }
                     }
@@ -580,6 +616,17 @@ fun SuperAdminDashboardScreen(
                             doctor = doc,
                             isEn = isEn,
                             currencyLabel = currencyLabel,
+                            onChatClinic = {
+                                onOpenChatThread(
+                                    DirectChatTarget(
+                                        threadType = ChatThreadType.CLINIC_ADMIN,
+                                        viewerRole = MessageSenderRole.ADMIN,
+                                        title = doc.clinicName.ifBlank { doc.doctorName },
+                                        subtitle = doc.doctorName,
+                                        doctorId = doc.id,
+                                    )
+                                )
+                            },
                             onEdit = { doctorToEdit = doc },
                             onDelete = { doctorToDelete = doc },
                         )
@@ -609,6 +656,17 @@ fun SuperAdminDashboardScreen(
                             doctor = doc,
                             isEn = isEn,
                             currencyLabel = currencyLabel,
+                            onChatClinic = {
+                                onOpenChatThread(
+                                    DirectChatTarget(
+                                        threadType = ChatThreadType.CLINIC_ADMIN,
+                                        viewerRole = MessageSenderRole.ADMIN,
+                                        title = doc.clinicName.ifBlank { doc.doctorName },
+                                        subtitle = doc.doctorName,
+                                        doctorId = doc.id,
+                                    )
+                                )
+                            },
                             onEdit = { doctorToEdit = doc },
                             onDelete = { doctorToDelete = doc },
                         )
@@ -935,29 +993,119 @@ fun SuperAdminDashboardScreen(
                                         )
                                     }
                                 }
+                                Surface(
+                                    color = Color(0xFFEFF6FF),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF93C5FD)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = bi(
+                                            isEn,
+                                            "🛡️ ضمان حفظ السجل الطبي: تفريغ الملفات الثقيلة (PDF/الصور) يحذف المرفقات فقط لتحرير المساحة، مع بقاء كافة السجلات الطبية الكتابية الدائمة محفوظة 100% مدى الحياة.",
+                                            "🛡️ Permanent Log Guarantee: Cleaning heavy PDF/image attachments frees Drive space while keeping 100% of written permanent medical history logs forever.",
+                                        ),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF1E3A8A),
+                                        lineHeight = 18.sp,
+                                        modifier = Modifier.padding(10.dp),
+                                    )
+                                }
+
+                                // مؤشر استهلاك مساحة التخزين الاحتياطية للمنصة (15 GB)
+                                val fallbackRecords = remember(state.medicalRecords, state.doctors) {
+                                    val docsById = state.doctors.associateBy { it.id }
+                                    state.medicalRecords.filter { rec ->
+                                        (rec.attachmentPath.isNotBlank() || rec.driveFileUrl.isNotBlank()) &&
+                                            (rec.doctorId.isBlank() || docsById[rec.doctorId]?.driveWebAppUrl.isNullOrBlank())
+                                    }
+                                }
+                                val fallbackUsedGb = remember(fallbackRecords) {
+                                    computeDriveUsedGb(fallbackRecords)
+                                }
+                                val fallbackPercent = computeDrivePercent(fallbackUsedGb, 15.0, fallbackRecords.size)
+                                LaunchedEffect(fallbackPercent) {
+                                    if (fallbackPercent >= 90) {
+                                        onReportStorage90Alert(
+                                            bi(isEn, "الاحتياطي العام للمنصة", "Platform Fallback Drive"),
+                                            fallbackPercent,
+                                        )
+                                    }
+                                }
+                                DriveAccountUsageMeterCard(
+                                    accountTitle = bi(isEn, "📦 حساب المنصة الاحتياطي العام (Fallback Drive)", "📦 Platform Fallback Drive Account"),
+                                    usedGb = fallbackUsedGb,
+                                    quotaGb = 15.0,
+                                    usedPercent = fallbackPercent,
+                                    heavyFilesCount = fallbackRecords.size,
+                                    isLinked = state.brandConfig.defaultDriveWebAppUrl.isNotBlank(),
+                                    isEn = isEn,
+                                    testTagPrefix = "drive_meter_fallback",
+                                    onCleanHeavyFiles = { onCleanClinicHeavyFiles("__FALLBACK__") },
+                                )
+
                                 AdminAccordionCard(
                                     title = bi(isEn, "قائمة حسابات Drive المرتبطة بالعيادات (${state.doctors.size})", "Linked Clinic Drive Accounts (${state.doctors.size})"),
-                                    subtitle = bi(isEn, "عرض / إخفاء التفاصيل", "Show/Hide details"),
+                                    subtitle = bi(isEn, "متابعة نسبة الاستهلاك (1% - 100%) والتفريغ اليدوي", "Monitor usage (1%–100%) & manual cleanup"),
                                     expanded = driveClinicsListExpanded,
                                     onToggle = { driveClinicsListExpanded = !driveClinicsListExpanded },
                                 ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         state.doctors.forEach { d ->
+                                            val docHeavyRecords = state.medicalRecords.filter { rec ->
+                                                rec.doctorId == d.id && (rec.attachmentPath.isNotBlank() || rec.driveFileUrl.isNotBlank())
+                                            }
+                                            val primaryUsedGb = computeDriveUsedGb(docHeavyRecords)
+                                            val primaryPercent = computeDrivePercent(primaryUsedGb, 15.0, docHeavyRecords.size)
+                                            val secondaryRecords = if (d.secondaryDriveWebAppUrl.isNotBlank()) {
+                                                docHeavyRecords.filter { it.driveFileUrl.contains("secondary", ignoreCase = true) }
+                                            } else emptyList()
+                                            val secondaryUsedGb = computeDriveUsedGb(secondaryRecords)
+                                            val secondaryPercent = computeDrivePercent(secondaryUsedGb, 15.0, secondaryRecords.size)
+
+                                            LaunchedEffect(primaryPercent, d.id) {
+                                                if (primaryPercent >= 90) {
+                                                    onReportStorage90Alert("${d.clinicName} (الأساسي)", primaryPercent)
+                                                }
+                                            }
+                                            LaunchedEffect(secondaryPercent, d.id) {
+                                                if (secondaryPercent >= 90) {
+                                                    onReportStorage90Alert("${d.clinicName} (الثانوي)", secondaryPercent)
+                                                }
+                                            }
+
                                             Surface(
-                                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                                shape = RoundedCornerShape(10.dp),
+                                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                                shape = RoundedCornerShape(14.dp),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
                                                 modifier = Modifier.fillMaxWidth(),
                                             ) {
-                                                Column(modifier = Modifier.padding(10.dp)) {
-                                                    Text("${d.clinicName} (${d.doctorName})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                                    Text(
-                                                        text = bi(
-                                                            isEn,
-                                                            "أساسي: ${if (d.driveWebAppUrl.isNotBlank()) "✓ مرتبط" else "احتياطي المنصة"} • ثانوي: ${if (d.secondaryDriveWebAppUrl.isNotBlank()) "✓ مرتبط" else "غير مضاف"}",
-                                                            "Primary: ${if (d.driveWebAppUrl.isNotBlank()) "✓ Linked" else "Fallback"} • Secondary: ${if (d.secondaryDriveWebAppUrl.isNotBlank()) "✓ Linked" else "None"}",
-                                                        ),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                Column(
+                                                    modifier = Modifier.padding(12.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                                ) {
+                                                    Text("${d.clinicName} (${d.doctorName})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                                    DriveAccountUsageMeterCard(
+                                                        accountTitle = bi(isEn, "1️⃣ الحساب الأساسي للعيادة (Primary 15 GB)", "1️⃣ Primary Clinic Drive (15 GB)"),
+                                                        usedGb = primaryUsedGb,
+                                                        quotaGb = 15.0,
+                                                        usedPercent = primaryPercent,
+                                                        heavyFilesCount = docHeavyRecords.size,
+                                                        isLinked = d.driveWebAppUrl.isNotBlank(),
+                                                        isEn = isEn,
+                                                        testTagPrefix = "drive_meter_primary_${d.id}",
+                                                        onCleanHeavyFiles = { onCleanClinicHeavyFiles(d.id) },
+                                                    )
+                                                    DriveAccountUsageMeterCard(
+                                                        accountTitle = bi(isEn, "2️⃣ الحساب الثانوي الاحتياطي (Secondary +15 GB)", "2️⃣ Secondary Backup Drive (+15 GB)"),
+                                                        usedGb = secondaryUsedGb,
+                                                        quotaGb = 15.0,
+                                                        usedPercent = secondaryPercent,
+                                                        heavyFilesCount = secondaryRecords.size,
+                                                        isLinked = d.secondaryDriveWebAppUrl.isNotBlank(),
+                                                        isEn = isEn,
+                                                        testTagPrefix = "drive_meter_secondary_${d.id}",
+                                                        onCleanHeavyFiles = { onCleanClinicHeavyFiles(d.id) },
                                                     )
                                                 }
                                             }
@@ -1372,20 +1520,30 @@ fun SuperAdminDashboardScreen(
                                 isEn = isEn,
                                 onToggleVerified = { onSetUserVerified(userAcc.id, !userAcc.isPhoneVerified) },
                                 onCopyOtp = {
-                                    if (userAcc.otpCode.length == 6) {
-                                        clipboardManager.setText(AnnotatedString(userAcc.otpCode))
-                                        onShowMessage(
-                                            bi(
-                                                isEn,
-                                                "تم نسخ كود التفعيل (${userAcc.otpCode}) الخاص بـ ${userAcc.fullName}",
-                                                "Copied OTP code (${userAcc.otpCode}) for ${userAcc.fullName}",
-                                            )
+                                    val readyMsg = "أهلاً بك في منصة طب الحجايزة. كود تفعيل حسابك هو: ${userAcc.otpCode} (صالح لمدة 24 ساعة). يمكنك الدخول وتأكيد حسابك الآن."
+                                    clipboardManager.setText(AnnotatedString(readyMsg))
+                                    onShowMessage(
+                                        bi(
+                                            isEn,
+                                            "تم نسخ كود ورسالة التفعيل (${userAcc.otpCode}) لـ ${userAcc.fullName}",
+                                            "Copied OTP message (${userAcc.otpCode}) for ${userAcc.fullName}",
                                         )
-                                    } else {
-                                        onRegenerateUserOtp(userAcc.id)
-                                    }
+                                    )
                                 },
                                 onRegenerateOtp = { onRegenerateUserOtp(userAcc.id) },
+                                onOpenChat = {
+                                    onOpenChatThread(
+                                        DirectChatTarget(
+                                            threadType = ChatThreadType.PATIENT_ADMIN,
+                                            viewerRole = MessageSenderRole.ADMIN,
+                                            title = "${userAcc.fullName} (${bi(isEn, "دعم فني", "Support")})",
+                                            subtitle = userAcc.phone,
+                                            patientAccountId = userAcc.id,
+                                            patientName = userAcc.fullName,
+                                            patientPhone = userAcc.phone,
+                                        )
+                                    )
+                                },
                                 onEdit = { userToEdit = userAcc },
                                 onDelete = { userToDelete = userAcc },
                             )
@@ -2136,6 +2294,7 @@ private fun AdminUserManageCard(
     onToggleVerified: () -> Unit,
     onCopyOtp: () -> Unit,
     onRegenerateOtp: () -> Unit,
+    onOpenChat: () -> Unit = {},
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -2156,7 +2315,7 @@ private fun AdminUserManageCard(
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, if (verified) SlotAvailableBorder.copy(alpha = 0.55f) else SlotBookedBorder.copy(alpha = 0.55f)),
+        border = BorderStroke(1.dp, if (verified) SlotAvailableBorder.copy(alpha = 0.55f) else Color(0xFFEF4444)),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("admin_user_card_${account.id}"),
@@ -2175,13 +2334,14 @@ private fun AdminUserManageCard(
                     Text(bi(isEn, "📞 الهاتف: ${account.phone}", "📞 Phone: ${account.phone}"), style = MaterialTheme.typography.bodySmall)
                 }
                 Surface(
-                    color = if (verified) SlotAvailableBg else SlotBookedBg,
+                    color = if (verified) SlotAvailableBg else Color(0xFFFEF2F2),
                     shape = RoundedCornerShape(8.dp),
+                    border = if (verified) null else BorderStroke(1.dp, Color(0xFFEF4444)),
                 ) {
                     Text(
-                        text = if (verified) bi(isEn, "موثق ✓", "Verified ✓") else bi(isEn, "غير موثق", "Unverified"),
+                        text = if (verified) bi(isEn, "موثق ✓", "Verified ✓") else bi(isEn, "⚠️ بانتظار التوثيق (غير مفعل)", "⚠️ Pending Verification"),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (verified) SlotAvailableText else SlotBookedText,
+                        color = if (verified) SlotAvailableText else Color(0xFF991B1B),
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
@@ -2277,53 +2437,95 @@ private fun AdminUserManageCard(
             }
 
             if (!verified) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = onToggleVerified,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SlotAvailableBorder,
-                            contentColor = Color.White,
-                        ),
-                        modifier = Modifier
-                            .weight(1.1f)
-                            .height(48.dp)
-                            .testTag("admin_user_verify_toggle_${account.id}"),
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 1) زر عرض / توليد كود OTP + نسخ رسالة التفعيل جاهزة
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.VerifiedUser,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = bi(isEn, "توثيق الحساب فوراً ✓", "Verify Account ✓"),
-                            maxLines = 1,
-                        )
+                        Button(
+                            onClick = onRegenerateOtp,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFD97706),
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("admin_user_show_regen_otp_${account.id}"),
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = bi(isEn, "🔑 عرض / توليد كود OTP (24 ساعة)", "🔑 Show / Regen 24h OTP"),
+                                maxLines = 1,
+                            )
+                        }
+                        Button(
+                            onClick = onCopyOtp,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF1D4ED8),
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("admin_user_copy_otp_${account.id}"),
+                        ) {
+                            Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = bi(isEn, "📋 نسخ الكود ورسالة التفعيل", "📋 Copy OTP & Msg"),
+                                maxLines = 1,
+                            )
+                        }
                     }
-                    Button(
-                        onClick = onCopyOtp,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1D4ED8),
-                            contentColor = Color.White,
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("admin_user_copy_otp_${account.id}"),
+
+                    // 2) زر توثيق الحساب فوراً (بدون كود) + 3) زر مراسلة / إرسال تحذير
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.ContentCopy,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = bi(isEn, "نسخ كود التفعيل", "Copy OTP Code"),
-                            maxLines = 1,
-                        )
+                        Button(
+                            onClick = onToggleVerified,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SlotAvailableBorder,
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier
+                                .weight(1.1f)
+                                .height(48.dp)
+                                .testTag("admin_user_verify_toggle_${account.id}"),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.VerifiedUser,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = bi(isEn, "✅ توثيق الحساب فوراً (بدون كود)", "✅ Verify Now (No OTP)"),
+                                maxLines = 1,
+                            )
+                        }
+                        Button(
+                            onClick = onOpenChat,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFDC2626),
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("admin_user_chat_warn_${account.id}"),
+                        ) {
+                            Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = bi(isEn, "💬 مراسلة / إرسال تحذير", "💬 Chat / Warn"),
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -2334,21 +2536,26 @@ private fun AdminUserManageCard(
             ) {
                 if (verified) {
                     Button(
-                        onClick = onToggleVerified,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SlotBookedBorder,
-                        ),
+                        onClick = onOpenChat,
+                        colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
                         modifier = Modifier
-                            .weight(1.2f)
+                            .weight(1.1f)
+                            .height(48.dp)
+                            .testTag("admin_user_chat_warn_${account.id}"),
+                    ) {
+                        Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(bi(isEn, "💬 مراسلة / تحذير", "💬 Chat / Warn"), maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = onToggleVerified,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SlotBookedBorder),
+                        border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .weight(1f)
                             .height(48.dp)
                             .testTag("admin_user_verify_toggle_${account.id}"),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Cancel,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = bi(isEn, "إلغاء التفعيل", "Unverify"),
                             maxLines = 1,
@@ -2358,7 +2565,7 @@ private fun AdminUserManageCard(
                 OutlinedButton(
                     onClick = onEdit,
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(0.8f)
                         .height(48.dp)
                         .testTag("admin_user_edit_${account.id}"),
                 ) {
@@ -2597,6 +2804,7 @@ private fun AdminDoctorManageCard(
     doctor: ClinicDoctorEntity,
     isEn: Boolean = false,
     currencyLabel: String = if (isEn) "EGP" else "ج.م",
+    onChatClinic: () -> Unit = {},
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -2670,13 +2878,26 @@ private fun AdminDoctorManageCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Button(
+                    onClick = onChatClinic,
+                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .height(46.dp)
+                        .testTag("admin_doc_chat_${doctor.id}"),
+                ) {
+                    Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(bi(isEn, "💬 مراسلة العيادة", "Chat Clinic"), maxLines = 1)
+                }
                 OutlinedButton(
                     onClick = onEdit,
-                    modifier = Modifier.weight(1f).height(46.dp),
+                    modifier = Modifier.weight(0.9f).height(46.dp),
                 ) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(bi(isEn, "تعديل البيانات", "Edit"))
+                    Text(bi(isEn, "تعديل", "Edit"), maxLines = 1)
                 }
                 OutlinedButton(
                     onClick = onDelete,
@@ -2684,9 +2905,7 @@ private fun AdminDoctorManageCard(
                     border = BorderStroke(1.dp, SlotBookedBorder.copy(alpha = 0.6f)),
                     modifier = Modifier.height(46.dp),
                 ) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(bi(isEn, "حذف", "Delete"))
+                    Icon(Icons.Filled.Delete, contentDescription = bi(isEn, "حذف", "Delete"), modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -3214,3 +3433,156 @@ private fun LabFormDialog(
         },
     )
 }
+
+private fun computeDriveUsedGb(records: List<MedicalRecordEntity>): Double {
+    if (records.isEmpty()) return 0.0
+    var totalBytes = 0L
+    records.forEach { rec ->
+        val localLen = if (rec.attachmentPath.isNotBlank() && !rec.attachmentPath.startsWith("http", true)) {
+            runCatching { java.io.File(rec.attachmentPath).length() }.getOrDefault(0L)
+        } else 0L
+        totalBytes += if (localLen > 0L) {
+            localLen
+        } else if (rec.attachmentMimeType.contains("pdf", true)) {
+            3_200_000L // متوسط حجم تقرير PDF بالمنصة عند المزامنة السحابية
+        } else {
+            2_400_000L // متوسط حجم صورة الأشعة/التحليل
+        }
+    }
+    return totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+}
+
+private fun computeDrivePercent(usedGb: Double, quotaGb: Double, fileCount: Int): Int {
+    if (quotaGb <= 0.0) return 1
+    if (fileCount <= 0 && usedGb <= 0.0) return 1
+    val pct = ((usedGb / quotaGb) * 100.0).toInt()
+    return pct.coerceIn(1, 100)
+}
+
+@Composable
+private fun DriveAccountUsageMeterCard(
+    accountTitle: String,
+    usedGb: Double,
+    quotaGb: Double,
+    usedPercent: Int,
+    heavyFilesCount: Int,
+    isLinked: Boolean,
+    isEn: Boolean,
+    testTagPrefix: String,
+    onCleanHeavyFiles: () -> Unit,
+) {
+    val barColor = when {
+        usedPercent >= 90 -> Color(0xFFDC2626)
+        usedPercent >= 70 -> Color(0xFFD97706)
+        else -> TealPrimary
+    }
+    val formattedUsedGb = String.format(java.util.Locale.US, "%.2f", usedGb)
+    val formattedQuotaGb = String.format(java.util.Locale.US, "%.0f", quotaGb)
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (usedPercent >= 90) Color(0xFFEF4444) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("${testTagPrefix}_card"),
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = accountTitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(
+                    color = if (isLinked) SlotAvailableBg else Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
+                    Text(
+                        text = if (isLinked) bi(isEn, "✓ مرتبط", "✓ Linked") else bi(isEn, "احتياطي", "Fallback"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isLinked) SlotAvailableText else Color(0xFF92400E),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
+            LinearProgressIndicator(
+                progress = { (usedPercent / 100f).coerceIn(0.01f, 1f) },
+                color = barColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .testTag("${testTagPrefix}_progress"),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "$usedPercent% - $formattedUsedGb GB / $formattedQuotaGb GB",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = barColor,
+                )
+                Text(
+                    text = bi(isEn, "$heavyFilesCount ملف مرفق", "$heavyFilesCount files"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (usedPercent >= 90) {
+                Surface(
+                    color = Color(0xFFFEF2F2),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFEF4444)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = bi(
+                            isEn,
+                            "⚠️ تنبيه امتلاء التخزين: الحساب وصل إلى $usedPercent%! يُنصح بتفريغ الملفات الثقيلة الآن.",
+                            "⚠️ Storage Alert: Account reached $usedPercent%! Clean heavy files now.",
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF991B1B),
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+            }
+
+            OutlinedButton(
+                onClick = onCleanHeavyFiles,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB91C1C)),
+                border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.65f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .testTag("${testTagPrefix}_clean_btn"),
+            ) {
+                Text(
+                    text = bi(isEn, "🧹 تفريغ وتنظيف الملفات الثقيلة الآن", "🧹 Clean Heavy Files Now"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+

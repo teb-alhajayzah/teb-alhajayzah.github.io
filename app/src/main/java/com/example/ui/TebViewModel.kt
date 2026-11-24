@@ -1952,6 +1952,33 @@ class TebViewModel(
         }
     }
 
+    fun cleanClinicHeavyFiles(storageTargetId: String) {
+        viewModelScope.launch {
+            val cleaned = repository.cleanHeavyAttachmentsForStorageTarget(storageTargetId)
+            _snackbarMessages.tryEmit(
+                if (cleaned > 0) {
+                    bi(
+                        uiState.value.isEn,
+                        "🧹 تم تفريغ وتنظيف $cleaned ملف ثقيل بنجاح — السجلات الطبية الدائمة محفوظة 100%",
+                        "🧹 Cleaned $cleaned heavy file(s) — Permanent medical logs remain 100% intact",
+                    )
+                } else {
+                    bi(
+                        uiState.value.isEn,
+                        "✓ لا توجد ملفات ثقيلة عالقة حالياً — السجلات الدائمة محفوظة بالكامل",
+                        "✓ No pending heavy files to clean — Permanent logs preserved",
+                    )
+                }
+            )
+        }
+    }
+
+    fun reportStorage90Alert(accountLabel: String, usedPercent: Int) {
+        viewModelScope.launch {
+            repository.emitStorage90PercentAlert(accountLabel, usedPercent)
+        }
+    }
+
     class Factory(private val repository: TebRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

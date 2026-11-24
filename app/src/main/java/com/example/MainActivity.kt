@@ -378,6 +378,22 @@ fun TebAlHajayzahAppRoot(
                                                     showAccountDialog = true
                                                 },
                                                 onChatWithClinic = openPatientClinicChat,
+                                                onChatWithAdmin = {
+                                                    val acc = state.activeAccount
+                                                    if (acc != null) {
+                                                        activeChatTarget = DirectChatTarget(
+                                                            threadType = ChatThreadType.PATIENT_ADMIN,
+                                                            viewerRole = MessageSenderRole.PATIENT,
+                                                            title = bi(isEn, "الإدارة والدعم الفني", "Platform Admin & Support"),
+                                                            subtitle = bi(isEn, "محادثة مباشرة مع الإدارة", "Direct support thread"),
+                                                            patientAccountId = acc.id,
+                                                            patientName = acc.fullName,
+                                                            patientPhone = acc.phone,
+                                                        )
+                                                    } else {
+                                                        showAccountDialog = true
+                                                    }
+                                                },
                                                 onCheckAppUpdate = {
                                                     viewModel.checkAppUpdateAndSync { apkUrl ->
                                                         runCatching {
@@ -555,6 +571,20 @@ fun TebAlHajayzahAppRoot(
                                                         onToggleFavoriteMed = viewModel::toggleFavoriteMedication,
                                                         onSearchPatientsForActivation = viewModel::searchPatientsForClinicActivation,
                                                          onActivatePatientByClinic = viewModel::activatePatientByClinic,
+                                                         onActivatePatientByClinicPhone = { phoneQuery ->
+                                                             viewModel.activatePatientByClinicPhone(
+                                                                 phoneQuery = phoneQuery,
+                                                                 onSuccess = { acc ->
+                                                                     showMessage(
+                                                                         bi(
+                                                                             isEn,
+                                                                             "تم توثيق وتفعيل حساب ${acc.fullName} بنجاح ✓",
+                                                                             "Account ${acc.fullName} activated successfully ✓",
+                                                                         )
+                                                                     )
+                                                                 },
+                                                             )
+                                                         },
                                                          onSubmitFamilyLinkRequest = { reqAccId, targetPhone, marriageUrl, idFrontUrl, idBackUrl ->
                                                              viewModel.submitFamilyLinkRequest(
                                                                  requesterAccountId = reqAccId,
@@ -698,6 +728,9 @@ fun TebAlHajayzahAppRoot(
                                         onRejectFamilyLinkRequest = viewModel::rejectFamilyLinkRequest,
                                         onUpdateDoctorDriveAccounts = viewModel::updateDoctorDriveAccounts,
                                         onPreviewAttachment = { previewAttachment = it },
+                                        onOpenNotifications = { showNotificationsDialog = true },
+                                        onCleanClinicHeavyFiles = viewModel::cleanClinicHeavyFiles,
+                                        onReportStorage90Alert = viewModel::reportStorage90Alert,
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )
@@ -777,12 +810,15 @@ fun TebAlHajayzahAppRoot(
         NotificationsDialog(
             notifications = state.visibleNotificationsForCurrentRole(),
             directMessages = state.directMessages,
+            allAccounts = state.allAccounts,
             roleMode = state.roleMode,
             activeAccount = state.activeAccount,
             loggedInDoctor = state.loggedInDoctor,
             isEn = isEn,
             onMarkAllRead = viewModel::markCurrentRoleNotificationsRead,
             onOpenChatThread = { target -> activeChatTarget = target },
+            onActivateAccount = { accId -> viewModel.setAccountVerifiedByAdmin(accId, true) },
+            onRegenerateOtp = { accId -> viewModel.regenerateAccountOtpForAdmin(accId) },
             onDismiss = { showNotificationsDialog = false },
         )
     }
@@ -810,7 +846,7 @@ fun TebAlHajayzahAppRoot(
                     doctorId = chatTarget.doctorId,
                 )
             },
-            onSendMessage = { body, onDone ->
+            onSendMessage = { body, isWarning, onDone ->
                 when (chatTarget.threadType) {
                     ChatThreadType.PATIENT_CLINIC -> {
                         if (chatTarget.viewerRole == MessageSenderRole.PATIENT) {
@@ -834,6 +870,7 @@ fun TebAlHajayzahAppRoot(
                                 patientName = chatTarget.patientName,
                                 patientPhone = chatTarget.patientPhone,
                                 body = body,
+                                isWarning = isWarning,
                                 onSent = onDone,
                             )
                         }
