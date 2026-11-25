@@ -26,6 +26,7 @@ import com.example.data.local.PermanentMedicalLogEntity
 import com.example.data.repository.VisitorStats
 import com.example.data.medications.EgyptianMedication
 import com.example.data.medications.MedicationCatalog
+import com.example.data.remote.CloudConnectionStatus
 import com.example.data.repository.LabPatientSearchResult
 import com.example.data.repository.TebRepository
 import com.example.util.SpecialtyCatalog
@@ -111,6 +112,7 @@ data class TebUiState(
     val familyLinkRequests: List<FamilyLinkRequestEntity> = emptyList(),
     val isPrivacyModalOpen: Boolean = false,
     val isTermsModalOpen: Boolean = false,
+    val cloudStatus: CloudConnectionStatus = CloudConnectionStatus(),
 ) {
     val isEn: Boolean
         get() = appLanguage == AppLanguage.EN
@@ -343,6 +345,14 @@ class TebViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            while (isActive) {
+                delay(4_000L)
+                if (_roleMode.value == AppRoleMode.SUPER_ADMIN && _isAdminLoggedIn.value) {
+                    repository.syncWithCloudFirestoreOnce()
+                }
+            }
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -496,6 +506,7 @@ class TebViewModel(
         _visitorStats,
         _isPrivacyModalOpen,
         _isTermsModalOpen,
+        repository.cloudConnectionStatusFlow,
     ) { values ->
         values.toList()
     }
@@ -530,6 +541,7 @@ class TebViewModel(
         val vStats = adminOps[6] as VisitorStats
         val privacyOpen = adminOps[7] as Boolean
         val termsOpen = adminOps[8] as Boolean
+        val cStatus = adminOps[9] as CloudConnectionStatus
 
         TebUiState(
             isReady = sel.isSeeded,
@@ -575,12 +587,19 @@ class TebViewModel(
             isPrivacyModalOpen = privacyOpen,
             isTermsModalOpen = termsOpen,
             familyLinkRequests = acc.familyLinkRequests,
+            cloudStatus = cStatus,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000L),
         initialValue = TebUiState(),
     )
+
+    fun refreshCloudNow() {
+        viewModelScope.launch {
+            repository.syncWithCloudFirestoreOnce()
+        }
+    }
 
     fun setAppLanguage(language: AppLanguage) {
         viewModelScope.launch {

@@ -733,6 +733,7 @@ fun TebAlHajayzahAppRoot(
                                         onOpenNotifications = { showNotificationsDialog = true },
                                         onCleanClinicHeavyFiles = viewModel::cleanClinicHeavyFiles,
                                         onReportStorage90Alert = viewModel::reportStorage90Alert,
+                                        onRefreshCloudNow = viewModel::refreshCloudNow,
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )

@@ -217,6 +217,7 @@ fun SuperAdminDashboardScreen(
     onOpenNotifications: () -> Unit = {},
     onCleanClinicHeavyFiles: (doctorId: String) -> Unit = {},
     onReportStorage90Alert: (accountLabel: String, usedPercent: Int) -> Unit = { _, _ -> },
+    onRefreshCloudNow: () -> Unit = {},
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -225,11 +226,18 @@ fun SuperAdminDashboardScreen(
     val isEn = state.isEn
     val currencyLabel = bi(isEn, state.brandConfig.currencyLabelAr, state.brandConfig.currencyLabelEn)
     val unreadAdminInbox = state.unreadSupportInboxCountForAdmin()
+    val unverifiedUsersCount = state.allAccounts.count { !it.isPhoneVerified }
     val pendingFamilyLinksCount = state.familyLinkRequests.count { it.status == FamilyLinkStatus.PENDING }
     var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var usersSearchQuery by remember { mutableStateOf("") }
     var usersStatusFilter by remember { mutableStateOf("ALL") }
+
+    LaunchedEffect(selectedTab) {
+        if (selectedTab in 5..8) {
+            onRefreshCloudNow()
+        }
+    }
     var globalBroadcastDraft by remember { mutableStateOf("") }
     var clinicAlertDraft by remember { mutableStateOf("") }
     var selectedAlertDoctorId by remember { mutableStateOf<String?>(null) }
@@ -412,6 +420,73 @@ fun SuperAdminDashboardScreen(
                                 }
                             }
                         }
+
+                        // Live Firestore REST Cloud Connection Status Badge + Manual Refresh Now
+                        val cs = state.cloudStatus
+                        val badgeBg = when {
+                            cs.isConnected -> Color(0xFFDCFCE7)
+                            cs.hasAttempted -> Color(0xFFFEE2E2)
+                            else -> Color(0xFFFEF3C7)
+                        }
+                        val badgeBorder = when {
+                            cs.isConnected -> Color(0xFF16A34A)
+                            cs.hasAttempted -> Color(0xFFDC2626)
+                            else -> Color(0xFFD97706)
+                        }
+                        val badgeTextColor = when {
+                            cs.isConnected -> Color(0xFF14532D)
+                            cs.hasAttempted -> Color(0xFF991B1B)
+                            else -> Color(0xFF92400E)
+                        }
+                        val badgeLabel = when {
+                            cs.isConnected -> bi(isEn, "🟢 متصل بالسحابة الحية", "🟢 Connected to Live Cloud")
+                            cs.hasAttempted -> bi(isEn, "🔴 خطأ اتصال: ${cs.errorMessage}", "🔴 Connection Error: ${cs.errorMessage}")
+                            else -> bi(isEn, "🟡 جاري الاتصال بالسحابة الحية...", "🟡 Connecting to Live Cloud...")
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Surface(
+                                color = badgeBg,
+                                shape = RoundedCornerShape(50),
+                                border = BorderStroke(1.2.dp, badgeBorder),
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .testTag("admin_cloud_status_badge"),
+                            ) {
+                                Text(
+                                    text = badgeLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = badgeTextColor,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    onRefreshCloudNow()
+                                    onShowMessage(bi(isEn, "🔄 جاري تحديث البيانات من السحابة الحية...", "🔄 Refreshing from Live Cloud..."))
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.65f)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .height(36.dp)
+                                    .testTag("admin_refresh_cloud_now_button"),
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = bi(isEn, "🔄 تحديث فوري الآن", "🔄 Refresh Now"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -447,12 +522,42 @@ fun SuperAdminDashboardScreen(
                     Tab(
                         selected = selectedTab == 5,
                         onClick = { selectedTab = 5 },
-                        text = { Text(bi(isEn, "قائمة العملاء والمشتركين (Users)", "Users & Subscribers")) },
-                        modifier = Modifier.testTag("admin_users_tab"),
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(bi(isEn, "🔑 التوثيق وأكواد OTP", "🔑 Verification & OTP"))
+                                if (unverifiedUsersCount > 0) {
+                                    Badge(containerColor = Color(0xFFDC2626), contentColor = Color.White) {
+                                        Text(unverifiedUsersCount.toString())
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.testTag("admin_otp_verify_tab"),
                     )
                     Tab(
                         selected = selectedTab == 6,
                         onClick = { selectedTab = 6 },
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(bi(isEn, "قائمة العملاء والمشتركين (Users)", "Users & Subscribers"))
+                                if (unverifiedUsersCount > 0) {
+                                    Badge(containerColor = Color(0xFFDC2626), contentColor = Color.White) {
+                                        Text(unverifiedUsersCount.toString())
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.testTag("admin_users_tab"),
+                    )
+                    Tab(
+                        selected = selectedTab == 7,
+                        onClick = { selectedTab = 7 },
                         text = {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -469,8 +574,8 @@ fun SuperAdminDashboardScreen(
                         modifier = Modifier.testTag("admin_messages_control_tab"),
                     )
                     Tab(
-                        selected = selectedTab == 7,
-                        onClick = { selectedTab = 7 },
+                        selected = selectedTab == 8,
+                        onClick = { selectedTab = 8 },
                         text = {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -499,7 +604,7 @@ fun SuperAdminDashboardScreen(
                         value = state.allAccounts.size.toString(),
                         modifier = Modifier.weight(1f),
                         testTagName = "admin_metric_users",
-                        onClick = { selectedTab = 5 },
+                        onClick = { selectedTab = 6 },
                     )
                     AdminMetricBox(
                         label = bi(isEn, "عيادات / مستشفى", "Clinics"),
@@ -1421,7 +1526,7 @@ fun SuperAdminDashboardScreen(
                     }
                 }
 
-                5 -> {
+                5, 6 -> {
                     item {
                         Card(
                             shape = RoundedCornerShape(18.dp),
@@ -1434,23 +1539,52 @@ fun SuperAdminDashboardScreen(
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
                                 Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Icon(Icons.Filled.Group, contentDescription = null, tint = TealPrimary)
-                                    Text(
-                                        text = bi(isEn, "قائمة العملاء والمشتركين (Users)", "Registered Customers & Users"),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                    )
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = if (selectedTab == 5) Icons.Filled.VerifiedUser else Icons.Filled.Group,
+                                            contentDescription = null,
+                                            tint = TealPrimary,
+                                        )
+                                        Text(
+                                            text = if (selectedTab == 5) {
+                                                bi(isEn, "🔑 مركز التوثيق وأكواد OTP للعملاء", "🔑 Live OTP & Verification Center")
+                                            } else {
+                                                bi(isEn, "قائمة العملاء والمشتركين (Users)", "Registered Customers & Users")
+                                            },
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            onRefreshCloudNow()
+                                            onShowMessage(bi(isEn, "🔄 جاري التحديث الفوري من السحابة...", "🔄 Syncing from Live Cloud..."))
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier
+                                            .height(36.dp)
+                                            .testTag("admin_users_refresh_now"),
+                                    ) {
+                                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(bi(isEn, "تحديث فوري الآن", "Refresh Now"), style = MaterialTheme.typography.labelSmall)
+                                    }
                                 }
                                 val verifiedCount = state.allAccounts.count { it.isPhoneVerified }
                                 val unverifiedCount = state.allAccounts.size - verifiedCount
                                 Text(
                                     text = bi(
                                         isEn,
-                                        "إجمالي المشتركين: ${state.allAccounts.size}  •  موثق: $verifiedCount  •  غير موثق: $unverifiedCount",
-                                        "Total Users: ${state.allAccounts.size}  •  Verified: $verifiedCount  •  Unverified: $unverifiedCount",
+                                        "إجمالي المشتركين: ${state.allAccounts.size}  •  ✅ موثق: $verifiedCount  •  ⚠️ غير موثق: $unverifiedCount",
+                                        "Total Users: ${state.allAccounts.size}  •  ✅ Verified: $verifiedCount  •  ⚠️ Unverified: $unverifiedCount",
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TealPrimary,
@@ -1525,8 +1659,8 @@ fun SuperAdminDashboardScreen(
                                     onShowMessage(
                                         bi(
                                             isEn,
-                                            "تم نسخ كود ورسالة التفعيل (${userAcc.otpCode}) لـ ${userAcc.fullName}",
-                                            "Copied OTP message (${userAcc.otpCode}) for ${userAcc.fullName}",
+                                            "تم نسخ كود ورسالة الواتساب (${userAcc.otpCode}) لـ ${userAcc.fullName}",
+                                            "Copied OTP & WhatsApp message (${userAcc.otpCode}) for ${userAcc.fullName}",
                                         )
                                     )
                                 },
@@ -1551,7 +1685,7 @@ fun SuperAdminDashboardScreen(
                     }
                 }
 
-                6 -> {
+                7 -> {
                     item {
                         AdminAccordionCard(
                             title = bi(isEn, "📢 الدردشة العامة والإشعار الجماعي للمنصة", "📢 Global Chat Switch & Broadcast"),
@@ -1938,7 +2072,7 @@ fun SuperAdminDashboardScreen(
                     }
                 }
 
-                7 -> {
+                8 -> {
                     item {
                         AdminAccordionCard(
                             title = bi(
@@ -2339,7 +2473,7 @@ private fun AdminUserManageCard(
                     border = if (verified) null else BorderStroke(1.dp, Color(0xFFEF4444)),
                 ) {
                     Text(
-                        text = if (verified) bi(isEn, "موثق ✓", "Verified ✓") else bi(isEn, "⚠️ بانتظار التوثيق", "⚠️ Pending Verification"),
+                        text = if (verified) bi(isEn, "✅ موثق", "✅ Verified") else bi(isEn, "⚠️ غير موثق", "⚠️ Unverified"),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (verified) SlotAvailableText else Color(0xFF991B1B),
                         fontWeight = FontWeight.Bold,
@@ -2362,7 +2496,7 @@ private fun AdminUserManageCard(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = bi(isEn, "كود التفعيل المرتبط بالحساب (24 ساعة):", "Account OTP Code (24h):"),
+                                text = bi(isEn, "كود OTP العشوائي (6 أرقام - صالح 24 ساعة):", "Random 6-Digit OTP (Valid 24h):"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFF92400E),
                             )
@@ -2438,29 +2572,11 @@ private fun AdminUserManageCard(
 
             if (!verified) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 1) زر عرض / توليد كود OTP + نسخ رسالة التفعيل جاهزة
+                    // 1) زر نسخ الكود ورسالة الواتساب + توليد كود جديد (24 ساعة)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Button(
-                            onClick = onRegenerateOtp,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFD97706),
-                                contentColor = Color.White,
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .testTag("admin_user_show_regen_otp_${account.id}"),
-                        ) {
-                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = bi(isEn, "🔑 عرض / توليد كود OTP (24 ساعة)", "🔑 Show / Regen 24h OTP"),
-                                maxLines = 1,
-                            )
-                        }
                         Button(
                             onClick = onCopyOtp,
                             colors = ButtonDefaults.buttonColors(
@@ -2475,7 +2591,25 @@ private fun AdminUserManageCard(
                             Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = bi(isEn, "📋 نسخ الكود ورسالة التفعيل", "📋 Copy OTP & Msg"),
+                                text = bi(isEn, "📋 نسخ الكود ورسالة الواتساب", "📋 Copy OTP & WhatsApp"),
+                                maxLines = 1,
+                            )
+                        }
+                        Button(
+                            onClick = onRegenerateOtp,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFD97706),
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("admin_user_show_regen_otp_${account.id}"),
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = bi(isEn, "🔄 توليد كود جديد (24 ساعة)", "🔄 New Code (24h)"),
                                 maxLines = 1,
                             )
                         }
@@ -2504,7 +2638,7 @@ private fun AdminUserManageCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = bi(isEn, "✅ توثيق أوتوماتيك فوراً (بدون OTP)", "✅ Verify Now (No OTP)"),
+                                text = bi(isEn, "✅ توثيق أوتوماتيك فوراً (بدون كود)", "✅ Verify Now (No Code)"),
                                 maxLines = 1,
                             )
                         }
@@ -2522,7 +2656,7 @@ private fun AdminUserManageCard(
                             Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = bi(isEn, "💬 مراسلة / ⚠️ إرسال تحذير إداري", "💬 Chat / ⚠️ Warning"),
+                                text = bi(isEn, "💬 مراسلة / ⚠️ تحذير إداري", "💬 Chat / ⚠️ Warning"),
                                 maxLines = 1,
                             )
                         }

@@ -28,12 +28,22 @@ import com.example.data.local.PlatformVisitorHitEntity
 import com.example.data.local.SlotStatus
 import com.example.util.ChronicConditionsCatalog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+
+data class CloudConnectionStatus(
+    val isConnected: Boolean = false,
+    val hasAttempted: Boolean = false,
+    val errorMessage: String = "",
+    val lastSuccessMillis: Long = 0L,
+)
 
 /**
  * خدمة المزامنة السحابية عبر Firestore REST API تحت مسار العزل الموحد (teb_alhajayzah/)
@@ -43,6 +53,36 @@ object FirestoreCloudSyncService {
 
     private const val CONNECT_TIMEOUT_MS = 3000
     private const val READ_TIMEOUT_MS = 3000
+
+    private val _cloudStatusFlow = MutableStateFlow(CloudConnectionStatus())
+    val cloudStatusFlow: StateFlow<CloudConnectionStatus> = _cloudStatusFlow.asStateFlow()
+
+    private fun markConnected() {
+        _cloudStatusFlow.value = CloudConnectionStatus(
+            isConnected = true,
+            hasAttempted = true,
+            errorMessage = "",
+            lastSuccessMillis = System.currentTimeMillis(),
+        )
+    }
+
+    private fun markError(reason: String) {
+        _cloudStatusFlow.value = _cloudStatusFlow.value.copy(
+            isConnected = false,
+            hasAttempted = true,
+            errorMessage = reason.ifBlank { "Network Error" }.take(80),
+        )
+    }
+
+    private fun readHttpErrorDetail(conn: HttpURLConnection, code: Int): String {
+        val rawErr = runCatching {
+            conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+        }.getOrDefault("")
+        val parsedMsg = runCatching {
+            if (rawErr.isNotBlank()) JSONObject(rawErr).optJSONObject("error")?.optString("message", "").orEmpty() else ""
+        }.getOrDefault("")
+        return if (parsedMsg.isNotBlank()) "HTTP $code ($parsedMsg)" else "HTTP $code"
+    }
 
     fun isCloudNetworkAllowed(): Boolean =
         !"robolectric".equals(Build.FINGERPRINT, ignoreCase = true)
@@ -230,9 +270,17 @@ object FirestoreCloudSyncService {
             }
             val code = conn.responseCode
             val body = if (code in 200..299) conn.inputStream.bufferedReader().use { it.readText() } else ""
+            val errDetail = if (code !in 200..299 && code != 404) readHttpErrorDetail(conn, code) else ""
             conn.disconnect()
-            if (code !in 200..299 || body.isBlank()) return@runCatching null
+            if (code == 404) return@runCatching null
+            if (code !in 200..299 || body.isBlank()) {
+                if (errDetail.isNotBlank()) markError(errDetail)
+                return@runCatching null
+            }
+            markConnected()
             fromFirestoreDocument(JSONObject(body))
+        }.onFailure { err ->
+            markError(err.localizedMessage ?: err.javaClass.simpleName)
         }.getOrNull()
     }
 
@@ -249,9 +297,17 @@ object FirestoreCloudSyncService {
             val payload = JSONObject().put("fields", toFirestoreFields(settingsToJson(brand)))
             conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
+            val errDetail = if (code !in 200..299) readHttpErrorDetail(conn, code) else ""
             conn.disconnect()
-            code in 200..299
+            if (code in 200..299) {
+                markConnected()
+                true
+            } else {
+                markError(errDetail)
+                false
+            }
         }.onFailure { err ->
+            markError(err.localizedMessage ?: err.javaClass.simpleName)
             android.util.Log.e("TebFirestoreSync", "pushSettings failed", err)
         }.getOrDefault(false)
     }
@@ -274,9 +330,16 @@ object FirestoreCloudSyncService {
                     }
                     val code = conn.responseCode
                     val body = if (code in 200..299) conn.inputStream.bufferedReader().use { it.readText() } else ""
+                    val errDetail = if (code !in 200..299 && code != 404) readHttpErrorDetail(conn, code) else ""
                     conn.disconnect()
-                    if (code == 404) return@runCatching emptyList<JSONObject>()
-                    if (code !in 200..299) return@runCatching null
+                    if (code == 404) {
+                        markConnected()
+                        return@runCatching emptyList<JSONObject>()
+                    }
+                    if (code !in 200..299) {
+                        markError(errDetail)
+                        return@runCatching null
+                    }
                     if (body.isBlank()) break
                     val json = JSONObject(body)
                     val docs = json.optJSONArray("documents")
@@ -288,7 +351,10 @@ object FirestoreCloudSyncService {
                     }
                     pageToken = json.optString("nextPageToken", "").takeIf { it.isNotBlank() }
                 } while (pageToken != null && safetyPages < 10)
+                markConnected()
                 results
+            }.onFailure { err ->
+                markError(err.localizedMessage ?: err.javaClass.simpleName)
             }.getOrNull()
         }
 
@@ -311,9 +377,17 @@ object FirestoreCloudSyncService {
             val body = JSONObject().put("fields", toFirestoreFields(payloadJson))
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
+            val errDetail = if (code !in 200..299) readHttpErrorDetail(conn, code) else ""
             conn.disconnect()
-            code in 200..299
+            if (code in 200..299) {
+                markConnected()
+                true
+            } else {
+                markError(errDetail)
+                false
+            }
         }.onFailure { err ->
+            markError(err.localizedMessage ?: err.javaClass.simpleName)
             android.util.Log.e("TebFirestoreSync", "upsertDocument($subCollection/$docId) failed", err)
         }.getOrDefault(false)
     }
@@ -345,9 +419,17 @@ object FirestoreCloudSyncService {
                 readTimeout = READ_TIMEOUT_MS
             }
             val code = conn.responseCode
+            val errDetail = if (code !in 200..299 && code != 404) readHttpErrorDetail(conn, code) else ""
             conn.disconnect()
-            code in 200..299 || code == 404
+            if (code in 200..299 || code == 404) {
+                markConnected()
+                true
+            } else {
+                markError(errDetail)
+                false
+            }
         }.onFailure { err ->
+            markError(err.localizedMessage ?: err.javaClass.simpleName)
             android.util.Log.e("TebFirestoreSync", "deleteDocument($subCollection/$docId) failed", err)
         }.getOrDefault(false)
     }

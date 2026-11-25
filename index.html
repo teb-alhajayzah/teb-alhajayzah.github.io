@@ -18,34 +18,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js"></script>
-  <script type="module">
-    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      doc,
-      setDoc,
-      deleteDoc,
-      getDoc,
-      getDocs,
-      onSnapshot,
-      writeBatch
-    } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
-    window.__tebModularFs = {
-      initializeApp,
-      getApps,
-      getFirestore,
-      collection,
-      doc,
-      setDoc,
-      deleteDoc,
-      getDoc,
-      getDocs,
-      onSnapshot,
-      writeBatch
-    };
-    window.dispatchEvent(new CustomEvent('teb-modular-fs-ready'));
-  </script>
   <style>
     :root {
       --teal: #0D7377;
@@ -2949,7 +2921,12 @@
         isConnected: false,
         sdkHealthyCount: 0,
         fcmToken: '',
-        deletedMsgIds: {}
+        deletedMsgIds: {},
+        cloudStatus: {
+          state: 'CONNECTING', // CONNECTING | CONNECTED | ERROR
+          error: '',
+          lastSuccessAt: 0
+        }
       };
 
       function safeCloudDocId(rawId) {
@@ -3042,12 +3019,7 @@
             }
             tebCloudRuntime.firebaseApp = compatApp;
           }
-          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-          if (!mfs || typeof mfs.getFirestore !== 'function') return null;
-          const modApp = (mfs.getApps() || []).find((a) => a.name === appName) || mfs.initializeApp(fbConfig, appName);
-          tebCloudRuntime.modularApp = modApp;
-          tebCloudRuntime.firestore = mfs.getFirestore(modApp, CLOUD_DATABASE_ID);
-          return tebCloudRuntime.firestore;
+          return null; // Always use direct HTTPS REST API (never WebChannel SDK inside WebView)
         } catch (e) {
           return null;
         }
@@ -3174,11 +3146,83 @@
         }
       }
 
+      function getCloudStatusBadgeMeta() {
+        const st = (tebCloudRuntime && tebCloudRuntime.cloudStatus) || { state: 'CONNECTING', error: '' };
+        if (st.state === 'CONNECTED') {
+          return {
+            ok: true,
+            bg: '#DCFCE7',
+            border: '#16A34A',
+            color: '#14532D',
+            text: bi('🟢 متصل بالسحابة الحية', '🟢 Connected to Live Cloud')
+          };
+        }
+        if (st.state === 'ERROR') {
+          const reason = String(st.error || bi('تعذر الوصول للخادم', 'Network unreachable')).slice(0, 72);
+          return {
+            ok: false,
+            bg: '#FEE2E2',
+            border: '#DC2626',
+            color: '#991B1B',
+            text: bi('🔴 خطأ اتصال: ', '🔴 Connection Error: ') + reason
+          };
+        }
+        return {
+          ok: null,
+          bg: '#FEF3C7',
+          border: '#D97706',
+          color: '#92400E',
+          text: bi('🟡 جاري الاتصال بالسحابة الحية...', '🟡 Connecting to Live Cloud...')
+        };
+      }
+
+      function updateCloudStatusWeb(isOk, errReason) {
+        if (!tebCloudRuntime.cloudStatus) {
+          tebCloudRuntime.cloudStatus = { state: 'CONNECTING', error: '', lastSuccessAt: 0 };
+        }
+        const prevState = tebCloudRuntime.cloudStatus.state;
+        const prevErr = tebCloudRuntime.cloudStatus.error;
+        if (isOk) {
+          tebCloudRuntime.cloudStatus.state = 'CONNECTED';
+          tebCloudRuntime.cloudStatus.error = '';
+          tebCloudRuntime.cloudStatus.lastSuccessAt = Date.now();
+        } else {
+          tebCloudRuntime.cloudStatus.state = 'ERROR';
+          tebCloudRuntime.cloudStatus.error = String(errReason || 'Network Error');
+        }
+        if (prevState !== tebCloudRuntime.cloudStatus.state || prevErr !== tebCloudRuntime.cloudStatus.error) {
+          if (typeof document !== 'undefined') {
+            const badgeEl = document.getElementById('adminCloudStatusBadge');
+            if (badgeEl) {
+              const meta = getCloudStatusBadgeMeta();
+              badgeEl.textContent = meta.text;
+              badgeEl.style.background = meta.bg;
+              badgeEl.style.borderColor = meta.border;
+              badgeEl.style.color = meta.color;
+            }
+          }
+        }
+      }
+
+      async function extractRestErrorReason(resp, fallback) {
+        if (!resp) return fallback || 'No Response';
+        let detail = 'HTTP ' + resp.status;
+        try {
+          const errJson = await resp.json();
+          const msg = errJson && errJson.error && errJson.error.message ? String(errJson.error.message) : '';
+          if (msg) detail = 'HTTP ' + resp.status + ' (' + msg.slice(0, 48) + ')';
+        } catch (e) {}
+        return detail;
+      }
+
       async function upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj) {
         if (typeof fetch !== 'function') return false;
         const projectId = String((cfg && cfg.firebaseProjectId) || '').trim();
         const apiKey = String((cfg && cfg.firebaseApiKey) || '').trim();
-        if (!projectId || !apiKey) return false;
+        if (!projectId || !apiKey) {
+          updateCloudStatusWeb(false, 'Missing Firebase Config');
+          return false;
+        }
         const docPath = (subCollection === 'config' || subCollection === 'settings')
           ? (CLOUD_PATHS.settings + '/' + CLOUD_PATHS.settingsDoc)
           : (encodeURIComponent(resolveFsCollectionName(subCollection)) + '/' + encodeURIComponent(safeId));
@@ -3189,9 +3233,18 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields: toFirestoreFields(prepareDocForFirestore(payloadObj, subCollection)) })
           }, 3000);
-          return Boolean(resp && resp.ok);
+          if (resp && resp.ok) {
+            updateCloudStatusWeb(true);
+            return true;
+          }
+          const reason = await extractRestErrorReason(resp, 'PATCH failed');
+          updateCloudStatusWeb(false, reason);
+          console.error('[TebFirestoreREST] PATCH failed (' + docPath + '):', reason);
+          return false;
         } catch (err) {
-          console.error('[TebFirestore] REST upsert failed (' + docPath + '):', err);
+          const reason = (err && err.name === 'AbortError') ? 'Timeout (3000ms)' : ((err && err.message) || 'Network Error');
+          updateCloudStatusWeb(false, reason);
+          console.error('[TebFirestoreREST] REST upsert failed (' + docPath + '):', err);
           return false;
         }
       }
@@ -3205,9 +3258,17 @@
         const url = firestoreRestDocsBase(projectId) + '/' + docPath + '?key=' + encodeURIComponent(apiKey);
         try {
           const resp = await fetchWithTimeout(url, { method: 'DELETE' }, 3000);
-          return Boolean(resp && (resp.ok || resp.status === 404));
+          if (resp && (resp.ok || resp.status === 404)) {
+            updateCloudStatusWeb(true);
+            return true;
+          }
+          const reason = await extractRestErrorReason(resp, 'DELETE failed');
+          updateCloudStatusWeb(false, reason);
+          return false;
         } catch (err) {
-          console.error('[TebFirestore] REST delete failed (' + docPath + '):', err);
+          const reason = (err && err.name === 'AbortError') ? 'Timeout (3000ms)' : ((err && err.message) || 'Network Error');
+          updateCloudStatusWeb(false, reason);
+          console.error('[TebFirestoreREST] REST delete failed (' + docPath + '):', err);
           return false;
         }
       }
@@ -3222,10 +3283,21 @@
           const url = firestoreRestDocsBase(projectId) + '/' + CLOUD_PATHS.settings + '/' + CLOUD_PATHS.settingsDoc +
             '?key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
           const resp = await fetchWithTimeout(url, { cache: 'no-store' }, 3000);
-          if (!resp || !resp.ok) return null;
+          if (!resp) {
+            updateCloudStatusWeb(false, 'No Response');
+            return null;
+          }
+          if (resp.status === 404) return null;
+          if (!resp.ok) {
+            updateCloudStatusWeb(false, await extractRestErrorReason(resp, 'HTTP ' + resp.status));
+            return null;
+          }
+          updateCloudStatusWeb(true);
           const docJson = await resp.json();
           return fromFirestoreDocWeb(docJson);
-        } catch (e) {
+        } catch (err) {
+          const reason = (err && err.name === 'AbortError') ? 'Timeout (3000ms)' : ((err && err.message) || 'Network Error');
+          updateCloudStatusWeb(false, reason);
           return null;
         }
       }
@@ -3235,7 +3307,10 @@
         const c = cfg || (db && db.config) || DEFAULT_CONFIG;
         const projectId = String(c.firebaseProjectId || '').trim();
         const apiKey = String(c.firebaseApiKey || '').trim();
-        if (!projectId || !apiKey) return null;
+        if (!projectId || !apiKey) {
+          updateCloudStatusWeb(false, 'Missing Firebase Config');
+          return null;
+        }
         try {
           const results = [];
           const resolvedCol = resolveFsCollectionName(fsCol);
@@ -3247,9 +3322,18 @@
               '?pageSize=500&key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
             if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
             const resp = await fetchWithTimeout(url, { cache: 'no-store' }, 3000);
-            if (!resp) return null;
-            if (resp.status === 404) return [];
-            if (!resp.ok) return null;
+            if (!resp) {
+              updateCloudStatusWeb(false, 'No Response');
+              return null;
+            }
+            if (resp.status === 404) {
+              updateCloudStatusWeb(true);
+              return [];
+            }
+            if (!resp.ok) {
+              updateCloudStatusWeb(false, await extractRestErrorReason(resp, 'HTTP ' + resp.status));
+              return null;
+            }
             const json = await resp.json();
             const docs = Array.isArray(json.documents) ? json.documents : [];
             docs.forEach((docJson) => {
@@ -3258,8 +3342,11 @@
             });
             pageToken = json.nextPageToken ? String(json.nextPageToken) : '';
           } while (pageToken && guard < 10);
+          updateCloudStatusWeb(true);
           return results;
-        } catch (e) {
+        } catch (err) {
+          const reason = (err && err.name === 'AbortError') ? 'Timeout (3000ms)' : ((err && err.message) || 'Network Error');
+          updateCloudStatusWeb(false, reason);
           return null;
         }
       }
@@ -3269,32 +3356,10 @@
           try {
             const cfg = (db && db.config) || DEFAULT_CONFIG;
             if (!isFirebaseCloudConfigured(cfg)) return false;
-            const normalizedSub = resolveFsCollectionName(subCollection);
             const safeId = safeCloudDocId(docId);
-            const fsDb = getOrCreateFirestore(cfg);
-            const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-            if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
-              try {
-                const sdkWrite = (normalizedSub === CLOUD_PATHS.settings)
-                  ? mfs.setDoc(
-                      mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
-                      prepareDocForFirestore(payloadObj, 'settings'),
-                      { merge: true }
-                    ).then(function () { return true; })
-                  : mfs.setDoc(
-                      mfs.doc(fsDb, normalizedSub, safeId),
-                      prepareDocForFirestore(payloadObj, subCollection),
-                      { merge: true }
-                    ).then(function () { return true; });
-                const sdkOk = await withFirestoreTimeout(sdkWrite, 2000, 'sdk.setDoc(' + normalizedSub + '/' + safeId + ')');
-                if (sdkOk === true) return true;
-              } catch (sdkErr) {
-                console.error('[TebFirestore] SDK setDoc failed, falling back to REST:', sdkErr);
-              }
-            }
             return await upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj);
           } catch (e) {
-            console.error('[TebFirestore] syncDocToFirestoreNamespace failed:', e);
+            console.error('[TebFirestoreREST] syncDocToFirestoreNamespace failed:', e);
             return false;
           }
         })(), 3000, 'syncDoc(' + subCollection + '/' + docId + ')');
@@ -3334,24 +3399,9 @@
             const cfg = (db && db.config) || DEFAULT_CONFIG;
             if (!isFirebaseCloudConfigured(cfg)) return false;
             const safeId = safeCloudDocId(docId);
-            const resolvedCol = resolveFsCollectionName(subCollection);
-            const fsDb = getOrCreateFirestore(cfg);
-            const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-            if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.deleteDoc === 'function') {
-              try {
-                const sdkDelOk = await withFirestoreTimeout(
-                  mfs.deleteDoc(mfs.doc(fsDb, resolvedCol, safeId)).then(function () { return true; }),
-                  2000,
-                  'sdk.deleteDoc(' + resolvedCol + '/' + safeId + ')'
-                );
-                if (sdkDelOk === true) return true;
-              } catch (sdkErr) {
-                console.error('[TebFirestore] SDK deleteDoc failed, falling back to REST:', sdkErr);
-              }
-            }
             return await deleteDocViaRestWeb(cfg, subCollection, safeId);
           } catch (e) {
-            console.error('[TebFirestore] deleteDocFromFirestoreNamespace failed:', e);
+            console.error('[TebFirestoreREST] deleteDocFromFirestoreNamespace failed:', e);
             return false;
           }
         })(), 3000, 'deleteDoc(' + subCollection + '/' + docId + ')');
@@ -3364,32 +3414,13 @@
         });
         tebCloudRuntime.lastSettingsJson = JSON.stringify(payload);
         return await withFirestoreTimeout((async function () {
-          try {
-            const fsDb = getOrCreateFirestore(payload);
-            const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-            if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
-              const sdkOk = await withFirestoreTimeout(
-                mfs.setDoc(
-                  mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
-                  prepareDocForFirestore(payload, 'settings'),
-                  { merge: true }
-                ).then(function () { return true; }),
-                2000,
-                'sdk.pushSettings'
-              );
-              if (sdkOk === true) return true;
-            }
-          } catch (e) {
-            console.error('[TebFirestore] pushSettings SDK error:', e);
-          }
           return await upsertDocViaRestWeb(payload, 'settings', CLOUD_PATHS.settingsDoc, payload);
         })(), 3000, 'pushSettings');
       }
 
-      async function pushCollectionChangesToFirestore(fsDb, colDef, itemsArr) {
+      async function pushCollectionChangesToFirestore(_fsDb, colDef, itemsArr) {
         const cfg = (db && db.config) || DEFAULT_CONFIG;
         const fsCol = colDef.fsCollection;
-        const resolvedCol = resolveFsCollectionName(fsCol);
         const prevMap = tebCloudRuntime.lastCloudMap[fsCol] || {};
         const nextMap = {};
         const ops = [];
@@ -3415,35 +3446,14 @@
         tebCloudRuntime.lastCloudMap[fsCol] = nextMap;
         if (ops.length === 0) return;
 
-        const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-        if (fsDb && mfs && typeof mfs.writeBatch === 'function' && typeof mfs.doc === 'function') {
-          try {
-            const batchOk = await withFirestoreTimeout((async function () {
-              for (let i = 0; i < ops.length; i += 350) {
-                const chunk = ops.slice(i, i + 350);
-                const batch = mfs.writeBatch(fsDb);
-                chunk.forEach((op) => {
-                  const ref = mfs.doc(fsDb, resolvedCol, op.docId);
-                  if (op.type === 'delete') batch.delete(ref);
-                  else batch.set(ref, op.data, { merge: true });
-                });
-                await batch.commit();
-              }
-              return true;
-            })(), 3000, 'sdk.writeBatch(' + resolvedCol + ')');
-            if (batchOk === true) return;
-          } catch (sdkErr) {
-            console.error('[TebFirestore] batch commit error, falling back to REST:', sdkErr);
-          }
-        }
-
-        for (let i = 0; i < ops.length; i++) {
-          const op = ops[i];
-          if (op.type === 'delete') {
-            await deleteDocViaRestWeb(cfg, fsCol, op.docId);
-          } else {
-            await upsertDocViaRestWeb(cfg, fsCol, op.docId, op.data);
-          }
+        for (let i = 0; i < ops.length; i += 6) {
+          const chunk = ops.slice(i, i + 6);
+          await Promise.all(chunk.map(function (op) {
+            if (op.type === 'delete') {
+              return deleteDocViaRestWeb(cfg, fsCol, op.docId);
+            }
+            return upsertDocViaRestWeb(cfg, fsCol, op.docId, op.data);
+          }));
         }
       }
 
@@ -3732,8 +3742,17 @@
         if (tebCloudRuntime.restPollTimer) return;
         tebCloudRuntime.restPollTimer = setInterval(function () {
           if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-          pullCloudStateViaRestWeb(['accounts', 'family_members', 'messages', 'notifications', 'slots', 'doctors', 'labs']);
-        }, 12000);
+          pullCloudStateViaRestWeb([
+            'accounts',
+            'family_members',
+            'messages',
+            'notifications',
+            'slots',
+            'doctors',
+            'labs',
+            'family_link_requests'
+          ]);
+        }, 4000);
       }
 
       function stopRealtimeCloudSync() {
@@ -3752,77 +3771,22 @@
 
       function startRealtimeCloudSync() {
         const cfg = (db && db.config) || DEFAULT_CONFIG;
-        if (!isFirebaseCloudConfigured(cfg)) return;
+        if (!isFirebaseCloudConfigured(cfg)) {
+          updateCloudStatusWeb(false, 'Firebase Config Incomplete');
+          return;
+        }
 
-        const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-        const hasSdkReady = Boolean(mfs && typeof mfs.onSnapshot === 'function');
-        const sig = getCloudConfigSig(cfg) + '|' + (hasSdkReady ? 'SDK' : 'REST');
+        const sig = getCloudConfigSig(cfg) + '|REST_4S';
         if (tebCloudRuntime.isConnected && tebCloudRuntime.activeConfigSig === sig) return;
 
         stopRealtimeCloudSync();
         tebCloudRuntime.activeConfigSig = sig;
         tebCloudRuntime.isConnected = true;
+        getOrCreateFirestore(cfg);
 
-        // Always perform an immediate REST hydration so devices see live data right away even before WebChannel connects
+        // Pure direct HTTPS REST API sync (immune to WebChannel hang inside Android WebView)
         pullCloudStateViaRestWeb();
-
-        const fsDb = getOrCreateFirestore(cfg);
-        if (!fsDb || !hasSdkReady) {
-          ensureRestFallbackPollingLoop();
-          return;
-        }
-
-        try {
-          // 1. Real-time sync for teb_alhajayzah_settings/settings across all devices (Named DB)
-          const settingsRef = mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc);
-          const unsubSettings = mfs.onSnapshot(settingsRef, function (docSnap) {
-            if (!docSnap || !docSnap.exists()) {
-              pushSettingsToCloudNow(db.config).catch(function () {});
-              return;
-            }
-            if (docSnap.metadata && docSnap.metadata.hasPendingWrites) return;
-            applyRemoteSettingsObject(docSnap.data() || {});
-          }, function () {
-            ensureRestFallbackPollingLoop();
-          });
-          tebCloudRuntime.unsubscribers.push(unsubSettings);
-
-          // 2. Real-time sync for all isolated flat teb_alhajayzah_* collections
-          CLOUD_SYNC_COLLECTIONS.forEach(function (colDef) {
-            const fsCol = colDef.fsCollection;
-            const resolvedCol = resolveFsCollectionName(fsCol);
-            const colRef = mfs.collection(fsDb, resolvedCol);
-            const unsubCol = mfs.onSnapshot(colRef, function (snap) {
-              if (!snap) return;
-              if (snap.metadata && snap.metadata.hasPendingWrites) return;
-              tebCloudRuntime.sdkHealthyCount += 1;
-              const rawDocs = snap.docs.map(function (d) {
-                const raw = d.data() || {};
-                raw._docId = d.id;
-                return raw;
-              });
-              applyRemoteCollectionItems(colDef, rawDocs, fsDb);
-            }, function () {
-              ensureRestFallbackPollingLoop();
-            });
-            tebCloudRuntime.unsubscribers.push(unsubCol);
-          });
-
-          // Safety backup check: if SDK snapshots haven't fired within 5s (e.g. blocked WebChannel), start REST polling
-          setTimeout(function () {
-            if (tebCloudRuntime.sdkHealthyCount === 0) {
-              ensureRestFallbackPollingLoop();
-            }
-          }, 5000);
-        } catch (e) {
-          ensureRestFallbackPollingLoop();
-        }
-      }
-
-      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-        window.addEventListener('teb-modular-fs-ready', function () {
-          try { startRealtimeCloudSync(); } catch (e) {}
-        });
+        ensureRestFallbackPollingLoop();
       }
 
       function saveState(nextState, opts) {
@@ -4335,7 +4299,7 @@
         labTargetMemberId: '',
         labTargetAccountPhone: '',
         isAdminLoggedIn: persistedAdminSession,
-        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | USERS | BOOKINGS | MESSAGES | SETTINGS | FAMILY_LINKS
+        adminTab: 'CLINICS', // CLINICS | HOSPITAL | LABS | OTP_VERIFY | USERS | BOOKINGS | MESSAGES | SETTINGS | FAMILY_LINKS
         adminSearchQuery: '',
         adminUsersQuery: '',
         adminUsersFilter: 'ALL', // ALL | VERIFIED | UNVERIFIED
@@ -8383,7 +8347,7 @@
                   '</div>'
                 ).join(''))
           );
-        } else if (ui.adminTab === 'USERS') {
+        } else if (ui.adminTab === 'USERS' || ui.adminTab === 'OTP_VERIFY') {
           const allUsers = (db.accounts || []).slice().sort((a, b) => {
             const av = a.isPhoneVerified !== false ? 1 : 0;
             const bv = b.isPhoneVerified !== false ? 1 : 0;
@@ -8392,10 +8356,13 @@
           });
           const uq = (ui.adminUsersQuery || '').trim().toLowerCase();
           const uqDigits = normalizePhoneDigits(uq);
+          const effectiveFilter = ui.adminTab === 'OTP_VERIFY' && ui.adminUsersFilter === 'ALL'
+            ? 'ALL'
+            : ui.adminUsersFilter;
           const filteredUsers = allUsers.filter((acc) => {
             const isVer = acc.isPhoneVerified !== false;
-            if (ui.adminUsersFilter === 'VERIFIED' && !isVer) return false;
-            if (ui.adminUsersFilter === 'UNVERIFIED' && isVer) return false;
+            if (effectiveFilter === 'VERIFIED' && !isVer) return false;
+            if (effectiveFilter === 'UNVERIFIED' && isVer) return false;
             if (!uq) return true;
             const famNames = (db.familyMembers || [])
               .filter((m) => m.accountId === acc.id)
@@ -8411,20 +8378,21 @@
 
           const usersInner =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
-              '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('يظهر العملاء بانتظار التوثيق في الأعلى مع أزرار كود التفعيل OTP والتوثيق الفوري والمراسلة/التحذير.', 'Unverified accounts appear first with OTP controls, 1-click verification, and direct messaging/warning.')) + '</div>' +
-              '<div style="display:flex;gap:6px;">' +
+              '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('تحديث سحابي حي كل 4 ثوانٍ — يظهر العملاء بانتظار التوثيق في الأعلى مع كود OTP والتوثيق الفوري بدون كود.', 'Live REST cloud sync every 4s — Unverified accounts appear first with 24h OTP codes & 1-click instant verification.')) + '</div>' +
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
                 '<span class="badge badge-avail">' + esc(bi('موثق: ', 'Verified: ')) + verifiedTotal + '</span>' +
-                '<span class="badge badge-booked">' + esc(bi('بانتظار التوثيق: ', 'Pending Verification: ')) + unverifiedTotal + '</span>' +
+                '<span class="badge badge-booked">' + esc(bi('غير موثق: ', 'Unverified: ')) + unverifiedTotal + '</span>' +
+                '<button class="btn btn-outline" type="button" data-admin-refresh-now="1" style="min-height:34px;padding:4px 10px;font-size:0.8rem;">🔄 ' + esc(bi('تحديث فوري الآن', 'Refresh Now')) + '</button>' +
               '</div>' +
             '</div>' +
             '<input class="input" id="adminUsersSearch" value="' + esc(ui.adminUsersQuery || '') + '" placeholder="' + esc(bi('ابحث بالاسم أو رقم الهاتف أو فرد العائلة...', 'Search by name, phone, or family member...')) + '" />' +
             '<div class="chips-row" style="padding:0;">' +
               '<button class="chip ' + (ui.adminUsersFilter === 'ALL' ? 'active' : '') + '" type="button" data-admin-users-filter="ALL">' + esc(bi('الكل (' + allUsers.length + ')', 'All (' + allUsers.length + ')')) + '</button>' +
-              '<button class="chip ' + (ui.adminUsersFilter === 'UNVERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="UNVERIFIED">⚠️ ' + esc(bi('بانتظار التوثيق (' + unverifiedTotal + ')', 'Pending (' + unverifiedTotal + ')')) + '</button>' +
-              '<button class="chip ' + (ui.adminUsersFilter === 'VERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="VERIFIED">✓ ' + esc(bi('موثق (' + verifiedTotal + ')', 'Verified (' + verifiedTotal + ')')) + '</button>' +
+              '<button class="chip ' + (ui.adminUsersFilter === 'UNVERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="UNVERIFIED">⚠️ ' + esc(bi('غير موثق (' + unverifiedTotal + ')', 'Unverified (' + unverifiedTotal + ')')) + '</button>' +
+              '<button class="chip ' + (ui.adminUsersFilter === 'VERIFIED' ? 'active' : '') + '" type="button" data-admin-users-filter="VERIFIED">✅ ' + esc(bi('موثق (' + verifiedTotal + ')', 'Verified (' + verifiedTotal + ')')) + '</button>' +
             '</div>' +
             (filteredUsers.length === 0
-              ? '<div style="text-align:center;color:var(--text-muted);padding:10px;">' + esc(bi('لا يوجد عملاء مسجلون أو مطابقون للبحث.', 'No registered users match your filter.')) + '</div>'
+              ? '<div style="text-align:center;color:var(--text-muted);padding:10px;">' + esc(bi('لا يوجد عملاء مسجلون أو مطابقون للبحث في السحابة الحية حتى الآن.', 'No registered users match your filter in live cloud yet.')) + '</div>'
               : '<div style="display:flex;flex-direction:column;gap:10px;">' +
                   filteredUsers.map((acc) => {
                     const isVer = acc.isPhoneVerified !== false;
@@ -8444,41 +8412,50 @@
                           '<div style="font-size:0.8rem;color:var(--teal-text);margin-top:3px;">👨‍👩‍👧 ' + esc(bi('أفراد الأسرة: ', 'Family: ')) + famSummary + '</div>' +
                         '</div>' +
                         (!isVer
-                          ? '<span class="badge" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;font-weight:800;">' + esc(bi('⚠️ بانتظار التوثيق', '⚠️ Pending Verification')) + '</span>'
-                          : '<span class="badge badge-avail">' + esc(bi('موثق ✓ — ' + verSource, 'Verified ✓ — ' + verSource)) + '</span>') +
+                          ? '<span class="badge" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;font-weight:800;">' + esc(bi('⚠️ غير موثق', '⚠️ Unverified')) + '</span>'
+                          : '<span class="badge badge-avail">' + esc(bi('✅ موثق — ' + verSource, '✅ Verified — ' + verSource)) + '</span>') +
                       '</div>' +
                       (!isVer
                         ? '<div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;">' +
                             '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
                               '<div>' +
-                                '<div style="font-size:0.78rem;color:var(--warn-text);font-weight:700;">🔑 ' + esc(bi('كود التفعيل الخاص بالعميل (صالح 24 ساعة):', 'Customer Activation OTP (24h):')) + '</div>' +
-                                '<strong dir="ltr" style="font-size:1.25rem;letter-spacing:3px;color:var(--teal-text);">' + esc(acc.otpCode || '------') + '</strong>' +
+                                '<div style="font-size:0.78rem;color:var(--warn-text);font-weight:700;">🔑 ' + esc(bi('كود OTP العشوائي (6 أرقام - صالح 24 ساعة):', 'Random 6-Digit OTP (Valid 24h):')) + '</div>' +
+                                '<strong dir="ltr" style="font-size:1.35rem;letter-spacing:4px;color:var(--teal-text);">' + esc(acc.otpCode || '------') + '</strong>' +
                                 '<div style="font-size:0.76rem;color:' + (otpExpired ? '#B91C1C' : '#15803D') + ';font-weight:700;">' + (otpExpired ? '⏰ ' : '⏳ ') + esc(otpRemLabel) + '</div>' +
                               '</div>' +
                               '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-                                '<button class="btn btn-outline" type="button" data-admin-regen-otp="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;background:#fff;">🔑 ' + esc(bi('عرض / توليد كود OTP (24 ساعة)', 'Show / Regen 24h OTP')) + '</button>' +
-                                '<button class="btn btn-blue" type="button" data-admin-copy-otp="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">📋 ' + esc(bi('نسخ الكود ورسالة التفعيل', 'Copy Code & Message')) + '</button>' +
+                                '<button class="btn btn-blue" type="button" data-admin-copy-otp="' + esc(acc.id) + '" style="min-height:40px;padding:6px 12px;font-size:0.82rem;">📋 ' + esc(bi('نسخ الكود ورسالة الواتساب', 'Copy Code & WhatsApp Msg')) + '</button>' +
+                                '<button class="btn btn-outline" type="button" data-admin-regen-otp="' + esc(acc.id) + '" style="min-height:40px;padding:6px 12px;font-size:0.82rem;background:#fff;">🔄 ' + esc(bi('توليد كود جديد (24 ساعة)', 'Generate New Code (24h)')) + '</button>' +
                               '</div>' +
                             '</div>' +
                           '</div>'
                         : '') +
                       '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
                         (!isVer
-                          ? '<button class="btn btn-green" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="flex:1;min-height:42px;">✅ ' + esc(bi('توثيق أوتوماتيك فوراً (بدون OTP)', 'Verify Now (No OTP)')) + '</button>'
+                          ? '<button class="btn btn-green" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="flex:1;min-height:42px;">✅ ' + esc(bi('توثيق أوتوماتيك فوراً (بدون كود)', 'Verify Automatically Now (No Code)')) + '</button>'
                           : '<button class="btn btn-outline" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">' + esc(bi('إلغاء التفعيل', 'Unverify')) + '</button>') +
-                        '<button class="btn btn-warn" type="button" data-admin-chat-user="' + esc(acc.id) + '" style="flex:1;min-height:42px;">💬 ' + esc(bi('مراسلة / ⚠️ إرسال تحذير إداري', 'Chat / ⚠️ Send Warning')) + '</button>' +
+                        '<button class="btn btn-warn" type="button" data-admin-chat-user="' + esc(acc.id) + '" style="flex:1;min-height:42px;">💬 ' + esc(bi('مراسلة / ⚠️ تحذير إداري', 'Message / ⚠️ Admin Warning')) + '</button>' +
                         '<button class="btn btn-outline" type="button" data-admin-edit-user="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">✏️ ' + esc(bi('تعديل', 'Edit')) + '</button>' +
                         '<button class="btn btn-danger-outline" type="button" data-admin-delete-user="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">🗑️ ' + esc(bi('حذف', 'Delete')) + '</button>' +
                       '</div>' +
                     '</div>';
                   }).join('') +
                 '</div>');
-          tabBodyHtml = renderAdminAccordionHtml(
-            'usersList',
-            bi('👥 قائمة العملاء والمشتركين (' + allUsers.length + ')', '👥 Registered Users & Patients (' + allUsers.length + ')'),
-            bi('موثق: ' + verifiedTotal + ' • بانتظار التوثيق: ' + unverifiedTotal, 'Verified: ' + verifiedTotal + ' • Pending: ' + unverifiedTotal),
-            usersInner
-          );
+          if (ui.adminTab === 'OTP_VERIFY') {
+            tabBodyHtml = '<section class="card" style="display:flex;flex-direction:column;gap:10px;border:1.5px solid var(--teal);">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+                '<h3 style="margin:0;color:var(--teal-text);">🔑 ' + esc(bi('مركز التوثيق الفوري وأكواد OTP للعملاء (' + unverifiedTotal + ' غير موثق)', 'Live OTP & Customer Verification Center (' + unverifiedTotal + ' unverified)')) + '</h3>' +
+              '</div>' +
+              usersInner +
+            '</section>';
+          } else {
+            tabBodyHtml = renderAdminAccordionHtml(
+              'usersList',
+              bi('👥 قائمة العملاء والمشتركين (' + allUsers.length + ')', '👥 Registered Users & Patients (' + allUsers.length + ')'),
+              bi('موثق: ' + verifiedTotal + ' • غير موثق: ' + unverifiedTotal, 'Verified: ' + verifiedTotal + ' • Unverified: ' + unverifiedTotal),
+              usersInner
+            );
+          }
         } else if (ui.adminTab === 'MESSAGES') {
           const globalEnabled = db.config.globalChatEnabled !== false;
           const allThreadsMap = {};
@@ -8805,6 +8782,8 @@
         }
 
         const unreadAdminInbox = getUnreadSupportInboxForAdmin();
+        const unverifiedUsersCount = (db.accounts || []).filter((a) => a && a.isPhoneVerified === false).length;
+        const cloudBadgeMeta = getCloudStatusBadgeMeta();
         const visitorStats = computeVisitorStats(db.visitorHits || []);
 
         return '<section class="hero-card">' +
@@ -8814,7 +8793,11 @@
                 '<h2 style="font-size:1.35rem;margin-top:6px;">' + esc(bi('مرحباً بك، ' + (db.config.adminOwnerName || 'المدير العام'), 'Welcome, ' + (db.config.adminOwnerName && db.config.adminOwnerName !== 'المدير العام' ? db.config.adminOwnerName : 'General Manager'))) + '</h2>' +
                 '<div style="opacity:0.92;font-size:0.9rem;">' + esc(bi('الإدارة العامة لمنصة طب الحجايزة — تحكم كامل في الأطباء، المستشفى، معامل التحاليل، العملاء، الحجوزات، الرسائل، والإعدادات.', 'General Administration — Teb Al-Hajayzah Platform: full control over clinics, hospital, labs, users, bookings & settings.')) + '</div>' +
               '</div>' +
-              '<button class="btn" id="btnAdminLogout" type="button" style="background:#fff;color:var(--teal);min-height:40px;">🚪 ' + esc(bi('خروج وتأمين', 'Lock & Exit')) + '</button>' +
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+                '<span id="adminCloudStatusBadge" class="badge" style="background:' + cloudBadgeMeta.bg + ';border:1.5px solid ' + cloudBadgeMeta.border + ';color:' + cloudBadgeMeta.color + ';padding:6px 12px;border-radius:999px;font-weight:800;font-size:0.8rem;">' + esc(cloudBadgeMeta.text) + '</span>' +
+                '<button class="btn" id="btnAdminRefreshCloudNow" type="button" style="background:rgba(255,255,255,0.18);color:#fff;border:1px solid rgba(255,255,255,0.45);min-height:40px;padding:6px 12px;">🔄 ' + esc(bi('تحديث فوري الآن', 'Refresh Now')) + '</button>' +
+                '<button class="btn" id="btnAdminLogout" type="button" style="background:#fff;color:var(--teal);min-height:40px;">🚪 ' + esc(bi('خروج وتأمين', 'Lock & Exit')) + '</button>' +
+              '</div>' +
             '</div>' +
           '</section>' +
 
@@ -8822,7 +8805,8 @@
             '<button class="chip ' + (ui.adminTab === 'CLINICS' ? 'active' : '') + '" type="button" data-admin-tab="CLINICS">🩺 ' + esc(bi('الأطباء والعيادات', 'Clinics & Doctors')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'HOSPITAL' ? 'active' : '') + '" type="button" data-admin-tab="HOSPITAL">🏥 ' + esc(bi('المستشفى والأقسام', 'Hospital Depts')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'LABS' ? 'active' : '') + '" type="button" data-admin-tab="LABS">🧪 ' + esc(bi('إدارة معامل التحاليل', 'Medical Labs')) + '</button>' +
-            '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين (Users)', 'Users List')) + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'OTP_VERIFY' ? 'active' : '') + '" type="button" data-admin-tab="OTP_VERIFY">🔑 ' + esc(bi('التوثيق وأكواد OTP', 'Verification & OTP')) + (unverifiedUsersCount > 0 ? ' <span class="badge" style="background:#DC2626;color:#fff;padding:2px 7px;border-radius:999px;font-size:0.74rem;font-weight:800;">' + unverifiedUsersCount + '</span>' : '') + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين (Users)', 'Users List')) + (unverifiedUsersCount > 0 ? ' (' + unverifiedUsersCount + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'FAMILY_LINKS' ? 'active' : '') + '" type="button" data-admin-tab="FAMILY_LINKS">👨‍👩‍👧‍👦 ' + esc(bi('طلبات ربط الأسرة', 'Family Links')) + (pendingFamLinkCount > 0 ? ' (' + pendingFamLinkCount + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-admin-tab="MESSAGES">📩 ' + esc(bi('الرسائل والدعم الفني', 'Messages & Support')) + (unreadAdminInbox > 0 ? ' <span class="badge" style="background:#DC2626;color:#fff;padding:2px 7px;border-radius:999px;font-size:0.74rem;font-weight:800;">' + unreadAdminInbox + '</span>' : '') + '</button>' +
@@ -12182,10 +12166,29 @@
           btn.onclick = function () {
             ui.adminTab = btn.getAttribute('data-admin-tab');
             renderApp();
-            if (ui.adminTab === 'USERS' || ui.adminTab === 'MESSAGES' || ui.adminTab === 'OVERVIEW') {
-              pullCloudStateViaRestWeb(['accounts', 'family_members', 'messages', 'notifications']);
+            if (ui.adminTab === 'USERS' || ui.adminTab === 'OTP_VERIFY' || ui.adminTab === 'MESSAGES' || ui.adminTab === 'FAMILY_LINKS' || ui.adminTab === 'OVERVIEW') {
+              pullCloudStateViaRestWeb(['accounts', 'family_members', 'messages', 'notifications', 'family_link_requests']);
             }
           };
+        });
+
+        async function triggerManualCloudRefreshWeb() {
+          showToast(bi('🔄 جاري تحديث البيانات من السحابة الحية...', '🔄 Syncing from Live Cloud...'), 1800);
+          await pullCloudStateViaRestWeb();
+          renderApp();
+          const st = (tebCloudRuntime && tebCloudRuntime.cloudStatus) || {};
+          if (st.state === 'CONNECTED') {
+            showToast(bi('🟢 تم التحديث من السحابة الحية بنجاح', '🟢 Live Cloud sync completed'), 2200);
+          } else {
+            showToast(bi('🔴 تعذر الاتصال: ', '🔴 Connection error: ') + (st.error || ''), 3200);
+          }
+        }
+        const topRefreshBtn = document.getElementById('btnAdminRefreshCloudNow');
+        if (topRefreshBtn) {
+          topRefreshBtn.onclick = triggerManualCloudRefreshWeb;
+        }
+        document.querySelectorAll('[data-admin-refresh-now]').forEach((btn) => {
+          btn.onclick = triggerManualCloudRefreshWeb;
         });
 
         const addPrivBtn = document.getElementById('btnAdminAddPrivateDoctor');

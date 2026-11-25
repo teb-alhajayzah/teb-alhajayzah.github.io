@@ -1725,6 +1725,8 @@ class TebRepository(
         }
     }
 
+    val cloudConnectionStatusFlow = FirestoreCloudSyncService.cloudStatusFlow
+
     suspend fun syncWithCloudFirestoreOnce(): Boolean {
         if (!FirestoreCloudSyncService.isCloudNetworkAllowed()) return false
         return cloudSyncMutex.withLock {
