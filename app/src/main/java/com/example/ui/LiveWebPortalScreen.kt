@@ -23,6 +23,8 @@ import com.example.BuildConfig
 import com.example.ai.GeminiMedicalAnalyzer
 import com.example.util.ImageStorageHelper
 import com.example.util.TebNotificationHelper
+import com.example.util.TebFcmService
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
