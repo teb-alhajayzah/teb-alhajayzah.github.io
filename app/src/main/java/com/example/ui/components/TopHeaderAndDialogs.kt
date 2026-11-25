@@ -1337,8 +1337,10 @@ fun AccountAndFamilyDialog(
                                     .fillMaxWidth()
                                     .testTag("reg_password_input"),
                             )
+                            var isCreatingAccount by remember { mutableStateOf(false) }
                             Button(
                                 onClick = {
+                                    if (isCreatingAccount) return@Button
                                     if (regPassword.length < 4) {
                                         onShowMessage(
                                             bi(
@@ -1348,16 +1350,28 @@ fun AccountAndFamilyDialog(
                                             )
                                         )
                                     } else {
-                                        onRegister(regName, regPhone, regNationalId, regPassword)
-                                        selectedTab = 0
+                                        isCreatingAccount = true
+                                        try {
+                                            onRegister(regName, regPhone, regNationalId, regPassword)
+                                            selectedTab = 0
+                                        } finally {
+                                            isCreatingAccount = false
+                                        }
                                     }
                                 },
+                                enabled = !isCreatingAccount,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(50.dp)
                                     .testTag("reg_submit_button"),
                             ) {
-                                Text(bi(isEn, "إنشاء الحساب والمتابعة للتفعيل (OTP)", "Create Account & Activate (OTP)"))
+                                Text(
+                                    if (isCreatingAccount) {
+                                        bi(isEn, "⏳ جاري إنشاء حسابك...", "⏳ Creating your account...")
+                                    } else {
+                                        bi(isEn, "إنشاء الحساب والمتابعة للتفعيل (OTP)", "Create Account & Activate (OTP)")
+                                    }
+                                )
                             }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

@@ -3137,6 +3137,43 @@
           '/databases/' + encodeURIComponent(CLOUD_DATABASE_ID) + '/documents';
       }
 
+      function withFirestoreTimeout(promise, timeoutMs, contextLabel) {
+        const ms = Number(timeoutMs) > 0 ? Number(timeoutMs) : 3000;
+        let timerId = null;
+        const timeoutPromise = new Promise(function (resolve) {
+          timerId = setTimeout(function () {
+            console.warn('[TebFirestore] Timeout (' + ms + 'ms) on ' + (contextLabel || 'operation'));
+            resolve(false);
+          }, ms);
+        });
+        return Promise.race([
+          Promise.resolve(promise).catch(function (err) {
+            console.error('[TebFirestore] Error on ' + (contextLabel || 'operation') + ':', err);
+            return false;
+          }),
+          timeoutPromise
+        ]).finally(function () {
+          if (timerId !== null) clearTimeout(timerId);
+        });
+      }
+
+      async function fetchWithTimeout(url, options, timeoutMs) {
+        const ms = Number(timeoutMs) > 0 ? Number(timeoutMs) : 3000;
+        if (typeof AbortController === 'undefined') {
+          return await fetch(url, options);
+        }
+        const controller = new AbortController();
+        const timerId = setTimeout(function () {
+          try { controller.abort(); } catch (e) {}
+        }, ms);
+        try {
+          const mergedOpts = Object.assign({}, options || {}, { signal: controller.signal });
+          return await fetch(url, mergedOpts);
+        } finally {
+          clearTimeout(timerId);
+        }
+      }
+
       async function upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj) {
         if (typeof fetch !== 'function') return false;
         const projectId = String((cfg && cfg.firebaseProjectId) || '').trim();
@@ -3146,12 +3183,17 @@
           ? (CLOUD_PATHS.settings + '/' + CLOUD_PATHS.settingsDoc)
           : (encodeURIComponent(resolveFsCollectionName(subCollection)) + '/' + encodeURIComponent(safeId));
         const url = firestoreRestDocsBase(projectId) + '/' + docPath + '?key=' + encodeURIComponent(apiKey);
-        const resp = await fetch(url, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: toFirestoreFields(prepareDocForFirestore(payloadObj, subCollection)) })
-        });
-        return Boolean(resp && resp.ok);
+        try {
+          const resp = await fetchWithTimeout(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: toFirestoreFields(prepareDocForFirestore(payloadObj, subCollection)) })
+          }, 3000);
+          return Boolean(resp && resp.ok);
+        } catch (err) {
+          console.error('[TebFirestore] REST upsert failed (' + docPath + '):', err);
+          return false;
+        }
       }
 
       async function deleteDocViaRestWeb(cfg, subCollection, safeId) {
@@ -3161,8 +3203,13 @@
         if (!projectId || !apiKey) return false;
         const docPath = encodeURIComponent(resolveFsCollectionName(subCollection)) + '/' + encodeURIComponent(safeId);
         const url = firestoreRestDocsBase(projectId) + '/' + docPath + '?key=' + encodeURIComponent(apiKey);
-        const resp = await fetch(url, { method: 'DELETE' });
-        return Boolean(resp && (resp.ok || resp.status === 404));
+        try {
+          const resp = await fetchWithTimeout(url, { method: 'DELETE' }, 3000);
+          return Boolean(resp && (resp.ok || resp.status === 404));
+        } catch (err) {
+          console.error('[TebFirestore] REST delete failed (' + docPath + '):', err);
+          return false;
+        }
       }
 
       async function fetchSettingsViaRestWeb(cfg) {
@@ -3174,7 +3221,7 @@
         try {
           const url = firestoreRestDocsBase(projectId) + '/' + CLOUD_PATHS.settings + '/' + CLOUD_PATHS.settingsDoc +
             '?key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
-          const resp = await fetch(url, { cache: 'no-store' });
+          const resp = await fetchWithTimeout(url, { cache: 'no-store' }, 3000);
           if (!resp || !resp.ok) return null;
           const docJson = await resp.json();
           return fromFirestoreDocWeb(docJson);
@@ -3199,7 +3246,7 @@
             let url = firestoreRestDocsBase(projectId) + '/' + encodeURIComponent(resolvedCol) +
               '?pageSize=500&key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
             if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
-            const resp = await fetch(url, { cache: 'no-store' });
+            const resp = await fetchWithTimeout(url, { cache: 'no-store' }, 3000);
             if (!resp) return null;
             if (resp.status === 404) return [];
             if (!resp.ok) return null;
@@ -3218,35 +3265,39 @@
       }
 
       async function syncDocToFirestoreNamespace(subCollection, docId, payloadObj) {
-        try {
-          const cfg = (db && db.config) || DEFAULT_CONFIG;
-          if (!isFirebaseCloudConfigured(cfg)) return false;
-          const normalizedSub = resolveFsCollectionName(subCollection);
-          const safeId = safeCloudDocId(docId);
-          const fsDb = getOrCreateFirestore(cfg);
-          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-          if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
-            try {
-              if (normalizedSub === CLOUD_PATHS.settings) {
-                await mfs.setDoc(
-                  mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
-                  prepareDocForFirestore(payloadObj, 'settings'),
-                  { merge: true }
-                );
-              } else {
-                await mfs.setDoc(
-                  mfs.doc(fsDb, normalizedSub, safeId),
-                  prepareDocForFirestore(payloadObj, subCollection),
-                  { merge: true }
-                );
+        return await withFirestoreTimeout((async function () {
+          try {
+            const cfg = (db && db.config) || DEFAULT_CONFIG;
+            if (!isFirebaseCloudConfigured(cfg)) return false;
+            const normalizedSub = resolveFsCollectionName(subCollection);
+            const safeId = safeCloudDocId(docId);
+            const fsDb = getOrCreateFirestore(cfg);
+            const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+            if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
+              try {
+                const sdkWrite = (normalizedSub === CLOUD_PATHS.settings)
+                  ? mfs.setDoc(
+                      mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
+                      prepareDocForFirestore(payloadObj, 'settings'),
+                      { merge: true }
+                    ).then(function () { return true; })
+                  : mfs.setDoc(
+                      mfs.doc(fsDb, normalizedSub, safeId),
+                      prepareDocForFirestore(payloadObj, subCollection),
+                      { merge: true }
+                    ).then(function () { return true; });
+                const sdkOk = await withFirestoreTimeout(sdkWrite, 2000, 'sdk.setDoc(' + normalizedSub + '/' + safeId + ')');
+                if (sdkOk === true) return true;
+              } catch (sdkErr) {
+                console.error('[TebFirestore] SDK setDoc failed, falling back to REST:', sdkErr);
               }
-              return true;
-            } catch (sdkErr) { /* fall through to REST PATCH */ }
+            }
+            return await upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj);
+          } catch (e) {
+            console.error('[TebFirestore] syncDocToFirestoreNamespace failed:', e);
+            return false;
           }
-          return await upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj);
-        } catch (e) {
-          return false;
-        }
+        })(), 3000, 'syncDoc(' + subCollection + '/' + docId + ')');
       }
 
       function syncAccountToCloudNow(acc) {
@@ -3278,23 +3329,32 @@
       }
 
       async function deleteDocFromFirestoreNamespace(subCollection, docId) {
-        try {
-          const cfg = (db && db.config) || DEFAULT_CONFIG;
-          if (!isFirebaseCloudConfigured(cfg)) return false;
-          const safeId = safeCloudDocId(docId);
-          const resolvedCol = resolveFsCollectionName(subCollection);
-          const fsDb = getOrCreateFirestore(cfg);
-          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-          if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.deleteDoc === 'function') {
-            try {
-              await mfs.deleteDoc(mfs.doc(fsDb, resolvedCol, safeId));
-              return true;
-            } catch (sdkErr) { /* fall through to REST DELETE */ }
+        return await withFirestoreTimeout((async function () {
+          try {
+            const cfg = (db && db.config) || DEFAULT_CONFIG;
+            if (!isFirebaseCloudConfigured(cfg)) return false;
+            const safeId = safeCloudDocId(docId);
+            const resolvedCol = resolveFsCollectionName(subCollection);
+            const fsDb = getOrCreateFirestore(cfg);
+            const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+            if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.deleteDoc === 'function') {
+              try {
+                const sdkDelOk = await withFirestoreTimeout(
+                  mfs.deleteDoc(mfs.doc(fsDb, resolvedCol, safeId)).then(function () { return true; }),
+                  2000,
+                  'sdk.deleteDoc(' + resolvedCol + '/' + safeId + ')'
+                );
+                if (sdkDelOk === true) return true;
+              } catch (sdkErr) {
+                console.error('[TebFirestore] SDK deleteDoc failed, falling back to REST:', sdkErr);
+              }
+            }
+            return await deleteDocViaRestWeb(cfg, subCollection, safeId);
+          } catch (e) {
+            console.error('[TebFirestore] deleteDocFromFirestoreNamespace failed:', e);
+            return false;
           }
-          return await deleteDocViaRestWeb(cfg, subCollection, safeId);
-        } catch (e) {
-          return false;
-        }
+        })(), 3000, 'deleteDoc(' + subCollection + '/' + docId + ')');
       }
 
       async function pushSettingsToCloudNow(configObj) {
@@ -3303,19 +3363,27 @@
           updatedAtMillis: Date.now()
         });
         tebCloudRuntime.lastSettingsJson = JSON.stringify(payload);
-        try {
-          const fsDb = getOrCreateFirestore(payload);
-          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
-          if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
-            await mfs.setDoc(
-              mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
-              prepareDocForFirestore(payload, 'settings'),
-              { merge: true }
-            );
-            return true;
+        return await withFirestoreTimeout((async function () {
+          try {
+            const fsDb = getOrCreateFirestore(payload);
+            const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+            if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
+              const sdkOk = await withFirestoreTimeout(
+                mfs.setDoc(
+                  mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
+                  prepareDocForFirestore(payload, 'settings'),
+                  { merge: true }
+                ).then(function () { return true; }),
+                2000,
+                'sdk.pushSettings'
+              );
+              if (sdkOk === true) return true;
+            }
+          } catch (e) {
+            console.error('[TebFirestore] pushSettings SDK error:', e);
           }
-        } catch (e) { /* fallback to REST */ }
-        return await upsertDocViaRestWeb(payload, 'settings', CLOUD_PATHS.settingsDoc, payload);
+          return await upsertDocViaRestWeb(payload, 'settings', CLOUD_PATHS.settingsDoc, payload);
+        })(), 3000, 'pushSettings');
       }
 
       async function pushCollectionChangesToFirestore(fsDb, colDef, itemsArr) {
@@ -3350,18 +3418,23 @@
         const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
         if (fsDb && mfs && typeof mfs.writeBatch === 'function' && typeof mfs.doc === 'function') {
           try {
-            for (let i = 0; i < ops.length; i += 350) {
-              const chunk = ops.slice(i, i + 350);
-              const batch = mfs.writeBatch(fsDb);
-              chunk.forEach((op) => {
-                const ref = mfs.doc(fsDb, resolvedCol, op.docId);
-                if (op.type === 'delete') batch.delete(ref);
-                else batch.set(ref, op.data, { merge: true });
-              });
-              await batch.commit();
-            }
-            return;
-          } catch (sdkErr) { /* fallback to REST per op */ }
+            const batchOk = await withFirestoreTimeout((async function () {
+              for (let i = 0; i < ops.length; i += 350) {
+                const chunk = ops.slice(i, i + 350);
+                const batch = mfs.writeBatch(fsDb);
+                chunk.forEach((op) => {
+                  const ref = mfs.doc(fsDb, resolvedCol, op.docId);
+                  if (op.type === 'delete') batch.delete(ref);
+                  else batch.set(ref, op.data, { merge: true });
+                });
+                await batch.commit();
+              }
+              return true;
+            })(), 3000, 'sdk.writeBatch(' + resolvedCol + ')');
+            if (batchOk === true) return;
+          } catch (sdkErr) {
+            console.error('[TebFirestore] batch commit error, falling back to REST:', sdkErr);
+          }
         }
 
         for (let i = 0; i < ops.length; i++) {
@@ -8989,47 +9062,49 @@
               confirmBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> ' + esc(bi('جاري تأكيد الحجز...', 'Booking...'));
 
               setTimeout(function () {
-                db = loadState();
-                const latestSlot = db.slots.find((s) => s.id === slot.id);
-                if (!latestSlot || latestSlot.status !== 'AVAILABLE') {
-                  isSubmittingBook = false;
+                try {
+                  db = loadState();
+                  const latestSlot = db.slots.find((s) => s.id === slot.id);
+                  if (!latestSlot || latestSlot.status !== 'AVAILABLE') {
+                    closeModal();
+                    showToast(bi('عذراً، تم حجز هذا الموعد للتو', 'Sorry, this slot was just booked'));
+                    renderApp();
+                    return;
+                  }
+                  if (isPhoneBlocked(db.account.phone) || isPhoneBlocked(member.phone)) {
+                    closeModal();
+                    showToast(bi('عذراً، هذا الرقم محظور من الحجز عبر المنصة', 'Sorry, this phone number is blocked'));
+                    return;
+                  }
+                  latestSlot.status = 'BOOKED';
+                  latestSlot.patientName = member.fullName;
+                  latestSlot.patientPhone = member.phone;
+                  latestSlot.familyMemberId = member.id;
+                  latestSlot.bookingSource = 'APP';
+                  const newBookTime = formatMinutesAr((latestSlot.startMinutes || 0) + (latestSlot.delayMinutes || 0));
+                  const bookAlert = '🩺 حجز جديد في ' + getClinicDisplayName(doc) + ': ' + member.fullName + ' (' + newBookTime + ')';
+                  db.notifications.unshift({
+                    id: Date.now(),
+                    message: bookAlert,
+                    isRead: false,
+                    targetAudience: 'CLINIC',
+                    targetId: doc.id,
+                    senderLabel: member.fullName,
+                    createdAtMillis: Date.now()
+                  });
+                  saveState(db);
+                  scheduleSlotRemindersWeb(latestSlot, doc);
+                  syncDocToFirestoreNamespace('slots', latestSlot.id, latestSlot);
+                  syncDocToFirestoreNamespace('notifications', String(db.notifications[0].id), db.notifications[0]);
+                  dispatchWorkerPush('NEW_BOOKING', getClinicDisplayName(doc), bookAlert, 'CLINIC', doc.id, CLOUD_PATHS.appointments);
+                  triggerPlatformNotification(getClinicDisplayName(doc), bookAlert, 'book_' + latestSlot.id);
                   closeModal();
-                  showToast(bi('عذراً، تم حجز هذا الموعد للتو', 'Sorry, this slot was just booked'));
+                  showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
                   renderApp();
-                  return;
-                }
-                if (isPhoneBlocked(db.account.phone) || isPhoneBlocked(member.phone)) {
+                } finally {
                   isSubmittingBook = false;
-                  closeModal();
-                  showToast(bi('عذراً، هذا الرقم محظور من الحجز عبر المنصة', 'Sorry, this phone number is blocked'));
-                  return;
+                  if (confirmBtn) confirmBtn.disabled = false;
                 }
-                latestSlot.status = 'BOOKED';
-                latestSlot.patientName = member.fullName;
-                latestSlot.patientPhone = member.phone;
-                latestSlot.familyMemberId = member.id;
-                latestSlot.bookingSource = 'APP';
-                const newBookTime = formatMinutesAr((latestSlot.startMinutes || 0) + (latestSlot.delayMinutes || 0));
-                const bookAlert = '🩺 حجز جديد في ' + getClinicDisplayName(doc) + ': ' + member.fullName + ' (' + newBookTime + ')';
-                db.notifications.unshift({
-                  id: Date.now(),
-                  message: bookAlert,
-                  isRead: false,
-                  targetAudience: 'CLINIC',
-                  targetId: doc.id,
-                  senderLabel: member.fullName,
-                  createdAtMillis: Date.now()
-                });
-                saveState(db);
-                scheduleSlotRemindersWeb(latestSlot, doc);
-                syncDocToFirestoreNamespace('slots', latestSlot.id, latestSlot);
-                syncDocToFirestoreNamespace('notifications', String(db.notifications[0].id), db.notifications[0]);
-                dispatchWorkerPush('NEW_BOOKING', getClinicDisplayName(doc), bookAlert, 'CLINIC', doc.id, CLOUD_PATHS.appointments);
-                triggerPlatformNotification(getClinicDisplayName(doc), bookAlert, 'book_' + latestSlot.id);
-                isSubmittingBook = false;
-                closeModal();
-                showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
-                renderApp();
               }, 160);
             };
           }
@@ -9379,7 +9454,9 @@
 
           const submitRegBtn = document.getElementById('btnSubmitRegister');
           if (submitRegBtn) {
+            let isRegSubmitting = false;
             submitRegBtn.onclick = async function () {
+              if (isRegSubmitting) return;
               const errBox = document.getElementById('regCloudErrorBox');
               function showRegErr(msg) {
                 if (errBox) {
@@ -9411,79 +9488,91 @@
                 showRegErr(bi('رقم الهاتف مسجل بالفعل، يمكنك تسجيل الدخول', 'Phone number already registered. Sign in instead.'));
                 return;
               }
-              if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                showRegErr(bi('⚠️ لا يوجد اتصال بالإنترنت. يرجى الاتصال بالإنترنت لإتمام التسجيل ومزامنة حسابك سحابياً.', '⚠️ Internet connection required to register and sync your account to the cloud.'));
-                return;
-              }
-              ui.otpSuccessMsg = '';
-              ui.otpErrorMsg = '';
-              const newAccId = 'acc_' + Date.now();
-              const nowMs = Date.now();
-              const newAcc = assignFreshUserOtp({
-                id: newAccId,
-                fullName: fullName,
-                phone: phone,
-                nationalId: nationalId,
-                password: password,
-                isPhoneVerified: false,
-                isVerified: false,
-                verifiedBy: '',
-                verifiedAtMillis: 0
-              }, db, nowMs);
-              const newSelfMem = normalizeFamilyMemberObj({
-                id: 'mem_' + nowMs,
-                accountId: newAccId,
-                fullName: fullName,
-                relation: 'نفسي (صاحب الحساب)',
-                age: 30,
-                phone: phone,
-                nationalId: nationalId
-              });
 
+              isRegSubmitting = true;
               const origBtnText = submitRegBtn.textContent;
               submitRegBtn.disabled = true;
-              submitRegBtn.textContent = bi('⏳ جاري حفظ الحساب سحابياً...', '⏳ Saving to Cloud...');
-              let cloudSavedOk = false;
+              submitRegBtn.textContent = bi('⏳ جاري إنشاء حسابك...', '⏳ Creating your account...');
+
               try {
-                cloudSavedOk = await syncAccountToCloudNow(newAcc);
-              } catch (e) {
-                cloudSavedOk = false;
+                ui.otpSuccessMsg = '';
+                ui.otpErrorMsg = '';
+                const newAccId = 'acc_' + Date.now();
+                const nowMs = Date.now();
+                const newAcc = assignFreshUserOtp({
+                  id: newAccId,
+                  fullName: fullName,
+                  phone: phone,
+                  nationalId: nationalId,
+                  password: password,
+                  isPhoneVerified: false,
+                  isVerified: false,
+                  verifiedBy: '',
+                  verifiedAtMillis: 0
+                }, db, nowMs);
+                const newSelfMem = normalizeFamilyMemberObj({
+                  id: 'mem_' + nowMs,
+                  accountId: newAccId,
+                  fullName: fullName,
+                  relation: 'نفسي (صاحب الحساب)',
+                  age: 30,
+                  phone: phone,
+                  nationalId: nationalId
+                });
+
+                db.accounts = (db.accounts || []).concat([newAcc]);
+                db.account = newAcc;
+                db.familyMembers.push(newSelfMem);
+                db.activeMemberId = newSelfMem.id;
+
+                const regAlertMsg = '👤 عميل جديد سجل الآن: ' + fullName + ' - ' + phone + ' (OTP: ' + newAcc.otpCode + ')';
+                const regNotif = {
+                  id: nowMs,
+                  message: regAlertMsg,
+                  isRead: false,
+                  targetAudience: 'ADMIN',
+                  targetId: newAccId,
+                  senderLabel: bi('تسجيل عميل جديد', 'New Customer Registration'),
+                  createdAtMillis: nowMs
+                };
+                db.notifications.unshift(regNotif);
+
+                saveState(db, { skipCloudSync: true });
+
+                // Background Firestore sync (non-blocking, 3s max timeout, console-only error reporting)
+                Promise.allSettled([
+                  syncAccountToCloudNow(newAcc),
+                  syncDocToFirestoreNamespace('family_members', newSelfMem.id, newSelfMem),
+                  syncDocToFirestoreNamespace('notifications', String(regNotif.id), regNotif),
+                  syncFcmTokenToFirestore(),
+                  dispatchWorkerPush('NEW_USER_REGISTERED', '👤 عميل جديد سجل الآن', regAlertMsg, 'ADMIN', newAccId, CLOUD_PATHS.users)
+                ]).then(function (results) {
+                  results.forEach(function (r, idx) {
+                    if (r.status === 'rejected') {
+                      console.error('[TebFirestore] Background registration sync rejected #' + idx + ':', r.reason);
+                    }
+                  });
+                }).catch(function (bgErr) {
+                  console.error('[TebFirestore] Background registration sync error:', bgErr);
+                });
+
+                triggerPlatformNotification('👤 عميل جديد — طب الحجايزة', regAlertMsg, 'new_user_' + newAccId);
+
+                await new Promise(function (resolve) { setTimeout(resolve, 120); });
+                authMode = 'NONE';
+                showToast(bi('تم إنشاء الحساب وتوليد كود تفعيل صالح لمدة 24 ساعة! اطلبه عبر واتساب أو فعّل من العيادة.', 'Account created with a 24h activation code! Request it via WhatsApp or verify at clinic.'));
+                refreshAccountModal();
+                renderApp();
+              } catch (err) {
+                console.error('[TebAuth] Registration unexpected error:', err);
+                showRegErr(bi('حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة مرة أخرى', 'Error creating account, please try again'));
+              } finally {
+                isRegSubmitting = false;
+                if (submitRegBtn) {
+                  submitRegBtn.disabled = false;
+                  submitRegBtn.textContent = origBtnText;
+                }
               }
-              submitRegBtn.disabled = false;
-              submitRegBtn.textContent = origBtnText;
-
-              if (!cloudSavedOk) {
-                showRegErr(bi('⚠️ تعذر الاتصال بقاعدة البيانات السحابية. يرجى التأكد من الإنترنت وإعادة المحاولة لإتمام التسجيل.', '⚠️ Failed to sync account to Cloud Firestore. Check your internet and try again.'));
-                return;
-              }
-
-              db.accounts = (db.accounts || []).concat([newAcc]);
-              db.account = newAcc;
-              db.familyMembers.push(newSelfMem);
-              db.activeMemberId = newSelfMem.id;
-
-              const regAlertMsg = '👤 عميل جديد سجل الآن: ' + fullName + ' - ' + phone + ' (OTP: ' + newAcc.otpCode + ')';
-              const regNotif = {
-                id: nowMs,
-                message: regAlertMsg,
-                isRead: false,
-                targetAudience: 'ADMIN',
-                targetId: newAccId,
-                senderLabel: bi('تسجيل عميل جديد', 'New Customer Registration'),
-                createdAtMillis: nowMs
-              };
-              db.notifications.unshift(regNotif);
-
-              saveState(db);
-              syncDocToFirestoreNamespace('family_members', newSelfMem.id, newSelfMem);
-              syncDocToFirestoreNamespace('notifications', String(regNotif.id), regNotif);
-              syncFcmTokenToFirestore();
-              triggerPlatformNotification('👤 عميل جديد — طب الحجايزة', regAlertMsg, 'new_user_' + newAccId);
-              dispatchWorkerPush('NEW_USER_REGISTERED', '👤 عميل جديد سجل الآن', regAlertMsg, 'ADMIN', newAccId, CLOUD_PATHS.users);
-              authMode = 'NONE';
-              showToast(bi('تم إنشاء الحساب وتوليد كود تفعيل صالح لمدة 24 ساعة! اطلبه عبر واتساب أو فعّل من العيادة.', 'Account created with a 24h activation code! Request it via WhatsApp or verify at clinic.'));
-              refreshAccountModal();
-              renderApp();
             };
           }
 

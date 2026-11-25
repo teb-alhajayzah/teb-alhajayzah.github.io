@@ -41,8 +41,8 @@ import java.net.URLEncoder
  */
 object FirestoreCloudSyncService {
 
-    private const val CONNECT_TIMEOUT_MS = 5000
-    private const val READ_TIMEOUT_MS = 6000
+    private const val CONNECT_TIMEOUT_MS = 3000
+    private const val READ_TIMEOUT_MS = 3000
 
     fun isCloudNetworkAllowed(): Boolean =
         !"robolectric".equals(Build.FINGERPRINT, ignoreCase = true)
@@ -251,6 +251,8 @@ object FirestoreCloudSyncService {
             val code = conn.responseCode
             conn.disconnect()
             code in 200..299
+        }.onFailure { err ->
+            android.util.Log.e("TebFirestoreSync", "pushSettings failed", err)
         }.getOrDefault(false)
     }
 
@@ -311,6 +313,8 @@ object FirestoreCloudSyncService {
             val code = conn.responseCode
             conn.disconnect()
             code in 200..299
+        }.onFailure { err ->
+            android.util.Log.e("TebFirestoreSync", "upsertDocument($subCollection/$docId) failed", err)
         }.getOrDefault(false)
     }
 
@@ -343,6 +347,8 @@ object FirestoreCloudSyncService {
             val code = conn.responseCode
             conn.disconnect()
             code in 200..299 || code == 404
+        }.onFailure { err ->
+            android.util.Log.e("TebFirestoreSync", "deleteDocument($subCollection/$docId) failed", err)
         }.getOrDefault(false)
     }
 

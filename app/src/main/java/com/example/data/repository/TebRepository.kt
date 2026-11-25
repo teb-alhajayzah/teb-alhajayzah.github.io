@@ -1701,8 +1701,12 @@ class TebRepository(
         if (!FirestoreCloudSyncService.isCloudNetworkAllowed() || docId.isBlank()) return
         cloudScope.launch {
             runCatching {
-                val brand = brandConfigFlow.first()
-                FirestoreCloudSyncService.upsertDocument(brand, subCollection, docId, payloadBuilder())
+                kotlinx.coroutines.withTimeoutOrNull(3_000L) {
+                    val brand = brandConfigFlow.first()
+                    FirestoreCloudSyncService.upsertDocument(brand, subCollection, docId, payloadBuilder())
+                } ?: android.util.Log.w("TebCloudSync", "Timeout (3000ms) pushing $subCollection/$docId")
+            }.onFailure { err ->
+                android.util.Log.e("TebCloudSync", "Background push failed for $subCollection/$docId", err)
             }
         }
     }
@@ -1711,8 +1715,12 @@ class TebRepository(
         if (!FirestoreCloudSyncService.isCloudNetworkAllowed() || docId.isBlank()) return
         cloudScope.launch {
             runCatching {
-                val brand = brandConfigFlow.first()
-                FirestoreCloudSyncService.deleteDocument(brand, subCollection, docId)
+                kotlinx.coroutines.withTimeoutOrNull(3_000L) {
+                    val brand = brandConfigFlow.first()
+                    FirestoreCloudSyncService.deleteDocument(brand, subCollection, docId)
+                } ?: android.util.Log.w("TebCloudSync", "Timeout (3000ms) deleting $subCollection/$docId")
+            }.onFailure { err ->
+                android.util.Log.e("TebCloudSync", "Background delete failed for $subCollection/$docId", err)
             }
         }
     }
@@ -2701,23 +2709,8 @@ class TebRepository(
             otpUsed = false,
         )
         val cloudAccDocId = FirestoreCloudSyncService.accountCloudDocId(account.phone, account.id)
-        if (FirestoreCloudSyncService.isCloudNetworkAllowed()) {
-            val brand = brandConfigFlow.first()
-            if (brand.isCloudConfigured) {
-                val cloudSaved = FirestoreCloudSyncService.upsertDocument(
-                    brand = brand,
-                    subCollection = "accounts",
-                    docId = cloudAccDocId,
-                    payloadJson = FirestoreCloudSyncService.accountToJson(account),
-                )
-                if (!cloudSaved) {
-                    return Result.failure(
-                        IllegalStateException("⚠️ تعذر الاتصال بالإنترنت أو قاعدة البيانات السحابية. يرجى التأكد من الاتصال بالإنترنت لإتمام التسجيل ومزامنة الحساب.")
-                    )
-                }
-            }
-        }
         dao.insertAccount(account)
+        pushDocAsync("accounts", cloudAccDocId) { FirestoreCloudSyncService.accountToJson(account) }
         val selfMemberId = "mem_${UUID.randomUUID()}"
         val selfMember = FamilyMemberEntity(
             id = selfMemberId,
