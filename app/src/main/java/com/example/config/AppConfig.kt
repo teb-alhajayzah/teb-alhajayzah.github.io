@@ -42,8 +42,8 @@ data class PlatformBrandConfig(
     val firebaseStorageBucket: String = "gen-lang-client-0514993881.firebasestorage.app",
     val firebaseMessagingSenderId: String = "197836130786",
     val firebaseAppId: String = "1:197836130786:web:3a85d5a30dd81184c411bb",
-    val firebaseVapidKey: String = "BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw",
-    val workerUrl: String = "https://masarik-otp.masarik-tourism.workers.dev",
+    val firebaseVapidKey: String = "BPH0zDDVmb1w6XZ29F_xS4D31Z6U_L1mmg9qdRCsbPpbqtIoxbchNVN5djCHMcx783SJbunqzeQgcM2O6X2A",
+    val workerUrl: String = "https://teb-alhajayzah.masarik-tourism.workers.dev",
     // إعدادات التخزين السحابي الاحتياطي على Google Drive وسياسة الاحتفاظ بالملفات الثقيلة (أيام: 90 / 180 / 360)
     val defaultDriveWebAppUrl: String = "",
     val fileRetentionDays: Int = 360,

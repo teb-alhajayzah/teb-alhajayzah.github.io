@@ -71,6 +71,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -492,105 +493,81 @@ fun SuperAdminDashboardScreen(
             }
 
             item {
-                ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text(bi(isEn, "الأطباء والعيادات", "Doctors & Clinics")) },
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text(bi(isEn, "المستشفى والأقسام", "Hospital Depts")) },
-                    )
-                    Tab(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        text = { Text(bi(isEn, "الحجوزات والحظر", "Bookings & Bans")) },
-                    )
-                    Tab(
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        text = { Text(bi(isEn, "الإعدادات و Drive", "Settings & Drive")) },
-                    )
-                    Tab(
-                        selected = selectedTab == 4,
-                        onClick = { selectedTab = 4 },
-                        text = { Text(bi(isEn, "إدارة معامل التحاليل", "Medical Labs")) },
-                        modifier = Modifier.testTag("admin_labs_tab"),
-                    )
-                    Tab(
-                        selected = selectedTab == 5,
-                        onClick = { selectedTab = 5 },
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(bi(isEn, "🔑 التوثيق وأكواد OTP", "🔑 Verification & OTP"))
-                                if (unverifiedUsersCount > 0) {
-                                    Badge(containerColor = Color(0xFFDC2626), contentColor = Color.White) {
-                                        Text(unverifiedUsersCount.toString())
+                val tabs = listOf(
+                    Triple(0, bi(isEn, "الأطباء والعيادات", "Doctors & Clinics"), null),
+                    Triple(1, bi(isEn, "المستشفى والأقسام", "Hospital Depts"), null),
+                    Triple(2, bi(isEn, "الحجوزات والحظر", "Bookings & Bans"), null),
+                    Triple(3, bi(isEn, "الإعدادات و Drive", "Settings & Drive"), null),
+                    Triple(4, bi(isEn, "إدارة معامل التحاليل", "Medical Labs"), "admin_labs_tab"),
+                    Triple(5, bi(isEn, "🔑 التوثيق وأكواد OTP", "🔑 Verification & OTP"), "admin_otp_verify_tab"),
+                    Triple(6, bi(isEn, "قائمة العملاء", "Users"), "admin_users_tab"),
+                    Triple(7, bi(isEn, "📩 الرسائل والدعم", "Messages"), "admin_messages_control_tab"),
+                    Triple(8, bi(isEn, "👨‍👩‍👧‍👦 ربط الأسرة", "Family Links"), "admin_family_links_tab"),
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    tabs.chunked(3).forEach { rowTabs ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            rowTabs.forEach { (tabIdx, tabTitle, testTagKey) ->
+                                val isSelected = selectedTab == tabIdx
+                                val badgeCount = when (tabIdx) {
+                                    5, 6 -> unverifiedUsersCount
+                                    7 -> unreadAdminInbox
+                                    8 -> pendingFamilyLinksCount
+                                    else -> 0
+                                }
+                                Surface(
+                                    onClick = { selectedTab = tabIdx },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .let { if (testTagKey != null) it.testTag(testTagKey) else it },
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center,
+                                        ) {
+                                            Text(
+                                                text = tabTitle,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                                ),
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                textAlign = TextAlign.Center,
+                                            )
+                                            if (badgeCount > 0) {
+                                                Spacer(modifier = Modifier.width(3.dp))
+                                                Badge(containerColor = Color(0xFFDC2626), contentColor = Color.White) {
+                                                    Text(badgeCount.toString())
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        },
-                        modifier = Modifier.testTag("admin_otp_verify_tab"),
-                    )
-                    Tab(
-                        selected = selectedTab == 6,
-                        onClick = { selectedTab = 6 },
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(bi(isEn, "قائمة العملاء والمشتركين (Users)", "Users & Subscribers"))
-                                if (unverifiedUsersCount > 0) {
-                                    Badge(containerColor = Color(0xFFDC2626), contentColor = Color.White) {
-                                        Text(unverifiedUsersCount.toString())
-                                    }
-                                }
+                            repeat(3 - rowTabs.size) {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
-                        },
-                        modifier = Modifier.testTag("admin_users_tab"),
-                    )
-                    Tab(
-                        selected = selectedTab == 7,
-                        onClick = { selectedTab = 7 },
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(bi(isEn, "📩 الرسائل والدعم الفني", "📩 Messages & Support"))
-                                if (unreadAdminInbox > 0) {
-                                    Badge(containerColor = Color(0xFFDC2626), contentColor = Color.White) {
-                                        Text(unreadAdminInbox.toString())
-                                    }
-                                }
-                            }
-                        },
-                        modifier = Modifier.testTag("admin_messages_control_tab"),
-                    )
-                    Tab(
-                        selected = selectedTab == 8,
-                        onClick = { selectedTab = 8 },
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(bi(isEn, "👨‍👩‍👧‍👦 طلبات ربط الأسرة", "👨‍👩‍👧‍👦 Family Links"))
-                                if (pendingFamilyLinksCount > 0) {
-                                    Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
-                                        Text(pendingFamilyLinksCount.toString())
-                                    }
-                                }
-                            }
-                        },
-                        modifier = Modifier.testTag("admin_family_links_tab"),
-                    )
+                        }
+                    }
                 }
             }
 

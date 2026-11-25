@@ -923,7 +923,7 @@ class ExampleRobolectricTest {
 
         val initialBrand = repository.brandConfigFlow.first()
         assertTrue(initialBrand.isCloudConfigured)
-        assertEquals("https://masarik-otp.masarik-tourism.workers.dev", initialBrand.workerUrl)
+        assertEquals("https://teb-alhajayzah.masarik-tourism.workers.dev", initialBrand.workerUrl)
         assertEquals("AIzaSyC08cH9E9le52NU-B56N894yt_k8hQMQ1M", initialBrand.firebaseApiKey)
         assertEquals("gen-lang-client-0514993881.firebaseapp.com", initialBrand.firebaseAuthDomain)
         assertEquals("gen-lang-client-0514993881", initialBrand.firebaseProjectId)
@@ -931,7 +931,7 @@ class ExampleRobolectricTest {
         assertEquals("197836130786", initialBrand.firebaseMessagingSenderId)
         assertEquals("1:197836130786:web:3a85d5a30dd81184c411bb", initialBrand.firebaseAppId)
         assertEquals(
-            "BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw",
+            "BPH0zDDVmb1w6XZ29F_xS4D31Z6U_L1mmg9qdRCsbPpbqtIoxbchNVN5djCHMcx783SJbunqzeQgcM2O6X2A",
             initialBrand.firebaseVapidKey,
         )
 
