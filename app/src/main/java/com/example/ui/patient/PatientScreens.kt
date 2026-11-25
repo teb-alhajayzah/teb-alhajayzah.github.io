@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -85,9 +87,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.net.URLEncoder
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
@@ -124,6 +128,8 @@ fun PatientHomeScreen(
     onCancelSlot: (String) -> Unit,
     onRescheduleSlot: (fromSlotId: String, toSlotId: String) -> Unit = { _, _ -> },
     onOpenOtpAccountDialog: () -> Unit,
+    onVerifyOtpInline: (String) -> Unit = {},
+    onRegenerateOtpInline: () -> Unit = {},
     onChatWithClinic: (String) -> Unit = {},
     onCheckAppUpdate: () -> Unit = {},
     onChatWithAdmin: () -> Unit = {},
@@ -440,34 +446,192 @@ fun PatientHomeScreen(
 
             if (state.activeAccount != null && !state.activeAccount.isPhoneVerified) {
                 item {
+                    val activeAcc = state.activeAccount
+                    var inlineOtpInput by rememberSaveable(activeAcc.id) { mutableStateOf("") }
+                    val nowMillis = System.currentTimeMillis()
+                    val isInlineOtpExpired = activeAcc.otpCode.length != 6 ||
+                        activeAcc.otpExpiresAtMillis <= 0L ||
+                        nowMillis > activeAcc.otpExpiresAtMillis
                     Surface(
                         color = SlotBookedBg,
                         shape = RoundedCornerShape(16.dp),
                         border = BorderStroke(1.5.dp, SlotBookedBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(onClick = onOpenOtpAccountDialog),
+                            .testTag("home_inline_otp_banner"),
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Icon(
-                                Icons.Filled.Warning,
-                                contentDescription = bi(isEn, "تأكيد OTP مطلوب", "OTP verification required"),
-                                tint = SlotBookedBorder,
-                                modifier = Modifier.size(26.dp),
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = bi(isEn, "تأكيد OTP مطلوب", "OTP verification required"),
+                                    tint = SlotBookedBorder,
+                                    modifier = Modifier.size(26.dp),
+                                )
+                                Text(
+                                    text = bi(
+                                        isEn,
+                                        "حسابك قيد التفعيل: أدخل كود التفعيل (OTP) المكون من 6 أرقام لتفعيل حجز المواعيد فوراً.",
+                                        "Account pending activation: enter your 6-digit OTP code below to unlock booking immediately.",
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = SlotBookedText,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TextButton(
+                                    onClick = onOpenOtpAccountDialog,
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("home_inline_account_options_button"),
+                                ) {
+                                    Text(bi(isEn, "خيارات الحساب", "Account"))
+                                }
+                            }
+
+                            if (isInlineOtpExpired) {
+                                Surface(
+                                    color = Color(0xFFFEE2E2),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = bi(
+                                                isEn,
+                                                "انتهت صلاحية كود التفعيل (أكثر من 24 ساعة)",
+                                                "Previous OTP expired (> 24h)",
+                                            ),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF991B1B),
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Button(
+                                            onClick = onRegenerateOtpInline,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = DelayWarningBorder,
+                                                contentColor = Color.White,
+                                            ),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("home_inline_otp_regen_button"),
+                                        ) {
+                                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(bi(isEn, "توليد كود جديد", "New Code"))
+                                        }
+                                    }
+                                }
+                            } else {
+                                val remMins = (((activeAcc.otpExpiresAtMillis - nowMillis) + 59_999L) / 60_000L).coerceAtLeast(1L)
+                                val remHours = remMins / 60L
+                                val remM = remMins % 60L
+                                val validityLabel = if (remHours > 0) {
+                                    bi(isEn, "⏳ الكود الخاص بحسابك صالح لمدة $remHours س و $remM د", "⏳ Your bound OTP is valid for ${remHours}h ${remM}m")
+                                } else {
+                                    bi(isEn, "⏳ الكود الخاص بحسابك صالح لمدة $remM دقيقة", "⏳ Your bound OTP is valid for ${remM}m")
+                                }
+                                Text(
+                                    text = validityLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = SlotAvailableText,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = inlineOtpInput,
+                                onValueChange = { raw ->
+                                    val normalized = buildString {
+                                        for (c in raw) {
+                                            when (c) {
+                                                in '\u0660'..'\u0669' -> append(('0'.code + (c.code - 0x0660)).toChar())
+                                                in '\u06F0'..'\u06F9' -> append(('0'.code + (c.code - 0x06F0)).toChar())
+                                                in '0'..'9' -> append(c)
+                                            }
+                                        }
+                                    }
+                                    inlineOtpInput = normalized.take(6)
+                                },
+                                label = {
+                                    Text(bi(isEn, "أدخل كود التفعيل (6 أرقام)", "Enter 6-digit OTP Code"))
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("home_inline_otp_input"),
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = bi(
-                                    isEn,
-                                    "حسابك بانتظار التفعيل برمز التحقق (OTP). اضغط هنا لإدخال الكود وتفعيل الحجز.",
-                                    "Your account awaits OTP activation. Tap here to enter your 6-digit code and unlock booking.",
-                                ),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = SlotBookedText,
-                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Button(
+                                    onClick = { onVerifyOtpInline(inlineOtpInput) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TealPrimary,
+                                        contentColor = Color.White,
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .testTag("home_inline_otp_verify_button"),
+                                ) {
+                                    Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = bi(isEn, "تفعيل الحساب الآن", "Activate Account Now"),
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+
+                                val cleanWaDigits = state.brandConfig.supportPhone.filter { it.isDigit() }.ifBlank { "01141271027" }
+                                val waOtpPhone = if (cleanWaDigits.startsWith("2")) cleanWaDigits else "2$cleanWaDigits"
+                                OutlinedButton(
+                                    onClick = {
+                                        val waMessage = "مرحباً إدارة طب الحجايزة، قمت بالتسجيل وأرجو توثيق حسابي أو إرسال كود التفعيل - الاسم: ${activeAcc.fullName} - الهاتف: ${activeAcc.phone}"
+                                        runCatching {
+                                            val encoded = URLEncoder.encode(waMessage, "UTF-8")
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waOtpPhone?text=$encoded")),
+                                            )
+                                        }.onFailure {
+                                            onShowMessage(cleanWaDigits)
+                                        }
+                                    },
+                                    border = BorderStroke(1.2.dp, SlotAvailableBorder),
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("home_inline_otp_whatsapp_button"),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Chat,
+                                        contentDescription = null,
+                                        tint = SlotAvailableText,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = bi(isEn, "واتساب", "WhatsApp"),
+                                        color = SlotAvailableText,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

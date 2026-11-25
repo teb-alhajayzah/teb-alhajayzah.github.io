@@ -377,6 +377,8 @@ fun TebAlHajayzahAppRoot(
                                                 onOpenOtpAccountDialog = {
                                                     showAccountDialog = true
                                                 },
+                                                onVerifyOtpInline = viewModel::verifyActiveAccountOtp,
+                                                onRegenerateOtpInline = viewModel::regenerateActiveAccountOtp,
                                                 onChatWithClinic = openPatientClinicChat,
                                                 onChatWithAdmin = {
                                                     val acc = state.activeAccount

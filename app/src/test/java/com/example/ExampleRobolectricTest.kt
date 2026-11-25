@@ -1549,4 +1549,81 @@ class ExampleRobolectricTest {
         assertEquals(1, logsAfterClean.size)
         assertEquals(logsBefore.first().id, logsAfterClean.first().id)
     }
+
+    @Test
+    fun accountPhoneCloudKeySupportMessageAdminAlertAndMessageReadCompatibilityWork() = runBlocking {
+        repository.ensureSeeded()
+
+        // 1. Account cloud document key resolves to normalized phone digits under teb_alhajayzah/data/accounts/{phone}
+        assertEquals(
+            "01012345678",
+            com.example.data.remote.FirestoreCloudSyncService.accountCloudDocId("٠١٠١٢٣٤٥٦٧٨", "acc_fallback"),
+        )
+        assertEquals(
+            "01141271027",
+            com.example.data.remote.FirestoreCloudSyncService.accountCloudDocId("+201141271027", "acc_fallback"),
+        )
+        val url = com.example.data.remote.FirestoreCloudSyncService.documentUrl(
+            projectId = "gen-lang-client-0015800098",
+            apiKey = "test-key",
+            subCollection = "accounts",
+            docId = com.example.data.remote.FirestoreCloudSyncService.accountCloudDocId("01099887766", "acc_x"),
+        )
+        assertTrue(url.contains("/teb_alhajayzah/data/accounts/01099887766?"))
+
+        // 2. Web message JSON with only legacy isRead=false maps accurately to unread for target role
+        val webSupportMsgJson = org.json.JSONObject().apply {
+            put("id", "msg_web_1")
+            put("threadType", com.example.data.local.ChatThreadType.PATIENT_ADMIN)
+            put("patientAccountId", "acc_p1")
+            put("patientName", "سالم محمد")
+            put("patientPhone", "01055443322")
+            put("senderRole", com.example.data.local.MessageSenderRole.PATIENT)
+            put("senderName", "سالم محمد")
+            put("body", "أحتاج تفعيل الحساب فوراً")
+            put("isRead", false)
+            put("createdAtMillis", 1_700_000_000_000L)
+        }
+        val parsedMsg = com.example.data.remote.FirestoreCloudSyncService.messageFromJson(webSupportMsgJson)!!
+        assertTrue(parsedMsg.isReadByPatient)
+        assertFalse(parsedMsg.isReadByAdmin)
+        val roundTripJson = com.example.data.remote.FirestoreCloudSyncService.messageToJson(parsedMsg)
+        assertFalse(roundTripJson.getBoolean("isRead"))
+
+        // 3. Sending a support message from patient creates an ADMIN notification immediately
+        val acc = repository.registerPatientAccount(
+            fullName = "خالد محمود حسن",
+            phone = "01077889900",
+            nationalId = "",
+            password = "2468",
+        ).getOrThrow()
+        assertFalse(acc.isPhoneVerified)
+
+        val supportMsg = repository.sendPatientToAdminMessage(
+            account = acc,
+            body = "لو سمحت الكود لم يصلني بعد",
+        ).getOrThrow()
+        assertEquals(com.example.data.local.ChatThreadType.PATIENT_ADMIN, supportMsg.threadType)
+
+        val adminSupportNotifs = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.ADMIN &&
+                it.targetId == acc.id &&
+                it.message.contains("لو سمحت الكود لم يصلني بعد")
+        }
+        assertEquals(1, adminSupportNotifs.size)
+
+        // 4. Regenerating OTP & verifying via inline OTP flow unlocks account verification cleanly
+        val renewed = repository.regenerateAccountOtp(acc.id).getOrThrow()
+        assertEquals(6, renewed.otpCode.length)
+        val verifyRes = repository.verifyAndBurnActivationCode(
+            accountId = acc.id,
+            accountName = acc.fullName,
+            accountPhone = acc.phone,
+            enteredCode = renewed.otpCode,
+        )
+        assertTrue(verifyRes.isSuccess)
+        val verifiedAcc = db.tebDao().getAccountById(acc.id)!!
+        assertTrue(verifiedAcc.isPhoneVerified)
+        assertEquals("كود OTP", verifiedAcc.verifiedBy)
+    }
 }

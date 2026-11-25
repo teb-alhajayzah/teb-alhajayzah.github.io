@@ -8,6 +8,7 @@ import com.example.data.local.ActivationOtpCodeEntity
 import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.BlockedPhoneEntity
 import com.example.data.local.BookingSource
+import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.ClinicType
 import com.example.data.local.DelayNotificationEntity
@@ -18,6 +19,7 @@ import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalLabEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
+import com.example.data.local.MessageSenderRole
 import com.example.data.local.NotificationAudience
 import com.example.data.local.PatientAccountEntity
 import com.example.data.local.PermanentLogEventType
@@ -49,6 +51,26 @@ object FirestoreCloudSyncService {
         rawId.replace(Regex("[^\\w\\-]"), "_")
             .take(180)
             .ifBlank { "doc_${System.currentTimeMillis()}" }
+
+    fun normalizePhoneDigits(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        for (ch in raw) {
+            when (ch) {
+                in '0'..'9' -> sb.append(ch)
+                in '٠'..'٩' -> sb.append(('0'.code + (ch.code - '٠'.code)).toChar())
+                in '۰'..'۹' -> sb.append(('0'.code + (ch.code - '۰'.code)).toChar())
+            }
+        }
+        val digits = sb.toString()
+        return when {
+            digits.startsWith("0020") -> "0${digits.substring(4)}"
+            digits.startsWith("20") && digits.length >= 12 -> "0${digits.substring(2)}"
+            else -> digits
+        }
+    }
+
+    fun accountCloudDocId(phone: String, fallbackId: String = ""): String =
+        normalizePhoneDigits(phone).ifBlank { fallbackId.trim() }
 
     private fun enc(value: String): String =
         URLEncoder.encode(value, "UTF-8")
@@ -494,9 +516,9 @@ object FirestoreCloudSyncService {
             otpCreatedAtMillis = j.optLong("otpCreatedAtMillis", 0L),
             otpExpiresAtMillis = j.optLong("otpExpiresAtMillis", 0L),
             otpUsed = if (j.has("otpUsed")) j.optBoolean("otpUsed", false) else false,
-            linkedSpouseAccountId = j.optString("linkedSpouseAccountId", ""),
-            linkedSpousePhone = j.optString("linkedSpousePhone", ""),
-            linkedSpouseName = j.optString("linkedSpouseName", ""),
+            linkedSpouseAccountId = j.optString("linkedSpouseAccountId", j.optString("spouseAccountId", "")),
+            linkedSpousePhone = j.optString("linkedSpousePhone", j.optString("spousePhone", "")),
+            linkedSpouseName = j.optString("linkedSpouseName", j.optString("spouseName", "")),
             allowSpouseViewPersonalRecords = j.optBoolean("allowSpouseViewPersonalRecords", false),
         )
     }
@@ -715,6 +737,12 @@ object FirestoreCloudSyncService {
     }
 
     fun messageToJson(m: DirectMessageEntity): JSONObject = JSONObject().apply {
+        val generallyRead = when {
+            m.threadType == ChatThreadType.PATIENT_ADMIN && m.senderRole == MessageSenderRole.PATIENT -> m.isReadByAdmin
+            m.threadType == ChatThreadType.CLINIC_ADMIN && m.senderRole == MessageSenderRole.CLINIC -> m.isReadByAdmin
+            m.threadType == ChatThreadType.PATIENT_CLINIC && m.senderRole == MessageSenderRole.PATIENT -> m.isReadByClinic
+            else -> m.isReadByPatient
+        }
         put("id", m.id)
         put("threadType", m.threadType)
         put("patientAccountId", m.patientAccountId)
@@ -727,6 +755,7 @@ object FirestoreCloudSyncService {
         put("senderName", m.senderName)
         put("body", m.body)
         put("createdAtMillis", m.createdAtMillis)
+        put("isRead", generallyRead)
         put("isReadByPatient", m.isReadByPatient)
         put("isReadByClinic", m.isReadByClinic)
         put("isReadByAdmin", m.isReadByAdmin)
@@ -736,22 +765,28 @@ object FirestoreCloudSyncService {
         val id = j.optString("id", j.optString("_docId", "")).trim()
         val body = j.optString("body", "").trim()
         if (id.isEmpty() || body.isEmpty()) return null
+        val threadType = j.optString("threadType", ChatThreadType.PATIENT_CLINIC)
+        val senderRole = j.optString("senderRole", MessageSenderRole.PATIENT)
+        val legacyRead = j.optBoolean("isRead", false)
+        val defaultReadByPatient = if (senderRole == MessageSenderRole.PATIENT || threadType == ChatThreadType.CLINIC_ADMIN) true else legacyRead
+        val defaultReadByClinic = if (senderRole == MessageSenderRole.CLINIC || threadType == ChatThreadType.PATIENT_ADMIN) true else legacyRead
+        val defaultReadByAdmin = if (senderRole == MessageSenderRole.ADMIN || threadType == ChatThreadType.PATIENT_CLINIC) true else legacyRead
         return DirectMessageEntity(
             id = id,
-            threadType = j.optString("threadType", "PATIENT_CLINIC"),
+            threadType = threadType,
             patientAccountId = j.optString("patientAccountId", ""),
             patientName = j.optString("patientName", ""),
             patientPhone = j.optString("patientPhone", ""),
             doctorId = j.optString("doctorId", ""),
             doctorName = j.optString("doctorName", ""),
             clinicName = j.optString("clinicName", ""),
-            senderRole = j.optString("senderRole", "PATIENT"),
+            senderRole = senderRole,
             senderName = j.optString("senderName", ""),
             body = body,
             createdAtMillis = j.optLong("createdAtMillis", System.currentTimeMillis()),
-            isReadByPatient = j.optBoolean("isReadByPatient", false),
-            isReadByClinic = j.optBoolean("isReadByClinic", false),
-            isReadByAdmin = j.optBoolean("isReadByAdmin", false),
+            isReadByPatient = if (j.has("isReadByPatient")) j.optBoolean("isReadByPatient", defaultReadByPatient) else defaultReadByPatient,
+            isReadByClinic = if (j.has("isReadByClinic")) j.optBoolean("isReadByClinic", defaultReadByClinic) else defaultReadByClinic,
+            isReadByAdmin = if (j.has("isReadByAdmin")) j.optBoolean("isReadByAdmin", defaultReadByAdmin) else defaultReadByAdmin,
         )
     }
 

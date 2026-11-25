@@ -2877,10 +2877,17 @@
         );
       }
 
+      function getAccountCloudDocId(acc) {
+        if (!acc) return '';
+        const phoneKey = normalizePhoneDigits(acc.phone);
+        if (phoneKey) return phoneKey;
+        return String(acc.id || '');
+      }
+
       const CLOUD_SYNC_COLLECTIONS = [
         { stateKey: 'doctors', fsCollection: 'doctors', idFn: (x) => String((x && x.id) || '') },
         { stateKey: 'labs', fsCollection: 'labs', idFn: (x) => String((x && x.id) || '') },
-        { stateKey: 'accounts', fsCollection: 'accounts', idFn: (x) => String((x && x.id) || '') },
+        { stateKey: 'accounts', fsCollection: 'accounts', idFn: (x) => getAccountCloudDocId(x) },
         { stateKey: 'familyMembers', fsCollection: 'family_members', idFn: (x) => String((x && x.id) || '') },
         { stateKey: 'slots', fsCollection: 'slots', idFn: (x) => String((x && x.id) || '') },
         { stateKey: 'records', fsCollection: 'records', idFn: (x) => String((x && x.id) || '') },
@@ -2902,7 +2909,9 @@
         lastCloudMap: {}, // { [fsCollection]: { [docId]: jsonStr } }
         lastSettingsJson: '',
         pushTimer: null,
+        restPollTimer: null,
         isConnected: false,
+        sdkHealthyCount: 0,
         fcmToken: '',
         deletedMsgIds: {}
       };
@@ -2982,71 +2991,236 @@
         }
       }
 
+      function encodeFirestoreRestValue(val) {
+        if (val === undefined || val === null) return null;
+        if (typeof val === 'boolean') return { booleanValue: val };
+        if (typeof val === 'number' && isFinite(val)) {
+          return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+        }
+        if (typeof val === 'string') {
+          return { stringValue: val.length > 65000 ? val.slice(0, 65000) : val };
+        }
+        if (Array.isArray(val)) {
+          return {
+            arrayValue: {
+              values: val.map((item) => encodeFirestoreRestValue(item)).filter(Boolean)
+            }
+          };
+        }
+        if (typeof val === 'object') {
+          const sub = {};
+          Object.keys(val).forEach((k) => {
+            const encoded = encodeFirestoreRestValue(val[k]);
+            if (encoded) sub[k] = encoded;
+          });
+          return { mapValue: { fields: sub } };
+        }
+        return { stringValue: String(val) };
+      }
+
       function toFirestoreFields(obj) {
         const out = {};
         Object.keys(obj || {}).forEach((k) => {
-          const val = obj[k];
-          if (val === undefined || val === null) return;
-          if (typeof val === 'boolean') out[k] = { booleanValue: val };
-          else if (typeof val === 'number' && isFinite(val)) out[k] = Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
-          else if (typeof val === 'string') out[k] = { stringValue: val.length > 2000 ? val.slice(0, 2000) : val };
+          const encoded = encodeFirestoreRestValue(obj[k]);
+          if (encoded) out[k] = encoded;
         });
+        out._cloudNamespace = { stringValue: CLOUD_NAMESPACE };
         out.cloudNamespace = { stringValue: CLOUD_NAMESPACE };
         out.updatedAtMillis = { integerValue: String(Date.now()) };
         return out;
       }
 
+      function decodeFirestoreRestValue(wrapper) {
+        if (!wrapper || typeof wrapper !== 'object') return undefined;
+        if (Object.prototype.hasOwnProperty.call(wrapper, 'stringValue')) return String(wrapper.stringValue || '');
+        if (Object.prototype.hasOwnProperty.call(wrapper, 'booleanValue')) return Boolean(wrapper.booleanValue);
+        if (Object.prototype.hasOwnProperty.call(wrapper, 'integerValue')) return Number(wrapper.integerValue) || 0;
+        if (Object.prototype.hasOwnProperty.call(wrapper, 'doubleValue')) return Number(wrapper.doubleValue) || 0;
+        if (Object.prototype.hasOwnProperty.call(wrapper, 'nullValue')) return null;
+        if (wrapper.arrayValue && Array.isArray(wrapper.arrayValue.values)) {
+          return wrapper.arrayValue.values.map((v) => decodeFirestoreRestValue(v)).filter((v) => v !== undefined);
+        }
+        if (wrapper.arrayValue) return [];
+        if (wrapper.mapValue && wrapper.mapValue.fields) {
+          return fromFirestoreFieldsWeb(wrapper.mapValue.fields);
+        }
+        if (wrapper.mapValue) return {};
+        return undefined;
+      }
+
+      function fromFirestoreFieldsWeb(fields) {
+        const out = {};
+        if (!fields || typeof fields !== 'object') return out;
+        Object.keys(fields).forEach((k) => {
+          const decoded = decodeFirestoreRestValue(fields[k]);
+          if (decoded !== undefined) out[k] = decoded;
+        });
+        return out;
+      }
+
+      function fromFirestoreDocWeb(docJson) {
+        if (!docJson || !docJson.fields) return null;
+        const out = fromFirestoreFieldsWeb(docJson.fields);
+        const docName = String(docJson.name || '');
+        if (docName) {
+          const shortId = docName.split('/').pop();
+          if (shortId && !out._docId) out._docId = shortId;
+          if (shortId && !out.id) out.id = shortId;
+        }
+        return out;
+      }
+
+      async function upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj) {
+        if (typeof fetch !== 'function') return false;
+        const projectId = String((cfg && cfg.firebaseProjectId) || '').trim();
+        const apiKey = String((cfg && cfg.firebaseApiKey) || '').trim();
+        if (!projectId || !apiKey) return false;
+        const docPath = (subCollection === 'config' || subCollection === 'settings')
+          ? CLOUD_PATHS.settings
+          : (CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(String(subCollection || 'items')) + '/' + encodeURIComponent(safeId));
+        const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
+          '/databases/(default)/documents/' + docPath + '?key=' + encodeURIComponent(apiKey);
+        const resp = await fetch(url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: toFirestoreFields(prepareDocForFirestore(payloadObj, subCollection)) })
+        });
+        return Boolean(resp && resp.ok);
+      }
+
+      async function deleteDocViaRestWeb(cfg, subCollection, safeId) {
+        if (typeof fetch !== 'function') return false;
+        const projectId = String((cfg && cfg.firebaseProjectId) || '').trim();
+        const apiKey = String((cfg && cfg.firebaseApiKey) || '').trim();
+        if (!projectId || !apiKey) return false;
+        const docPath = CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(String(subCollection || 'items')) + '/' + encodeURIComponent(safeId);
+        const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
+          '/databases/(default)/documents/' + docPath + '?key=' + encodeURIComponent(apiKey);
+        const resp = await fetch(url, { method: 'DELETE' });
+        return Boolean(resp && (resp.ok || resp.status === 404));
+      }
+
+      async function fetchSettingsViaRestWeb(cfg) {
+        if (typeof fetch !== 'function') return null;
+        const c = cfg || (db && db.config) || DEFAULT_CONFIG;
+        const projectId = String(c.firebaseProjectId || '').trim();
+        const apiKey = String(c.firebaseApiKey || '').trim();
+        if (!projectId || !apiKey) return null;
+        try {
+          const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
+            '/databases/(default)/documents/' + CLOUD_PATHS.settings + '?key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
+          const resp = await fetch(url, { cache: 'no-store' });
+          if (!resp || !resp.ok) return null;
+          const docJson = await resp.json();
+          return fromFirestoreDocWeb(docJson);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      async function fetchCollectionViaRestWeb(cfg, fsCol) {
+        if (typeof fetch !== 'function') return null;
+        const c = cfg || (db && db.config) || DEFAULT_CONFIG;
+        const projectId = String(c.firebaseProjectId || '').trim();
+        const apiKey = String(c.firebaseApiKey || '').trim();
+        if (!projectId || !apiKey) return null;
+        try {
+          const results = [];
+          let pageToken = '';
+          let guard = 0;
+          do {
+            guard++;
+            let url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
+              '/databases/(default)/documents/' + CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(fsCol) +
+              '?pageSize=500&key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
+            if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
+            const resp = await fetch(url, { cache: 'no-store' });
+            if (!resp) return null;
+            if (resp.status === 404) return [];
+            if (!resp.ok) return null;
+            const json = await resp.json();
+            const docs = Array.isArray(json.documents) ? json.documents : [];
+            docs.forEach((docJson) => {
+              const parsed = fromFirestoreDocWeb(docJson);
+              if (parsed) results.push(parsed);
+            });
+            pageToken = json.nextPageToken ? String(json.nextPageToken) : '';
+          } while (pageToken && guard < 10);
+          return results;
+        } catch (e) {
+          return null;
+        }
+      }
+
       async function syncDocToFirestoreNamespace(subCollection, docId, payloadObj) {
         try {
-          const cfg = (db && db.config) || {};
-          if (!isFirebaseCloudConfigured(cfg)) return;
-          const fsDb = getOrCreateFirestore(cfg);
+          const cfg = (db && db.config) || DEFAULT_CONFIG;
+          if (!isFirebaseCloudConfigured(cfg)) return false;
+          const normalizedSub = subCollection === 'appointments'
+            ? 'slots'
+            : (subCollection === 'users'
+                ? 'accounts'
+                : (subCollection === 'familyLinkRequests' ? 'family_link_requests' : subCollection));
           const safeId = safeCloudDocId(docId);
+          const fsDb = getOrCreateFirestore(cfg);
           if (fsDb) {
-            if (subCollection === 'config' || subCollection === 'settings') {
-              await fsDb.doc(CLOUD_PATHS.settings).set(prepareDocForFirestore(payloadObj, 'settings'), { merge: true });
-            } else {
-              await fsDb.collection(CLOUD_PATHS.dataRoot + '/' + subCollection).doc(safeId).set(
-                prepareDocForFirestore(payloadObj, subCollection),
-                { merge: true }
-              );
-            }
-            return;
+            try {
+              if (normalizedSub === 'config' || normalizedSub === 'settings') {
+                await fsDb.doc(CLOUD_PATHS.settings).set(prepareDocForFirestore(payloadObj, 'settings'), { merge: true });
+              } else {
+                await fsDb.collection(CLOUD_PATHS.dataRoot + '/' + normalizedSub).doc(safeId).set(
+                  prepareDocForFirestore(payloadObj, normalizedSub),
+                  { merge: true }
+                );
+              }
+              return true;
+            } catch (sdkErr) { /* fall through to REST PATCH */ }
           }
-          if (typeof fetch !== 'function') return;
-          const projectId = String(cfg.firebaseProjectId || '').trim();
-          const apiKey = String(cfg.firebaseApiKey || '').trim();
-          const docPath = (subCollection === 'config' || subCollection === 'settings')
-            ? CLOUD_PATHS.settings
-            : (CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(String(subCollection || 'items')) + '/' + encodeURIComponent(safeId));
-          const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-            '/databases/(default)/documents/' + docPath + '?key=' + encodeURIComponent(apiKey);
-          await fetch(url, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: toFirestoreFields(payloadObj) })
-          });
-        } catch (e) { /* offline-safe background sync */ }
+          return await upsertDocViaRestWeb(cfg, normalizedSub, safeId, payloadObj);
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function syncAccountToCloudNow(acc) {
+        if (!acc) return;
+        const phoneDocId = getAccountCloudDocId(acc);
+        if (!phoneDocId) return;
+        const cleanAcc = Object.assign({
+          id: acc.id,
+          fullName: acc.fullName || '',
+          phone: acc.phone || '',
+          nationalId: acc.nationalId || '',
+          password: acc.password || '',
+          isPhoneVerified: acc.isPhoneVerified !== false,
+          verifiedBy: acc.verifiedBy || '',
+          verifiedAtMillis: Number(acc.verifiedAtMillis) || 0,
+          otpCode: acc.otpCode || '',
+          otpCreatedAtMillis: Number(acc.otpCreatedAtMillis) || 0,
+          otpExpiresAtMillis: Number(acc.otpExpiresAtMillis) || 0,
+          otpUsed: Boolean(acc.otpUsed),
+          spouseAccountId: String(acc.spouseAccountId || ''),
+          allowSpouseViewPersonalRecords: Boolean(acc.allowSpouseViewPersonalRecords)
+        }, acc);
+        syncDocToFirestoreNamespace('accounts', phoneDocId, cleanAcc);
       }
 
       async function deleteDocFromFirestoreNamespace(subCollection, docId) {
         try {
-          const cfg = (db && db.config) || {};
-          if (!isFirebaseCloudConfigured(cfg)) return;
-          const fsDb = getOrCreateFirestore(cfg);
+          const cfg = (db && db.config) || DEFAULT_CONFIG;
+          if (!isFirebaseCloudConfigured(cfg)) return false;
           const safeId = safeCloudDocId(docId);
+          const fsDb = getOrCreateFirestore(cfg);
           if (fsDb) {
-            await fsDb.collection(CLOUD_PATHS.dataRoot + '/' + subCollection).doc(safeId).delete();
-            return;
+            try {
+              await fsDb.collection(CLOUD_PATHS.dataRoot + '/' + subCollection).doc(safeId).delete();
+              return true;
+            } catch (sdkErr) { /* fall through to REST DELETE */ }
           }
-          if (typeof fetch !== 'function') return;
-          const projectId = String(cfg.firebaseProjectId || '').trim();
-          const apiKey = String(cfg.firebaseApiKey || '').trim();
-          const docPath = CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(String(subCollection || 'items')) + '/' + encodeURIComponent(safeId);
-          const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-            '/databases/(default)/documents/' + docPath + '?key=' + encodeURIComponent(apiKey);
-          await fetch(url, { method: 'DELETE' });
-        } catch (e) { /* offline-safe delete */ }
+          return await deleteDocViaRestWeb(cfg, subCollection, safeId);
+        } catch (e) {
+          return false;
+        }
       }
 
       async function pushSettingsToCloudNow(configObj) {
@@ -3062,14 +3236,13 @@
             return true;
           }
         } catch (e) { /* fallback to REST */ }
-        await syncDocToFirestoreNamespace('settings', 'settings', payload);
+        await upsertDocViaRestWeb(payload, 'settings', 'settings', payload);
         return true;
       }
 
       async function pushCollectionChangesToFirestore(fsDb, colDef, itemsArr) {
-        if (!fsDb) return;
+        const cfg = (db && db.config) || DEFAULT_CONFIG;
         const fsCol = colDef.fsCollection;
-        const colRef = fsDb.collection(CLOUD_PATHS.dataRoot + '/' + fsCol);
         const prevMap = tebCloudRuntime.lastCloudMap[fsCol] || {};
         const nextMap = {};
         const ops = [];
@@ -3095,16 +3268,237 @@
         tebCloudRuntime.lastCloudMap[fsCol] = nextMap;
         if (ops.length === 0) return;
 
-        for (let i = 0; i < ops.length; i += 350) {
-          const chunk = ops.slice(i, i + 350);
-          const batch = fsDb.batch();
-          chunk.forEach((op) => {
-            const ref = colRef.doc(op.docId);
-            if (op.type === 'delete') batch.delete(ref);
-            else batch.set(ref, op.data, { merge: true });
-          });
-          await batch.commit();
+        if (fsDb) {
+          try {
+            const colRef = fsDb.collection(CLOUD_PATHS.dataRoot + '/' + fsCol);
+            for (let i = 0; i < ops.length; i += 350) {
+              const chunk = ops.slice(i, i + 350);
+              const batch = fsDb.batch();
+              chunk.forEach((op) => {
+                const ref = colRef.doc(op.docId);
+                if (op.type === 'delete') batch.delete(ref);
+                else batch.set(ref, op.data, { merge: true });
+              });
+              await batch.commit();
+            }
+            return;
+          } catch (sdkErr) { /* fallback to REST per op */ }
         }
+
+        for (let i = 0; i < ops.length; i++) {
+          const op = ops[i];
+          if (op.type === 'delete') {
+            await deleteDocViaRestWeb(cfg, fsCol, op.docId);
+          } else {
+            await upsertDocViaRestWeb(cfg, fsCol, op.docId, op.data);
+          }
+        }
+      }
+
+      function applyRemoteSettingsObject(remote) {
+        if (!remote || typeof remote !== 'object') return;
+        const sig = getCloudConfigSig(db.config || DEFAULT_CONFIG);
+        const merged = Object.assign({}, DEFAULT_CONFIG, db.config || {}, remote);
+        delete merged._cloudNamespace;
+        delete merged._docId;
+        delete merged.id;
+        delete merged.updatedAtMillis;
+        [
+          'firebaseApiKey', 'firebaseAuthDomain', 'firebaseProjectId',
+          'firebaseStorageBucket', 'firebaseMessagingSenderId',
+          'firebaseAppId', 'firebaseVapidKey', 'workerUrl'
+        ].forEach((ck) => {
+          if (!String(merged[ck] || '').trim()) merged[ck] = DEFAULT_CONFIG[ck];
+        });
+        let didOverrideLegacyRemotePin = false;
+        if (String(merged.adminPin || '').trim() === '202600' || !String(merged.adminPin || '').trim()) {
+          merged.adminPin = String((db.config && db.config.adminPin !== '202600' ? db.config.adminPin : '') || '132027');
+          didOverrideLegacyRemotePin = true;
+        }
+        merged.appVersionLabel = 'v1.0.0';
+        if (/محمد يوسف|Mohamed Youssef/i.test(String(merged.adminOwnerName || ''))) {
+          merged.adminOwnerName = 'المدير العام';
+        }
+        merged.globalChatEnabled = merged.globalChatEnabled !== false;
+        merged.defaultDriveWebAppUrl = String(merged.defaultDriveWebAppUrl || '').trim();
+        merged.fileRetentionDays = normalizeRetentionDaysWeb(merged.fileRetentionDays);
+
+        const prevSig = JSON.stringify(db.config || {});
+        const nextSig = JSON.stringify(merged);
+        if (prevSig !== nextSig || didOverrideLegacyRemotePin) {
+          db.config = merged;
+          tebCloudRuntime.lastSettingsJson = nextSig;
+          if (typeof pruneExpiredHeavyAttachmentsWeb === 'function') {
+            pruneExpiredHeavyAttachmentsWeb(db);
+          }
+          saveState(db, { skipCloudSync: !didOverrideLegacyRemotePin });
+          initFirebaseCloudBridge();
+          renderApp();
+          if (getCloudConfigSig(merged) !== sig) {
+            setTimeout(startRealtimeCloudSync, 50);
+          }
+        }
+      }
+
+      function pickPreferredAccountRecord(a, b) {
+        if (!a) return b;
+        if (!b) return a;
+        const aVer = a.isPhoneVerified !== false ? 1 : 0;
+        const bVer = b.isPhoneVerified !== false ? 1 : 0;
+        if (bVer !== aVer) return bVer > aVer ? b : a;
+        const aTs = Number(a.verifiedAtMillis || a.otpCreatedAtMillis || 0);
+        const bTs = Number(b.verifiedAtMillis || b.otpCreatedAtMillis || 0);
+        return bTs >= aTs ? b : a;
+      }
+
+      function applyRemoteCollectionItems(colDef, rawItems, fsDb) {
+        const fsCol = colDef.fsCollection;
+        if (!Array.isArray(rawItems)) return false;
+
+        if (rawItems.length === 0 && !tebCloudRuntime.hydratedCols[fsCol]) {
+          tebCloudRuntime.hydratedCols[fsCol] = true;
+          const localArr = Array.isArray(db[colDef.stateKey]) ? db[colDef.stateKey] : [];
+          if (localArr.length > 0) {
+            pushCollectionChangesToFirestore(fsDb, colDef, localArr).catch(function () {});
+          }
+          return false;
+        }
+
+        tebCloudRuntime.hydratedCols[fsCol] = true;
+        const prevMap = tebCloudRuntime.lastCloudMap[fsCol] || {};
+        const nextMap = {};
+        const remoteItemsById = {};
+        const remoteList = [];
+
+        rawItems.forEach(function (raw) {
+          if (!raw || typeof raw !== 'object') return;
+          const clean = Object.assign({}, raw);
+          delete clean._cloudNamespace;
+          if (colDef.stateKey === 'records' && clean.cloudAttachmentOversized && !clean.attachmentDataUrl) {
+            const localRec = (db.records || []).find((r) => r.id === clean.id);
+            if (localRec && localRec.attachmentDataUrl) {
+              clean.attachmentDataUrl = localRec.attachmentDataUrl;
+            }
+          }
+          const rawKey = colDef.idFn(clean) || clean._docId || clean.id || '';
+          const docId = safeCloudDocId(rawKey);
+          if (colDef.stateKey === 'messages' && tebCloudRuntime.deletedMsgIds[docId]) {
+            return;
+          }
+          if (colDef.stateKey === 'accounts') {
+            clean.isPhoneVerified = clean.isPhoneVerified !== false;
+            clean.otpUsed = Boolean(clean.otpUsed);
+            if (!clean.id) clean.id = 'acc_' + docId;
+            delete clean._docId;
+            const existingIdx = remoteList.findIndex((r) =>
+              normalizePhoneDigits(r.phone) && normalizePhoneDigits(r.phone) === normalizePhoneDigits(clean.phone)
+            );
+            if (existingIdx >= 0) {
+              remoteList[existingIdx] = pickPreferredAccountRecord(remoteList[existingIdx], clean);
+              const winnerKey = safeCloudDocId(colDef.idFn(remoteList[existingIdx]) || docId);
+              nextMap[winnerKey] = JSON.stringify(prepareDocForFirestore(remoteList[existingIdx], fsCol));
+              remoteItemsById[winnerKey] = remoteList[existingIdx];
+              return;
+            }
+          } else {
+            delete clean._docId;
+          }
+          nextMap[docId] = JSON.stringify(prepareDocForFirestore(clean, fsCol));
+          remoteItemsById[docId] = clean;
+          remoteList.push(clean);
+        });
+
+        const existingLocal = Array.isArray(db[colDef.stateKey]) ? db[colDef.stateKey] : [];
+        const mergedList = remoteList.slice();
+        const extraLocalToPush = [];
+
+        existingLocal.forEach(function (localItem) {
+          const lid = safeCloudDocId(colDef.idFn(localItem));
+          const inRemote = Object.prototype.hasOwnProperty.call(remoteItemsById, lid) ||
+            (colDef.stateKey === 'accounts' && remoteList.some((r) =>
+              normalizePhoneDigits(r.phone) && normalizePhoneDigits(r.phone) === normalizePhoneDigits(localItem.phone)
+            ));
+          const wasPreviouslyInCloud = Object.prototype.hasOwnProperty.call(prevMap, lid);
+          if (!inRemote && !wasPreviouslyInCloud) {
+            if (colDef.stateKey === 'doctors' || colDef.stateKey === 'slots' || colDef.stateKey === 'activationCodes') {
+              if (Object.keys(remoteItemsById).length === 0) {
+                mergedList.push(localItem);
+                extraLocalToPush.push(localItem);
+              }
+            } else {
+              mergedList.push(localItem);
+              extraLocalToPush.push(localItem);
+            }
+          }
+        });
+
+        if (colDef.stateKey === 'slots') {
+          mergedList.sort((a, b) => (a.startMinutes || 0) - (b.startMinutes || 0));
+        } else if (colDef.stateKey === 'records' || colDef.stateKey === 'notifications') {
+          mergedList.sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+        } else if (colDef.stateKey === 'permanentLogs') {
+          mergedList.sort((a, b) => (b.eventTimestampMillis || 0) - (a.eventTimestampMillis || 0));
+        } else if (colDef.stateKey === 'messages') {
+          mergedList.sort((a, b) => (a.createdAtMillis || 0) - (b.createdAtMillis || 0));
+        }
+
+        tebCloudRuntime.lastCloudMap[fsCol] = nextMap;
+        const prevArrJson = JSON.stringify(existingLocal);
+        const nextArrJson = JSON.stringify(mergedList);
+        let didUpdateUi = false;
+        if (prevArrJson !== nextArrJson) {
+          db[colDef.stateKey] = mergedList;
+          if (colDef.stateKey === 'accounts' && db.account) {
+            const activeDigits = normalizePhoneDigits(db.account.phone);
+            const syncedAcc = mergedList.find((a) =>
+              a.id === db.account.id || (activeDigits && normalizePhoneDigits(a.phone) === activeDigits)
+            );
+            if (syncedAcc) db.account = syncedAcc;
+          }
+          if (colDef.stateKey === 'familyMembers') {
+            db.familyMembers = db.familyMembers.map(normalizeFamilyMemberObj);
+          }
+          saveState(db, { skipCloudSync: true });
+          baselineDbSyncSig = computeDbSyncSignature(db);
+          didUpdateUi = true;
+          renderApp();
+        }
+
+        if (extraLocalToPush.length > 0) {
+          pushCollectionChangesToFirestore(fsDb, colDef, mergedList).catch(function () {});
+        }
+        return didUpdateUi;
+      }
+
+      let __isRestPullInFlight = false;
+      async function pullCloudStateViaRestWeb(onlyFsCollections) {
+        if (__isRestPullInFlight) return false;
+        const cfg = (db && db.config) || DEFAULT_CONFIG;
+        if (!isFirebaseCloudConfigured(cfg)) return false;
+        __isRestPullInFlight = true;
+        let anyChanged = false;
+        try {
+          if (!onlyFsCollections) {
+            const remoteCfg = await fetchSettingsViaRestWeb(cfg);
+            if (remoteCfg) applyRemoteSettingsObject(remoteCfg);
+          }
+          const cols = Array.isArray(onlyFsCollections) && onlyFsCollections.length > 0
+            ? CLOUD_SYNC_COLLECTIONS.filter((c) => onlyFsCollections.includes(c.fsCollection) || onlyFsCollections.includes(c.stateKey))
+            : CLOUD_SYNC_COLLECTIONS;
+          const fsDb = getOrCreateFirestore(cfg);
+          await Promise.all(cols.map(async function (colDef) {
+            const remoteDocs = await fetchCollectionViaRestWeb(cfg, colDef.fsCollection);
+            if (Array.isArray(remoteDocs)) {
+              if (applyRemoteCollectionItems(colDef, remoteDocs, fsDb)) {
+                anyChanged = true;
+              }
+            }
+          }));
+        } catch (e) { /* offline-safe REST pull */ }
+        finally {
+          __isRestPullInFlight = false;
+        }
+        return anyChanged;
       }
 
       function queueCloudSyncFromLocal(nextState) {
@@ -3114,7 +3508,6 @@
             const st = nextState || db;
             if (!st || !isFirebaseCloudConfigured(st.config)) return;
             const fsDb = getOrCreateFirestore(st.config);
-            if (!fsDb) return;
 
             const cfgJson = JSON.stringify(st.config || {});
             if (cfgJson !== tebCloudRuntime.lastSettingsJson) {
@@ -3129,6 +3522,14 @@
         }, 120);
       }
 
+      function ensureRestFallbackPollingLoop() {
+        if (tebCloudRuntime.restPollTimer) return;
+        tebCloudRuntime.restPollTimer = setInterval(function () {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+          pullCloudStateViaRestWeb(['accounts', 'family_members', 'messages', 'notifications', 'slots', 'doctors', 'labs']);
+        }, 12000);
+      }
+
       function stopRealtimeCloudSync() {
         (tebCloudRuntime.unsubscribers || []).forEach((unsub) => {
           try { if (typeof unsub === 'function') unsub(); } catch (e) {}
@@ -3136,13 +3537,16 @@
         tebCloudRuntime.unsubscribers = [];
         tebCloudRuntime.hydratedCols = {};
         tebCloudRuntime.isConnected = false;
+        tebCloudRuntime.sdkHealthyCount = 0;
+        if (tebCloudRuntime.restPollTimer) {
+          clearInterval(tebCloudRuntime.restPollTimer);
+          tebCloudRuntime.restPollTimer = null;
+        }
       }
 
       function startRealtimeCloudSync() {
         const cfg = (db && db.config) || DEFAULT_CONFIG;
         if (!isFirebaseCloudConfigured(cfg)) return;
-        const fsDb = getOrCreateFirestore(cfg);
-        if (!fsDb) return;
 
         const sig = getCloudConfigSig(cfg);
         if (tebCloudRuntime.isConnected && tebCloudRuntime.activeConfigSig === sig) return;
@@ -3150,6 +3554,15 @@
         stopRealtimeCloudSync();
         tebCloudRuntime.activeConfigSig = sig;
         tebCloudRuntime.isConnected = true;
+
+        // Always perform an immediate REST hydration so devices see live data right away even before WebChannel connects
+        pullCloudStateViaRestWeb();
+
+        const fsDb = getOrCreateFirestore(cfg);
+        if (!fsDb) {
+          ensureRestFallbackPollingLoop();
+          return;
+        }
 
         try {
           // 1. Real-time sync for teb_alhajayzah/settings across all devices
@@ -3159,47 +3572,10 @@
               return;
             }
             if (docSnap.metadata && docSnap.metadata.hasPendingWrites) return;
-            const remote = docSnap.data() || {};
-            const merged = Object.assign({}, DEFAULT_CONFIG, db.config || {}, remote);
-            delete merged._cloudNamespace;
-            delete merged.updatedAtMillis;
-            [
-              'firebaseApiKey', 'firebaseAuthDomain', 'firebaseProjectId',
-              'firebaseStorageBucket', 'firebaseMessagingSenderId',
-              'firebaseAppId', 'firebaseVapidKey', 'workerUrl'
-            ].forEach((ck) => {
-              if (!String(merged[ck] || '').trim()) merged[ck] = DEFAULT_CONFIG[ck];
-            });
-            // Do not allow stale remote '202600' PIN to overwrite migrated '132027' PIN
-            let didOverrideLegacyRemotePin = false;
-            if (String(merged.adminPin || '').trim() === '202600' || !String(merged.adminPin || '').trim()) {
-              merged.adminPin = String((db.config && db.config.adminPin !== '202600' ? db.config.adminPin : '') || '132027');
-              didOverrideLegacyRemotePin = true;
-            }
-            merged.appVersionLabel = 'v1.0.0';
-            if (/محمد يوسف|Mohamed Youssef/i.test(String(merged.adminOwnerName || ''))) {
-              merged.adminOwnerName = 'المدير العام';
-            }
-            merged.globalChatEnabled = merged.globalChatEnabled !== false;
-            merged.defaultDriveWebAppUrl = String(merged.defaultDriveWebAppUrl || '').trim();
-            merged.fileRetentionDays = normalizeRetentionDaysWeb(merged.fileRetentionDays);
-
-            const prevSig = JSON.stringify(db.config || {});
-            const nextSig = JSON.stringify(merged);
-            if (prevSig !== nextSig || didOverrideLegacyRemotePin) {
-              db.config = merged;
-              tebCloudRuntime.lastSettingsJson = nextSig;
-              if (typeof pruneExpiredHeavyAttachmentsWeb === 'function') {
-                pruneExpiredHeavyAttachmentsWeb(db);
-              }
-              saveState(db, { skipCloudSync: !didOverrideLegacyRemotePin });
-              initFirebaseCloudBridge();
-              renderApp();
-              if (getCloudConfigSig(merged) !== sig) {
-                setTimeout(startRealtimeCloudSync, 50);
-              }
-            }
-          }, function () {});
+            applyRemoteSettingsObject(docSnap.data() || {});
+          }, function () {
+            ensureRestFallbackPollingLoop();
+          });
           tebCloudRuntime.unsubscribers.push(unsubSettings);
 
           // 2. Real-time sync for all platform collections under teb_alhajayzah/data/*
@@ -3209,98 +3585,28 @@
             const unsubCol = fsDb.collection(colPath).onSnapshot(function (snap) {
               if (!snap) return;
               if (snap.metadata && snap.metadata.hasPendingWrites) return;
-
-              if (snap.empty && !tebCloudRuntime.hydratedCols[fsCol]) {
-                tebCloudRuntime.hydratedCols[fsCol] = true;
-                const localArr = Array.isArray(db[colDef.stateKey]) ? db[colDef.stateKey] : [];
-                if (localArr.length > 0) {
-                  pushCollectionChangesToFirestore(fsDb, colDef, localArr).catch(function () {});
-                }
-                return;
-              }
-
-              tebCloudRuntime.hydratedCols[fsCol] = true;
-              const prevMap = tebCloudRuntime.lastCloudMap[fsCol] || {};
-              const nextMap = {};
-              const remoteItemsById = {};
-              const remoteList = [];
-
-              snap.docs.forEach(function (d) {
+              tebCloudRuntime.sdkHealthyCount += 1;
+              const rawDocs = snap.docs.map(function (d) {
                 const raw = d.data() || {};
-                const clean = Object.assign({}, raw);
-                delete clean._cloudNamespace;
-                if (colDef.stateKey === 'records' && clean.cloudAttachmentOversized && !clean.attachmentDataUrl) {
-                  const localRec = (db.records || []).find((r) => r.id === clean.id);
-                  if (localRec && localRec.attachmentDataUrl) {
-                    clean.attachmentDataUrl = localRec.attachmentDataUrl;
-                  }
-                }
-                const docId = safeCloudDocId(colDef.idFn(clean) || d.id);
-                if (colDef.stateKey === 'messages' && tebCloudRuntime.deletedMsgIds[docId]) {
-                  return;
-                }
-                nextMap[docId] = JSON.stringify(prepareDocForFirestore(clean, fsCol));
-                remoteItemsById[docId] = clean;
-                remoteList.push(clean);
+                raw._docId = d.id;
+                return raw;
               });
-
-              const existingLocal = Array.isArray(db[colDef.stateKey]) ? db[colDef.stateKey] : [];
-              const mergedList = remoteList.slice();
-              const extraLocalToPush = [];
-
-              existingLocal.forEach(function (localItem) {
-                const lid = safeCloudDocId(colDef.idFn(localItem));
-                const inRemote = Object.prototype.hasOwnProperty.call(remoteItemsById, lid);
-                const wasPreviouslyInCloud = Object.prototype.hasOwnProperty.call(prevMap, lid);
-                if (!inRemote && !wasPreviouslyInCloud) {
-                  // Offline-created item or extra local item not deleted from cloud — preserve & queue push
-                  if (colDef.stateKey === 'doctors' || colDef.stateKey === 'slots' || colDef.stateKey === 'activationCodes') {
-                    // For baseline seeded entities when cloud already holds authoritative data, let cloud lead
-                    if (Object.keys(remoteItemsById).length === 0) {
-                      mergedList.push(localItem);
-                      extraLocalToPush.push(localItem);
-                    }
-                  } else {
-                    mergedList.push(localItem);
-                    extraLocalToPush.push(localItem);
-                  }
-                }
-              });
-
-              if (colDef.stateKey === 'slots') {
-                mergedList.sort((a, b) => (a.startMinutes || 0) - (b.startMinutes || 0));
-              } else if (colDef.stateKey === 'records' || colDef.stateKey === 'notifications') {
-                mergedList.sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
-              } else if (colDef.stateKey === 'permanentLogs') {
-                mergedList.sort((a, b) => (b.eventTimestampMillis || 0) - (a.eventTimestampMillis || 0));
-              } else if (colDef.stateKey === 'messages') {
-                mergedList.sort((a, b) => (a.createdAtMillis || 0) - (b.createdAtMillis || 0));
-              }
-
-              tebCloudRuntime.lastCloudMap[fsCol] = nextMap;
-              const prevArrJson = JSON.stringify(existingLocal);
-              const nextArrJson = JSON.stringify(mergedList);
-              if (prevArrJson !== nextArrJson) {
-                db[colDef.stateKey] = mergedList;
-                if (colDef.stateKey === 'accounts' && db.account && db.account.id) {
-                  const syncedAcc = mergedList.find((a) => a.id === db.account.id);
-                  if (syncedAcc) db.account = syncedAcc;
-                }
-                if (colDef.stateKey === 'familyMembers') {
-                  db.familyMembers = db.familyMembers.map(normalizeFamilyMemberObj);
-                }
-                saveState(db, { skipCloudSync: true });
-                baselineDbSyncSig = computeDbSyncSignature(db);
-                renderApp();
-              }
-
-              if (extraLocalToPush.length > 0) {
-                pushCollectionChangesToFirestore(fsDb, colDef, mergedList).catch(function () {});
-              }
-            }, function () {});
+              applyRemoteCollectionItems(colDef, rawDocs, fsDb);
+            }, function () {
+              ensureRestFallbackPollingLoop();
+            });
             tebCloudRuntime.unsubscribers.push(unsubCol);
           });
-        } catch (e) { /* offline-safe listener init */ }
+
+          // Safety backup check: if SDK snapshots haven't fired within 5s (e.g. blocked WebChannel), start REST polling
+          setTimeout(function () {
+            if (tebCloudRuntime.sdkHealthyCount === 0) {
+              ensureRestFallbackPollingLoop();
+            }
+          }, 5000);
+        } catch (e) {
+          ensureRestFallbackPollingLoop();
+        }
       }
 
       function saveState(nextState, opts) {
@@ -3585,7 +3891,7 @@
         }
         saveState(db);
         cancelSlotRemindersWeb(slot.id);
-        syncDocToFirestoreNamespace('appointments', slot.id, slot);
+        syncDocToFirestoreNamespace('slots', slot.id, slot);
         triggerPlatformNotification(clinicLabel, alertMsg, 'cancel_' + slot.id);
         showToast(bi('تم إلغاء الحجز وإعادة الموعد متاحاً باللون الأخضر', 'Booking cancelled; slot is open again'));
         renderApp();
@@ -3661,8 +3967,8 @@
         saveState(db);
         cancelSlotRemindersWeb(fromSlot.id);
         scheduleSlotRemindersWeb(toSlot, docObj);
-        syncDocToFirestoreNamespace('appointments', fromSlot.id, fromSlot);
-        syncDocToFirestoreNamespace('appointments', toSlot.id, toSlot);
+        syncDocToFirestoreNamespace('slots', fromSlot.id, fromSlot);
+        syncDocToFirestoreNamespace('slots', toSlot.id, toSlot);
         triggerPlatformNotification(clinicLabel, alertMsg, 'resched_' + toSlot.id);
         showToast(bi('تم تعديل الموعد إلى الساعة ' + newTimeLabel + ' بنجاح', 'Appointment rescheduled to ' + newTimeLabel));
         renderApp();
@@ -5296,7 +5602,7 @@
               };
               db.familyLinkRequests.unshift(req);
               saveState(db);
-              syncDocToFirestoreNamespace('familyLinkRequests', req.id, req);
+              syncDocToFirestoreNamespace('family_link_requests', req.id, req);
               closeModal();
               showToast(bi('تم إرسال طلب ربط الأسرة للإدارة للمراجعة والاعتماد', 'Family link request sent to Super Admin'));
               renderApp();
@@ -5718,12 +6024,13 @@
         if (clean === MASTER_ADMIN_OTP) {
           markAccountVerified(account, 'كود OTP');
           saveState(db);
+          syncAccountToCloudNow(db.account && db.account.id === (account && account.id) ? db.account : account);
           return { ok: true, usedMaster: true };
         }
 
         // 1) Check the unique 24-hour OTP code bound to this specific user account
         const boundAccount = account
-          ? ((db.accounts || []).find((a) => a.id === account.id) || account)
+          ? ((db.accounts || []).find((a) => a.id === account.id || normalizePhoneDigits(a.phone) === normalizePhoneDigits(account.phone)) || account)
           : null;
         if (boundAccount && boundAccount.otpCode) {
           const boundCode = toAsciiDigits(boundAccount.otpCode).replace(/\D/g, '');
@@ -5750,6 +6057,7 @@
             boundAccount.otpUsed = true;
             markAccountVerified(boundAccount, 'كود OTP');
             saveState(db);
+            syncAccountToCloudNow(boundAccount);
             return { ok: true, usedMaster: false, usedUserOtp: true };
           }
         }
@@ -5775,6 +6083,8 @@
         found.usedAtMillis = now;
         markAccountVerified(account, 'كود OTP');
         saveState(db);
+        syncAccountToCloudNow(db.account && db.account.id === (account && account.id) ? db.account : account);
+        syncDocToFirestoreNamespace('activation_codes', found.code, found);
         return { ok: true, usedMaster: false };
       }
 
@@ -5870,6 +6180,7 @@
             }));
           }
           await refreshMedicationsFromApi();
+          await pullCloudStateViaRestWeb();
           db = loadState();
           ui.hasNewDataBanner = false;
           baselineDbSyncSig = computeDbSyncSignature(db);
@@ -6268,9 +6579,20 @@
           .sort((a, b) => (Number(b.createdAtMillis || b.id) || 0) - (Number(a.createdAtMillis || a.id) || 0));
       }
 
-      function isIncomingMessageForRole(msg, roleModeOverride) {
-        if (!msg || msg.isRead) return false;
+      function isMessageReadForRole(msg, roleModeOverride) {
+        if (!msg) return true;
         const mode = roleModeOverride || ui.roleMode;
+        if (msg.isRead) return true;
+        if (mode === 'PATIENT' && typeof msg.isReadByPatient === 'boolean') return msg.isReadByPatient;
+        if (mode === 'DOCTOR' && typeof msg.isReadByClinic === 'boolean') return msg.isReadByClinic;
+        if (mode === 'ADMIN' && typeof msg.isReadByAdmin === 'boolean') return msg.isReadByAdmin;
+        return false;
+      }
+
+      function isIncomingMessageForRole(msg, roleModeOverride) {
+        if (!msg) return false;
+        const mode = roleModeOverride || ui.roleMode;
+        if (isMessageReadForRole(msg, mode)) return false;
         if (mode === 'PATIENT') {
           if (!db.account) return false;
           if (msg.patientAccountId !== db.account.id) return false;
@@ -6297,14 +6619,14 @@
       function getUnreadMessagesForPatientSupport() {
         if (!db.account) return 0;
         return (db.messages || []).filter((m) =>
-          !m.isRead && m.threadType === 'PATIENT_ADMIN' && m.patientAccountId === db.account.id && m.senderRole === 'ADMIN'
+          !isMessageReadForRole(m, 'PATIENT') && m.threadType === 'PATIENT_ADMIN' && m.patientAccountId === db.account.id && m.senderRole === 'ADMIN'
         ).length;
       }
 
       function getUnreadMessagesForDoctor(docId) {
         if (!docId) return 0;
         return (db.messages || []).filter((m) =>
-          !m.isRead && m.doctorId === docId && (
+          !isMessageReadForRole(m, 'DOCTOR') && m.doctorId === docId && (
             (m.threadType === 'PATIENT_CLINIC' && m.senderRole === 'PATIENT') ||
             (m.threadType === 'CLINIC_ADMIN' && m.senderRole === 'ADMIN')
           )
@@ -6313,7 +6635,7 @@
 
       function getUnreadSupportInboxForAdmin() {
         return (db.messages || []).filter((m) =>
-          !m.isRead && (
+          !isMessageReadForRole(m, 'ADMIN') && (
             (m.threadType === 'PATIENT_ADMIN' && m.senderRole === 'PATIENT') ||
             (m.threadType === 'CLINIC_ADMIN' && m.senderRole === 'CLINIC')
           )
@@ -6333,10 +6655,13 @@
 
       function pushDirectMessage(payload) {
         if (!Array.isArray(db.messages)) db.messages = [];
+        const nowMs = Date.now();
+        const tType = payload.threadType;
+        const sRole = payload.senderRole;
         const msgObj = {
-          id: 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
-          threadType: payload.threadType,
-          senderRole: payload.senderRole,
+          id: 'msg_' + nowMs + '_' + Math.floor(Math.random() * 10000),
+          threadType: tType,
+          senderRole: sRole,
           senderName: payload.senderName || '',
           patientAccountId: payload.patientAccountId || '',
           patientName: payload.patientName || '',
@@ -6345,21 +6670,70 @@
           doctorName: payload.doctorName || '',
           body: payload.body || '',
           isRead: false,
-          createdAtMillis: Date.now()
+          isReadByPatient: sRole === 'PATIENT' || tType === 'CLINIC_ADMIN',
+          isReadByClinic: sRole === 'CLINIC' || tType === 'PATIENT_ADMIN',
+          isReadByAdmin: sRole === 'ADMIN' || tType === 'PATIENT_CLINIC',
+          createdAtMillis: nowMs
         };
         db.messages.push(msgObj);
+
+        let adminAlertNotif = null;
+        if (tType === 'PATIENT_ADMIN' && sRole === 'PATIENT') {
+          const senderTitle = msgObj.patientName || msgObj.senderName || bi('عميل', 'Customer');
+          adminAlertNotif = {
+            id: nowMs,
+            message: '💬 رسالة دعم جديدة من ' + senderTitle + (msgObj.patientPhone ? ' (' + msgObj.patientPhone + ')' : '') + ': ' + msgObj.body,
+            isRead: false,
+            targetAudience: 'ADMIN',
+            targetId: msgObj.patientAccountId || '',
+            senderLabel: bi('رسالة دعم فني جديدة', 'New Support Message'),
+            createdAtMillis: nowMs
+          };
+          db.notifications.unshift(adminAlertNotif);
+        } else if (tType === 'CLINIC_ADMIN' && sRole === 'CLINIC') {
+          adminAlertNotif = {
+            id: nowMs,
+            message: '🩺 رسالة من عيادة ' + (msgObj.doctorName || msgObj.senderName || '') + ': ' + msgObj.body,
+            isRead: false,
+            targetAudience: 'ADMIN',
+            targetId: msgObj.doctorId || '',
+            senderLabel: bi('رسالة عيادة للإدارة', 'Clinic Message to Admin'),
+            createdAtMillis: nowMs
+          };
+          db.notifications.unshift(adminAlertNotif);
+        }
+
         saveState(db);
+        syncDocToFirestoreNamespace('messages', msgObj.id, msgObj);
+        if (adminAlertNotif) {
+          syncDocToFirestoreNamespace('notifications', String(adminAlertNotif.id), adminAlertNotif);
+        }
+
+        const isToAdmin = (tType === 'PATIENT_ADMIN' && sRole === 'PATIENT') || (tType === 'CLINIC_ADMIN' && sRole === 'CLINIC');
+        const pushAud = isToAdmin
+          ? 'ADMIN'
+          : (sRole === 'ADMIN'
+              ? (tType === 'CLINIC_ADMIN' ? 'CLINIC' : 'PATIENT')
+              : (sRole === 'PATIENT' ? 'CLINIC' : 'PATIENT'));
+        const pushTargetId = isToAdmin
+          ? (msgObj.patientAccountId || msgObj.doctorId || '')
+          : (pushAud === 'CLINIC' ? (msgObj.doctorId || '') : (msgObj.patientAccountId || ''));
+        const pushEvent = isToAdmin && tType === 'PATIENT_ADMIN' ? 'PATIENT_SUPPORT_MESSAGE' : 'DIRECT_MESSAGE';
+        const pushTitle = isToAdmin
+          ? ('💬 رسالة دعم جديدة من ' + (msgObj.patientName || msgObj.doctorName || msgObj.senderName || 'طب الحجايزة'))
+          : ('💬 ' + (msgObj.senderName || 'طب الحجايزة'));
+
         triggerPlatformNotification(
           '💬 ' + (msgObj.senderName || bi('رسالة جديدة', 'New Message')),
           msgObj.body,
           'msg_' + msgObj.threadType
         );
         dispatchWorkerPush(
-          'DIRECT_MESSAGE',
-          '💬 ' + (msgObj.senderName || 'طب الحجايزة'),
+          pushEvent,
+          pushTitle,
           msgObj.body,
-          msgObj.threadType || 'ALL',
-          msgObj.patientAccountId || msgObj.doctorId || '',
+          pushAud,
+          pushTargetId,
           CLOUD_PATHS.messages
         );
       }
@@ -6823,7 +7197,35 @@
           (announcement ? '<div class="alert-banner" style="background:var(--teal-soft);border-color:var(--teal);color:var(--teal-text);">📢 ' + esc(announcement) + '</div>' : '') +
 
           (needsOtp
-            ? '<button type="button" class="alert-banner" id="btnHomeOtpWarning" style="cursor:pointer;width:100%;text-align:start;">🔐 ' + esc(bi('حسابك قيد التفعيل: يرجى إدخال رمز التحقق (OTP) المكون من 6 أرقام لتفعيل حجز المواعيد. اضغط هنا للتأكيد.', 'Account pending verification: enter the 6-digit OTP code to unlock bookings. Tap to verify.')) + '</button>'
+            ? (function () {
+                const inlineExpired = isAccountOtpExpired(db.account);
+                const inlineOtpWaPhoneDigits = normalizePhoneDigits((db.config && db.config.otpWhatsappPhone) || DEFAULT_CONFIG.otpWhatsappPhone || '01141271027');
+                const inlineWaPhone = inlineOtpWaPhoneDigits.startsWith('2') ? inlineOtpWaPhoneDigits : ('2' + inlineOtpWaPhoneDigits);
+                const inlineWaText = encodeURIComponent('مرحباً إدارة طب الحجايزة، قمت بالتسجيل وأرجو توثيق حسابي أو إرسال كود التفعيل - الاسم: ' + db.account.fullName + ' - الهاتف: ' + db.account.phone);
+                return '<div class="alert-banner" id="homeOtpWarningBanner" style="flex-direction:column;align-items:stretch;gap:10px;">' +
+                  '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                    '<div style="font-weight:800;">🔐 ' + esc(bi('حسابك قيد التفعيل: أدخل كود التفعيل (OTP) المكون من 6 أرقام لتفعيل حجز المواعيد فوراً.', 'Account pending verification: enter your 6-digit OTP code to activate booking immediately.')) + '</div>' +
+                    '<button type="button" class="btn btn-outline" id="btnHomeOtpWarning" style="min-height:36px;padding:4px 10px;font-size:0.8rem;background:#fff;">⚙️ ' + esc(bi('خيارات الحساب', 'Account Options')) + '</button>' +
+                  '</div>' +
+                  (inlineExpired
+                    ? '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:6px 10px;">' +
+                        '<span style="font-size:0.8rem;font-weight:700;color:#991B1B;">⏰ ' + esc(bi('انتهت صلاحية الكود السابق (أكثر من 24 ساعة)', 'Previous OTP expired (> 24h)')) + '</span>' +
+                        '<button type="button" class="btn btn-warn" id="btnHomeInlineRegenOtp" style="min-height:36px;padding:4px 10px;font-size:0.8rem;">🔄 ' + esc(bi('توليد كود جديد', 'Generate New Code')) + '</button>' +
+                      '</div>'
+                    : '<div style="font-size:0.78rem;font-weight:700;color:#15803D;">⏳ ' + esc(bi('صلاحية الكود المرتبط بحسابك: ', 'Your bound OTP status: ')) + esc(formatOtpRemainingDuration(db.account.otpExpiresAtMillis)) + '</div>') +
+                  '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+                    '<input class="input" id="homeInlineOtpInput" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" dir="ltr" placeholder="' + esc(bi('أدخل كود OTP (6 أرقام)', 'Enter 6-digit OTP')) + '" style="flex:1;min-width:155px;background:#fff;text-align:center;font-weight:800;letter-spacing:3px;min-height:46px;" />' +
+                    '<button type="button" class="btn btn-primary" id="btnHomeInlineOtpVerify" style="min-height:46px;white-space:nowrap;">✅ ' + esc(bi('تفعيل الحساب الآن', 'Activate Account Now')) + '</button>' +
+                  '</div>' +
+                  (ui.otpErrorMsg
+                    ? '<div style="color:#991B1B;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:6px 10px;font-size:0.82rem;font-weight:700;">⚠️ ' + esc(ui.otpErrorMsg) + '</div>'
+                    : '') +
+                  '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+                    '<a class="btn btn-whatsapp" href="https://wa.me/' + esc(inlineWaPhone) + '?text=' + inlineWaText + '" target="_blank" rel="noopener" style="min-height:38px;padding:6px 12px;font-size:0.82rem;">💬 ' + esc(bi('طلب الكود أو التفعيل عبر واتساب', 'Request Code via WhatsApp')) + '</a>' +
+                    '<span style="font-size:0.78rem;color:var(--warn-text);">' + esc(bi('أو اطلب التفعيل المباشر من العيادة / المدير العام', 'Or ask the clinic / admin to verify directly')) + '</span>' +
+                  '</div>' +
+                '</div>';
+              })()
             : '') +
 
           (latestDelay
@@ -7814,7 +8216,7 @@
               };
             }
             allThreadsMap[key].msgs.push(m);
-            if (!m.isRead && m.senderRole !== 'ADMIN') allThreadsMap[key].unread += 1;
+            if (!isMessageReadForRole(m, 'ADMIN') && m.senderRole !== 'ADMIN') allThreadsMap[key].unread += 1;
           });
           const allThreads = Object.values(allThreadsMap).sort((a, b) => {
             const al = a.msgs[a.msgs.length - 1];
@@ -8402,7 +8804,8 @@
                 });
                 saveState(db);
                 scheduleSlotRemindersWeb(latestSlot, doc);
-                syncDocToFirestoreNamespace('appointments', latestSlot.id, latestSlot);
+                syncDocToFirestoreNamespace('slots', latestSlot.id, latestSlot);
+                syncDocToFirestoreNamespace('notifications', String(db.notifications[0].id), db.notifications[0]);
                 dispatchWorkerPush('NEW_BOOKING', getClinicDisplayName(doc), bookAlert, 'CLINIC', doc.id, CLOUD_PATHS.appointments);
                 triggerPlatformNotification(getClinicDisplayName(doc), bookAlert, 'book_' + latestSlot.id);
                 isSubmittingBook = false;
@@ -8481,6 +8884,7 @@
               closeModal();
               showToast(bi('تم فتح لوحة تحكم الإدارة العليا بنجاح', 'Super Admin dashboard unlocked'));
               renderApp();
+              pullCloudStateViaRestWeb(['accounts', 'messages', 'notifications', 'slots']);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
               showToast(res.error);
@@ -8714,9 +9118,10 @@
             regenOtpBtn.onclick = function () {
               if (!db.account) return;
               assignFreshUserOtp(db.account, db);
-              const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id);
+              const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id || normalizePhoneDigits(a.phone) === normalizePhoneDigits(db.account.phone));
               if (idx >= 0) db.accounts[idx] = db.account;
               saveState(db);
+              syncAccountToCloudNow(db.account);
               ui.otpErrorMsg = '';
               showToast(bi('تم توليد كود تفعيل جديد صالح لمدة 24 ساعة. اطلبه الآن عبر واتساب.', 'Generated a new 24h activation code. Request it via WhatsApp.'));
               refreshAccountModal();
@@ -8792,7 +9197,7 @@
               db.activeMemberId = newSelfMem.id;
 
               const regAlertMsg = '👤 عميل جديد سجل الآن: ' + fullName + ' - ' + phone + ' (OTP: ' + newAcc.otpCode + ')';
-              db.notifications.unshift({
+              const regNotif = {
                 id: nowMs,
                 message: regAlertMsg,
                 isRead: false,
@@ -8800,9 +9205,13 @@
                 targetId: newAccId,
                 senderLabel: bi('تسجيل عميل جديد', 'New Customer Registration'),
                 createdAtMillis: nowMs
-              });
+              };
+              db.notifications.unshift(regNotif);
 
               saveState(db);
+              syncAccountToCloudNow(newAcc);
+              syncDocToFirestoreNamespace('family_members', newSelfMem.id, newSelfMem);
+              syncDocToFirestoreNamespace('notifications', String(regNotif.id), regNotif);
               triggerPlatformNotification('👤 عميل جديد — طب الحجايزة', regAlertMsg, 'new_user_' + newAccId);
               dispatchWorkerPush('NEW_USER_REGISTERED', '👤 عميل جديد سجل الآن', regAlertMsg, 'ADMIN', newAccId, CLOUD_PATHS.users);
               authMode = 'NONE';
@@ -8875,6 +9284,7 @@
               db.familyMembers.push(mem);
               db.activeMemberId = mem.id;
               saveState(db);
+              syncDocToFirestoreNamespace('family_members', mem.id, mem);
               closeModal();
               showToast(bi('تمت إضافة ' + name + ' إلى قائمة العائلة', 'Added ' + name + ' to family list'));
               renderApp();
@@ -8903,7 +9313,7 @@
               const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id);
               if (idx >= 0) db.accounts[idx].allowSpouseViewPersonalRecords = db.account.allowSpouseViewPersonalRecords;
               saveState(db);
-              syncDocToFirestoreNamespace('users', db.account.id, db.account);
+              syncAccountToCloudNow(db.account);
               showToast(bi(
                 db.account.allowSpouseViewPersonalRecords
                   ? 'تم السماح للزوج/الزوجة بالاطلاع على ملفك الطبي الشخصي'
@@ -9390,20 +9800,24 @@
         }
 
         function markThreadReadForViewer() {
-          let changed = false;
+          const updatedMsgs = [];
           (db.messages || []).forEach((m) => {
-            if (!matchesThread(m) || m.isRead) return;
+            if (!matchesThread(m) || isMessageReadForRole(m, viewerRole)) return;
             const isFromOther =
               (viewerRole === 'PATIENT' && m.senderRole !== 'PATIENT') ||
               (viewerRole === 'DOCTOR' && m.senderRole !== 'CLINIC') ||
               (viewerRole === 'ADMIN' && m.senderRole !== 'ADMIN');
             if (isFromOther) {
               m.isRead = true;
-              changed = true;
+              if (viewerRole === 'PATIENT') m.isReadByPatient = true;
+              if (viewerRole === 'DOCTOR') m.isReadByClinic = true;
+              if (viewerRole === 'ADMIN') m.isReadByAdmin = true;
+              updatedMsgs.push(m);
             }
           });
-          if (changed) {
+          if (updatedMsgs.length > 0) {
             saveState(db);
+            updatedMsgs.forEach((m) => syncDocToFirestoreNamespace('messages', m.id, m));
             updateHeader();
           }
         }
@@ -9545,7 +9959,7 @@
               const aud = target.threadType === 'CLINIC_ADMIN' ? 'CLINIC' : 'PATIENT';
               const tid = target.threadType === 'CLINIC_ADMIN' ? (target.doctorId || '') : (target.patientAccountId || '');
               const nowMs = Date.now();
-              db.notifications.unshift({
+              const warnNotif = {
                 id: nowMs,
                 message: finalBody,
                 isRead: false,
@@ -9553,8 +9967,10 @@
                 targetId: tid,
                 senderLabel: bi('⚠️ تحذير إداري من المدير العام', '⚠️ Warning from General Manager'),
                 createdAtMillis: nowMs
-              });
+              };
+              db.notifications.unshift(warnNotif);
               saveState(db);
+              syncDocToFirestoreNamespace('notifications', String(warnNotif.id), warnNotif);
               triggerPlatformNotification('⚠️ تحذير إداري — طب الحجايزة', finalBody, 'warn_' + nowMs);
               dispatchWorkerPush('ADMIN_WARNING', '⚠️ تحذير إداري — طب الحجايزة', finalBody, aud, tid, CLOUD_PATHS.notifications);
             }
@@ -9705,11 +10121,30 @@
           const markBtn = document.getElementById('btnNotifMarkAllRead');
           if (markBtn) {
             markBtn.onclick = function () {
-              getVisibleNotificationsForRole().forEach((n) => { n.isRead = true; });
+              const changedNotifs = [];
+              const changedMsgs = [];
+              getVisibleNotificationsForRole().forEach((n) => {
+                if (!n.isRead) {
+                  n.isRead = true;
+                  changedNotifs.push(n);
+                }
+              });
               (db.messages || []).forEach((m) => {
-                if (isIncomingMessageForRole(m, roleMode)) m.isRead = true;
+                if (isIncomingMessageForRole(m, roleMode)) {
+                  m.isRead = true;
+                  if (roleMode === 'PATIENT') m.isReadByPatient = true;
+                  else if (roleMode === 'DOCTOR') m.isReadByClinic = true;
+                  else if (roleMode === 'ADMIN') m.isReadByAdmin = true;
+                  changedMsgs.push(m);
+                }
               });
               saveState(db);
+              changedNotifs.forEach((n) => {
+                syncDocToFirestoreNamespace('notifications', String(n.id), n);
+              });
+              changedMsgs.forEach((m) => {
+                syncDocToFirestoreNamespace('messages', m.id, m);
+              });
               updateHeader();
               const body = document.getElementById('modalBody');
               if (body) {
@@ -9731,6 +10166,7 @@
               if (!acc) return;
               markAccountVerified(acc, db.config.adminOwnerName || 'المدير العام');
               saveState(db);
+              syncAccountToCloudNow(acc);
               showToast(bi('تم توثيق حساب ' + acc.fullName + ' فوراً', 'Verified ' + acc.fullName));
               const body = document.getElementById('modalBody');
               if (body) { body.innerHTML = renderNotificationsBody(); mountNotificationsHandlers(); }
@@ -9741,7 +10177,7 @@
             btn.onclick = function () {
               const acc = (db.accounts || []).find((a) => a.id === btn.getAttribute('data-notif-copy-otp'));
               if (!acc) return;
-              if (isAccountOtpExpired(acc)) { assignFreshUserOtp(acc, db); saveState(db); }
+              if (isAccountOtpExpired(acc)) { assignFreshUserOtp(acc, db); saveState(db); syncAccountToCloudNow(acc); }
               const msg = 'مرحباً ' + acc.fullName + '، كود تفعيل حسابك في منصة طب الحجايزة هو: ' + acc.otpCode + ' (صالح لمدة 24 ساعة).';
               copyTextToClipboard(msg, function () { showToast(bi('تم نسخ كود التفعيل ورسالة الترحيب (' + acc.otpCode + ')', 'Copied OTP & message')); });
             };
@@ -10866,6 +11302,53 @@
           };
         }
 
+        const inlineOtpInp = document.getElementById('homeInlineOtpInput');
+        const inlineOtpBtn = document.getElementById('btnHomeInlineOtpVerify');
+        function submitInlineHomeOtp() {
+          if (!db.account) {
+            openAccountModal('LOGIN');
+            return;
+          }
+          const rawVal = inlineOtpInp ? inlineOtpInp.value : '';
+          const check = verifyAndBurnActivationCode(db.account, rawVal);
+          if (!check.ok) {
+            ui.otpErrorMsg = check.error;
+            ui.otpSuccessMsg = '';
+            showToast(check.error);
+            renderApp();
+            return;
+          }
+          ui.otpErrorMsg = '';
+          ui.otpSuccessMsg = bi('تم تفعيل حسابك بنجاح! يمكنك الآن حجز المواعيد فوراً.', 'Account verified & activated! You can now book appointments.');
+          showToast(ui.otpSuccessMsg);
+          renderApp();
+        }
+        if (inlineOtpBtn) {
+          inlineOtpBtn.onclick = submitInlineHomeOtp;
+        }
+        if (inlineOtpInp) {
+          inlineOtpInp.onkeydown = function (e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submitInlineHomeOtp();
+            }
+          };
+        }
+        const inlineRegenBtn = document.getElementById('btnHomeInlineRegenOtp');
+        if (inlineRegenBtn) {
+          inlineRegenBtn.onclick = function () {
+            if (!db.account) return;
+            assignFreshUserOtp(db.account, db);
+            const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id || normalizePhoneDigits(a.phone) === normalizePhoneDigits(db.account.phone));
+            if (idx >= 0) db.accounts[idx] = db.account;
+            saveState(db);
+            syncAccountToCloudNow(db.account);
+            ui.otpErrorMsg = '';
+            showToast(bi('تم توليد كود تفعيل جديد صالح لمدة 24 ساعة.', 'Generated a new 24h activation code.'));
+            renderApp();
+          };
+        }
+
         const replyAdminWarnBtn = document.getElementById('btnHomeReplyAdminWarning');
         if (replyAdminWarnBtn) {
           replyAdminWarnBtn.onclick = function () {
@@ -11289,6 +11772,9 @@
           btn.onclick = function () {
             ui.adminTab = btn.getAttribute('data-admin-tab');
             renderApp();
+            if (ui.adminTab === 'USERS' || ui.adminTab === 'MESSAGES' || ui.adminTab === 'OVERVIEW') {
+              pullCloudStateViaRestWeb(['accounts', 'family_members', 'messages', 'notifications']);
+            }
           };
         });
 
@@ -11576,10 +12062,12 @@
                 db.account = target;
               }
               saveState(db);
+              syncAccountToCloudNow(target);
               showToast(bi('تم إلغاء تفعيل حساب ' + target.fullName, 'Unverified ' + target.fullName));
             } else {
               markAccountVerified(target, db.config.adminOwnerName || 'المدير العام');
               saveState(db);
+              syncAccountToCloudNow(target);
               showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' فوراً بواسطة المدير العام', 'Verified ' + target.fullName + ' immediately'));
             }
             renderApp();
@@ -11595,6 +12083,7 @@
               assignFreshUserOtp(target, db);
               if (db.account && db.account.id === target.id) db.account = target;
               saveState(db);
+              syncAccountToCloudNow(target);
               renderApp();
             }
             const readyMsg = 'مرحباً ' + target.fullName + '، تم استلام طلب تسجيلك في منصة طب الحجايزة الطبية.\nكود التفعيل الخاص بك هو: ' + target.otpCode + '\n(صالح لمدة 24 ساعة لتفعيل الحجز والملف الطبي)';
@@ -11612,6 +12101,7 @@
             assignFreshUserOtp(target, db);
             if (db.account && db.account.id === target.id) db.account = target;
             saveState(db);
+            syncAccountToCloudNow(target);
             showToast(bi('تم تجديد كود ' + target.fullName + ' (' + target.otpCode + ') لمدة 24 ساعة', 'Renewed 24h OTP (' + target.otpCode + ')'));
             renderApp();
           };
@@ -11675,6 +12165,10 @@
                   });
                   if (db.account && db.account.id === acc.id) db.account = acc;
                   saveState(db);
+                  if (oldPhoneDigits && oldPhoneDigits !== newPhoneDigits) {
+                    deleteDocFromFirestoreNamespace('accounts', oldPhoneDigits);
+                  }
+                  syncAccountToCloudNow(acc);
                   closeModal();
                   showToast(bi('تم تحديث بيانات العميل بنجاح', 'Customer details updated'));
                   renderApp();
@@ -11698,6 +12192,8 @@
               function () {
                 document.getElementById('btnCancelDeleteUser').onclick = closeModal;
                 document.getElementById('btnConfirmDeleteUser').onclick = function () {
+                  const delMembers = (db.familyMembers || []).filter((m) => m.accountId === acc.id);
+                  const phoneDocId = getAccountCloudDocId(acc);
                   db.accounts = (db.accounts || []).filter((a) => a.id !== acc.id);
                   db.familyMembers = (db.familyMembers || []).filter((m) => m.accountId !== acc.id);
                   if (db.account && db.account.id === acc.id) {
@@ -11705,6 +12201,9 @@
                     db.activeMemberId = null;
                   }
                   saveState(db);
+                  if (phoneDocId) deleteDocFromFirestoreNamespace('accounts', phoneDocId);
+                  if (acc.id && acc.id !== phoneDocId) deleteDocFromFirestoreNamespace('accounts', acc.id);
+                  delMembers.forEach((m) => deleteDocFromFirestoreNamespace('family_members', m.id));
                   closeModal();
                   showToast(bi('تم حذف حساب ' + acc.fullName + ' نهائياً', 'Deleted ' + acc.fullName));
                   renderApp();
@@ -11747,7 +12246,7 @@
             const msgInp = document.getElementById('admBroadcastMsg');
             const msg = (msgInp ? msgInp.value : '').trim();
             if (!msg) { showToast(bi('اكتب نص الإشعار العام أولاً', 'Write broadcast message first')); return; }
-            db.notifications.unshift({
+            const bcNotif = {
               id: Date.now(),
               message: '📢 ' + msg,
               isRead: false,
@@ -11755,8 +12254,10 @@
               targetId: '',
               senderLabel: bi('إعلان عام من الإدارة العليا', 'Global Admin Broadcast'),
               createdAtMillis: Date.now()
-            });
+            };
+            db.notifications.unshift(bcNotif);
             saveState(db);
+            syncDocToFirestoreNamespace('notifications', String(bcNotif.id), bcNotif);
             triggerPlatformNotification(
               bi('إعلان من الإدارة — طب الحجايزة', 'Admin Broadcast — Teb Al-Hajayzah'),
               '📢 ' + msg,
@@ -11781,7 +12282,7 @@
             const targetId = (document.getElementById('admClinicAlertTarget') || {}).value || '';
             const msg = ((document.getElementById('admClinicAlertMsg') || {}).value || '').trim();
             if (!msg) { showToast(bi('اكتب نص التنبيه للعيادة أولاً', 'Write clinic alert message first')); return; }
-            db.notifications.unshift({
+            const caNotif = {
               id: Date.now(),
               message: '🔔 ' + msg,
               isRead: false,
@@ -11789,8 +12290,10 @@
               targetId: targetId,
               senderLabel: bi('تنبيه من الإدارة العليا للعيادة', 'Admin Clinic Alert'),
               createdAtMillis: Date.now()
-            });
+            };
+            db.notifications.unshift(caNotif);
             saveState(db);
+            syncDocToFirestoreNamespace('notifications', String(caNotif.id), caNotif);
             triggerPlatformNotification(bi('تنبيه إداري للعيادة', 'Clinic Alert'), '🔔 ' + msg, 'clinic_alert_' + Date.now());
             showToast(bi('تم إرسال التنبيه للعيادة بنجاح', 'Clinic alert sent'));
             renderApp();
@@ -12057,6 +12560,7 @@
             const clinicSource = 'عيادة د. ' + String(doc.doctorName || '').replace(/^د\.?\s*/i, '').trim();
             markAccountVerified(target, clinicSource);
             saveState(db);
+            syncAccountToCloudNow(target);
             showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' بنجاح (' + clinicSource + ') ✓', 'Verified ' + target.fullName + ' (' + clinicSource + ') ✓'));
             renderApp();
           };
@@ -12075,7 +12579,7 @@
             const targetAccId = (document.getElementById('docAlertPatientSel') || {}).value || '';
             const msg = ((document.getElementById('docAlertMessageInp') || {}).value || '').trim();
             if (!msg) { showToast(bi('اكتب نص الإشعار للمريض أولاً', 'Write alert message first')); return; }
-            db.notifications.unshift({
+            const patNotif = {
               id: Date.now(),
               message: '🩺 ' + getDoctorDisplayName(doc) + ': ' + msg,
               isRead: false,
@@ -12083,8 +12587,10 @@
               targetId: targetAccId,
               senderLabel: getClinicDisplayName(doc),
               createdAtMillis: Date.now()
-            });
+            };
+            db.notifications.unshift(patNotif);
             saveState(db);
+            syncDocToFirestoreNamespace('notifications', String(patNotif.id), patNotif);
             showToast(bi('تم إرسال الإشعار للمريض بنجاح', 'Alert sent to patient'));
             renderApp();
           };
@@ -12157,6 +12663,7 @@
             const clinicSource = 'عيادة د. ' + String(doc.doctorName || '').replace(/^د\.?\s*/i, '').trim();
             markAccountVerified(target, clinicSource);
             saveState(db);
+            syncAccountToCloudNow(target);
             ui.docActivateResults = (db.accounts || []).filter((acc) => {
               const digitsQ = normalizePhoneDigits(ui.docActivatePhoneQuery);
               const accDigits = normalizePhoneDigits(acc.phone);
@@ -12196,7 +12703,7 @@
             }
           });
           const delayMsg = 'تنبيه عاجل: تم تأخير مواعيد ' + doc.doctorName + ' (' + doc.clinicName + ') لمدة ' + mins + ' دقيقة (الإجمالي: ' + doc.currentDelayMinutes + ' دقيقة).';
-          db.notifications.unshift({
+          const delayNotif = {
             id: Date.now(),
             message: delayMsg,
             isRead: false,
@@ -12204,8 +12711,10 @@
             targetId: '',
             senderLabel: getClinicDisplayName(doc),
             createdAtMillis: Date.now()
-          });
+          };
+          db.notifications.unshift(delayNotif);
           saveState(db);
+          syncDocToFirestoreNamespace('notifications', String(delayNotif.id), delayNotif);
           triggerPlatformNotification(getClinicDisplayName(doc), delayMsg, 'delay_' + doc.id);
           dispatchWorkerPush('CLINIC_DELAY', getClinicDisplayName(doc), delayMsg, 'PATIENT', '', CLOUD_PATHS.appointments);
           showToast(bi('تم تأخير المواعيد ' + mins + ' دقيقة وإرسال تنبيه فوري للمرضى', 'Delayed slots by ' + mins + ' min'));

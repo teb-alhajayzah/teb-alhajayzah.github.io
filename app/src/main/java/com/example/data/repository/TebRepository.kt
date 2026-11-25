@@ -436,6 +436,11 @@ class TebRepository(
 
     suspend fun markAccountPhoneVerified(accountId: String, verifiedBy: String = "كود OTP") {
         dao.markAccountPhoneVerified(accountId, verifiedBy, System.currentTimeMillis())
+        dao.getAccountById(accountId)?.let { acc ->
+            pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(acc.phone, acc.id)) {
+                FirestoreCloudSyncService.accountToJson(acc)
+            }
+        }
     }
 
     private suspend fun generateUniqueUserOtpCode(): String {
@@ -470,6 +475,9 @@ class TebRepository(
             otpExpiresAtMillis = expiresAt,
             otpUsed = false,
         )
+        pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(updated.phone, updated.id)) {
+            FirestoreCloudSyncService.accountToJson(updated)
+        }
         return Result.success(updated)
     }
 
@@ -519,7 +527,9 @@ class TebRepository(
         if (cleanCode == MASTER_ADMIN_OTP) {
             dao.markAccountPhoneVerified(accountId, "كود OTP", nowMillis)
             dao.getAccountById(accountId)?.let { acc ->
-                pushDocAsync("accounts", acc.id) { FirestoreCloudSyncService.accountToJson(acc) }
+                pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(acc.phone, acc.id)) {
+                    FirestoreCloudSyncService.accountToJson(acc)
+                }
             }
             return Result.success(Unit)
         }
@@ -539,7 +549,9 @@ class TebRepository(
             }
             dao.markAccountPhoneVerified(accountId, "كود OTP", nowMillis)
             dao.getAccountById(accountId)?.let { acc ->
-                pushDocAsync("accounts", acc.id) { FirestoreCloudSyncService.accountToJson(acc) }
+                pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(acc.phone, acc.id)) {
+                    FirestoreCloudSyncService.accountToJson(acc)
+                }
             }
             return Result.success(Unit)
         }
@@ -560,7 +572,9 @@ class TebRepository(
         )
         return if (redeemed) {
             dao.getAccountById(accountId)?.let { acc ->
-                pushDocAsync("accounts", acc.id) { FirestoreCloudSyncService.accountToJson(acc) }
+                pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(acc.phone, acc.id)) {
+                    FirestoreCloudSyncService.accountToJson(acc)
+                }
             }
             dao.getActivationCode(cleanCode)?.let { updatedCode ->
                 pushDocAsync("activation_codes", updatedCode.code) { FirestoreCloudSyncService.activationCodeToJson(updatedCode) }
@@ -608,7 +622,9 @@ class TebRepository(
             verifiedBy = source,
             verifiedAtMillis = now,
         )
-        pushDocAsync("accounts", updated.id) { FirestoreCloudSyncService.accountToJson(updated) }
+        pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(updated.phone, updated.id)) {
+            FirestoreCloudSyncService.accountToJson(updated)
+        }
         return Result.success(updated)
     }
 
@@ -647,7 +663,9 @@ class TebRepository(
             regenerateAccountOtp(accountId, now)
         }
         dao.getAccountById(accountId)?.let { acc ->
-            pushDocAsync("accounts", acc.id) { FirestoreCloudSyncService.accountToJson(acc) }
+            pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(acc.phone, acc.id)) {
+                FirestoreCloudSyncService.accountToJson(acc)
+            }
         }
     }
 
@@ -678,14 +696,26 @@ class TebRepository(
             phone = cleanPhone,
             password = resolvedPass,
         )
-        pushDocAsync("accounts", updated.id) { FirestoreCloudSyncService.accountToJson(updated) }
+        val oldDocId = FirestoreCloudSyncService.accountCloudDocId(existing.phone, existing.id)
+        val newDocId = FirestoreCloudSyncService.accountCloudDocId(updated.phone, updated.id)
+        if (oldDocId != newDocId) {
+            deleteDocAsync("accounts", oldDocId)
+        }
+        pushDocAsync("accounts", newDocId) { FirestoreCloudSyncService.accountToJson(updated) }
         return Result.success(updated)
     }
 
     suspend fun deleteAccountByAdmin(accountId: String) {
+        val existing = dao.getAccountById(accountId)
         val members = dao.getFamilyMembersOnce(accountId)
         dao.deleteAccountCascade(accountId)
         deleteDocAsync("accounts", accountId)
+        if (existing != null) {
+            val phoneDocId = FirestoreCloudSyncService.accountCloudDocId(existing.phone, existing.id)
+            if (phoneDocId != accountId) {
+                deleteDocAsync("accounts", phoneDocId)
+            }
+        }
         members.forEach { deleteDocAsync("family_members", it.id) }
         appContext.tebDataStore.edit { prefs ->
             if (prefs[activeAccountKey] == accountId) {
@@ -1718,15 +1748,55 @@ class TebRepository(
                     }
                 }
 
-                // 4) مزامنة الحسابات (teb_alhajayzah/data/accounts)
+                // 4) مزامنة الحسابات (teb_alhajayzah/data/accounts/{phone})
                 FirestoreCloudSyncService.listCollection(brand, "accounts")?.let { remoteAccs ->
                     val localAccs = dao.getAllAccountsOnce()
                     if (remoteAccs.isEmpty() && localAccs.isNotEmpty()) {
                         localAccs.forEach { a ->
-                            FirestoreCloudSyncService.upsertDocument(brand, "accounts", a.id, FirestoreCloudSyncService.accountToJson(a))
+                            FirestoreCloudSyncService.upsertDocument(
+                                brand,
+                                "accounts",
+                                FirestoreCloudSyncService.accountCloudDocId(a.phone, a.id),
+                                FirestoreCloudSyncService.accountToJson(a),
+                            )
                         }
-                    } else {
-                        remoteAccs.mapNotNull { FirestoreCloudSyncService.accountFromJson(it) }.forEach { dao.insertAccount(it) }
+                    } else if (remoteAccs.isNotEmpty()) {
+                        val parsedRemote = remoteAccs.mapNotNull { FirestoreCloudSyncService.accountFromJson(it) }
+                        val mergedByPhone = LinkedHashMap<String, PatientAccountEntity>()
+                        parsedRemote.forEach { acc ->
+                            val key = FirestoreCloudSyncService.accountCloudDocId(acc.phone, acc.id)
+                            val prev = mergedByPhone[key]
+                            if (prev == null ||
+                                (acc.isPhoneVerified && !prev.isPhoneVerified) ||
+                                (acc.isPhoneVerified == prev.isPhoneVerified && acc.verifiedAtMillis > prev.verifiedAtMillis) ||
+                                (acc.verifiedAtMillis == prev.verifiedAtMillis && acc.otpCreatedAtMillis > prev.otpCreatedAtMillis)
+                            ) {
+                                mergedByPhone[key] = acc
+                            }
+                        }
+                        val localByPhone = localAccs.associateBy {
+                            FirestoreCloudSyncService.accountCloudDocId(it.phone, it.id)
+                        }
+                        mergedByPhone.forEach { (phoneKey, remoteAcc) ->
+                            val existingLocal = localByPhone[phoneKey]
+                            val toSave = if (existingLocal != null && existingLocal.id != remoteAcc.id) {
+                                remoteAcc.copy(id = existingLocal.id)
+                            } else {
+                                remoteAcc
+                            }
+                            dao.insertAccount(toSave)
+                        }
+                        localAccs.forEach { localAcc ->
+                            val key = FirestoreCloudSyncService.accountCloudDocId(localAcc.phone, localAcc.id)
+                            if (!mergedByPhone.containsKey(key)) {
+                                FirestoreCloudSyncService.upsertDocument(
+                                    brand,
+                                    "accounts",
+                                    key,
+                                    FirestoreCloudSyncService.accountToJson(localAcc),
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -2459,7 +2529,9 @@ class TebRepository(
             nationalId = account.nationalId,
         )
         dao.insertFamilyMember(selfMember)
-        pushDocAsync("accounts", account.id) { FirestoreCloudSyncService.accountToJson(account) }
+        pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(account.phone, account.id)) {
+            FirestoreCloudSyncService.accountToJson(account)
+        }
         pushDocAsync("family_members", selfMember.id) { FirestoreCloudSyncService.familyMemberToJson(selfMember) }
         val adminRegMsg = "👤 عميل جديد سجل الآن: ${account.fullName} - ${account.phone}"
         val adminNotif = DelayNotificationEntity(
@@ -2587,6 +2659,36 @@ class TebRepository(
         )
         dao.insertDirectMessage(msg)
         pushDocAsync("messages", msg.id) { FirestoreCloudSyncService.messageToJson(msg) }
+        val adminNotif = DelayNotificationEntity(
+            doctorId = "",
+            doctorName = account.fullName,
+            clinicName = "رسالة دعم فني",
+            delayMinutes = 0,
+            message = "💬 رسالة دعم جديدة من ${account.fullName} (${account.phone}): $cleanBody",
+            createdAtMillis = msg.createdAtMillis,
+            isRead = false,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = account.id,
+            senderLabel = "رسالة دعم فني جديدة",
+        )
+        val notifRowId = dao.insertNotification(adminNotif)
+        val savedNotif = adminNotif.copy(id = notifRowId)
+        pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+            FirestoreCloudSyncService.notificationToJson(savedNotif)
+        }
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "💬 رسالة دعم جديدة من ${account.fullName}",
+            body = cleanBody,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "PATIENT_SUPPORT_MESSAGE",
+            title = "💬 رسالة دعم جديدة من ${account.fullName}",
+            body = cleanBody,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = account.id,
+            namespacePath = CloudNamespacePaths.MESSAGES,
+        )
         return Result.success(msg)
     }
 
@@ -2680,6 +2782,31 @@ class TebRepository(
         )
         dao.insertDirectMessage(msg)
         pushDocAsync("messages", msg.id) { FirestoreCloudSyncService.messageToJson(msg) }
+        val adminNotif = DelayNotificationEntity(
+            doctorId = doctor.id,
+            doctorName = doctor.doctorName,
+            clinicName = doctor.clinicName,
+            delayMinutes = 0,
+            message = "🩺 رسالة من عيادة ${doctor.doctorName} (${doctor.clinicName}): $cleanBody",
+            createdAtMillis = msg.createdAtMillis,
+            isRead = false,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = doctor.id,
+            senderLabel = "رسالة عيادة للإدارة",
+        )
+        val notifRowId = dao.insertNotification(adminNotif)
+        val savedNotif = adminNotif.copy(id = notifRowId)
+        pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+            FirestoreCloudSyncService.notificationToJson(savedNotif)
+        }
+        dispatchWorkerPushAsync(
+            eventType = "CLINIC_ADMIN_MESSAGE",
+            title = "🩺 رسالة من ${doctor.clinicName}",
+            body = cleanBody,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = doctor.id,
+            namespacePath = CloudNamespacePaths.MESSAGES,
+        )
         return Result.success(msg)
     }
 
@@ -3251,9 +3378,17 @@ class TebRepository(
             )
         }
         val updatedReq = dao.getAccountById(requester.id)
-        if (updatedReq != null) pushDocAsync("accounts", updatedReq.id) { FirestoreCloudSyncService.accountToJson(updatedReq) }
+        if (updatedReq != null) {
+            pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(updatedReq.phone, updatedReq.id)) {
+                FirestoreCloudSyncService.accountToJson(updatedReq)
+            }
+        }
         val updatedTarget = dao.getAccountById(target.id)
-        if (updatedTarget != null) pushDocAsync("accounts", updatedTarget.id) { FirestoreCloudSyncService.accountToJson(updatedTarget) }
+        if (updatedTarget != null) {
+            pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(updatedTarget.phone, updatedTarget.id)) {
+                FirestoreCloudSyncService.accountToJson(updatedTarget)
+            }
+        }
         return Result.success(Unit)
     }
 
@@ -3278,7 +3413,9 @@ class TebRepository(
         dao.setSpouseViewPermission(accountId, allow)
         val updated = dao.getAccountById(accountId)
         if (updated != null) {
-            pushDocAsync("accounts", updated.id) { FirestoreCloudSyncService.accountToJson(updated) }
+            pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(updated.phone, updated.id)) {
+                FirestoreCloudSyncService.accountToJson(updated)
+            }
         }
         return Result.success(Unit)
     }
