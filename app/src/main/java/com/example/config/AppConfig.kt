@@ -74,6 +74,9 @@ object CloudNamespacePaths {
     const val NOTIFICATIONS = "$DATA_ROOT/notifications"
     const val BLOCKED_PHONES = "$DATA_ROOT/blocked_phones"
     const val ACTIVATION_CODES = "$DATA_ROOT/activation_codes"
+    const val FAMILY_LINK_REQUESTS = "$DATA_ROOT/family_link_requests"
+    const val FCM_TOKENS = "$ROOT/fcm_tokens"
+    const val DATA_FCM_TOKENS = "$DATA_ROOT/fcm_tokens"
     const val CONFIG = SETTINGS
 }
 

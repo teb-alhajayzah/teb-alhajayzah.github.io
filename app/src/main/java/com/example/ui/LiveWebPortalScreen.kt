@@ -508,6 +508,10 @@ fun LiveWebPortalScreen(
                                 fun getAppVersionCode(): Int = BuildConfig.VERSION_CODE
 
                                 @JavascriptInterface
+                                fun areNotificationsEnabled(): Boolean =
+                                    TebNotificationHelper.hasNotificationPermission(ctx)
+
+                                @JavascriptInterface
                                 fun isNotificationPermissionGranted(): Boolean =
                                     TebNotificationHelper.hasNotificationPermission(ctx)
 

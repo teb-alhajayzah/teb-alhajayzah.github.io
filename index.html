@@ -1672,6 +1672,8 @@
         activationCodes: CLOUD_NAMESPACE + '/data/activation_codes',
         familyLinkRequests: CLOUD_NAMESPACE + '/data/family_link_requests',
         visitorHits: CLOUD_NAMESPACE + '/data/visitor_hits',
+        fcmTokens: CLOUD_NAMESPACE + '/fcm_tokens',
+        dataFcmTokens: CLOUD_NAMESPACE + '/data/fcm_tokens',
         config: CLOUD_NAMESPACE + '/settings'
       };
       const PATIENT_MODIFY_CUTOFF_MINUTES = 120;
@@ -3643,11 +3645,79 @@
               body: String(body || ''),
               targetAudience: String(targetAudience || 'ALL'),
               targetId: String(targetId || ''),
+              fcmToken: String(tebCloudRuntime.fcmToken || ''),
               projectId: String(cfg.firebaseProjectId || DEFAULT_CONFIG.firebaseProjectId || ''),
               createdAtMillis: Date.now()
             })
           });
         } catch (e) { /* offline-safe worker dispatch */ }
+      }
+
+      function getFcmTokenOwnerKey() {
+        try {
+          if (ui && ui.isAdminLoggedIn) return 'admin';
+          if (ui && ui.loggedInDoctorId) return 'doctor_' + safeCloudDocId(ui.loggedInDoctorId);
+          if (ui && ui.loggedInLabId) return 'lab_' + safeCloudDocId(ui.loggedInLabId);
+          if (db && db.account) return safeCloudDocId(getAccountCloudDocId(db.account) || db.account.id);
+        } catch (e) {}
+        return 'guest_device';
+      }
+
+      function getFcmTokenOwnerRole() {
+        if (ui && ui.isAdminLoggedIn) return 'ADMIN';
+        if (ui && ui.loggedInDoctorId) return 'CLINIC';
+        if (ui && ui.loggedInLabId) return 'LAB';
+        if (db && db.account) return 'PATIENT';
+        return 'GUEST';
+      }
+
+      async function syncFcmTokenToFirestore(tokenOverride) {
+        try {
+          const token = String(tokenOverride || tebCloudRuntime.fcmToken || '').trim();
+          if (!token) return false;
+          const cfg = (db && db.config) || DEFAULT_CONFIG;
+          if (!isFirebaseCloudConfigured(cfg)) return false;
+          const ownerKey = getFcmTokenOwnerKey();
+          const role = getFcmTokenOwnerRole();
+          const payload = {
+            id: ownerKey,
+            userId: ownerKey,
+            accountId: (db && db.account && db.account.id) || '',
+            phone: (db && db.account && db.account.phone) || '',
+            role: role,
+            fcmToken: token,
+            platform: (window.AndroidBridge ? 'ANDROID_WEBVIEW' : 'WEB'),
+            updatedAtMillis: Date.now()
+          };
+          await syncDocToFirestoreNamespace('fcm_tokens', ownerKey, payload);
+          const fsDb = getOrCreateFirestore(cfg);
+          if (fsDb) {
+            try {
+              const mapObj = {};
+              mapObj[ownerKey] = payload;
+              await fsDb.doc(CLOUD_PATHS.fcmTokens).set(mapObj, { merge: true });
+              return true;
+            } catch (sdkErr) { /* fall through to REST PATCH */ }
+          }
+          const projectId = String(cfg.firebaseProjectId || '').trim();
+          const apiKey = String(cfg.firebaseApiKey || '').trim();
+          if (projectId && apiKey && typeof fetch === 'function') {
+            const mapPatch = {};
+            mapPatch[ownerKey] = payload;
+            const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
+              '/databases/(default)/documents/' + CLOUD_PATHS.fcmTokens +
+              '?updateMask.fieldPaths=' + encodeURIComponent(ownerKey) +
+              '&key=' + encodeURIComponent(apiKey);
+            await fetch(url, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: toFirestoreFields(mapPatch) })
+            }).catch(() => {});
+          }
+          return true;
+        } catch (e) {
+          return false;
+        }
       }
 
       function initFirebaseCloudBridge() {
@@ -3664,6 +3734,17 @@
             vapidKey: String(cfg.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey).trim()
           };
           getOrCreateFirestore(cfg);
+          function acquireAndSyncToken(msgSdk, reg) {
+            if (!msgSdk || !webCfg.vapidKey || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+            msgSdk.getToken({ vapidKey: webCfg.vapidKey, serviceWorkerRegistration: reg })
+              .then((token) => {
+                if (token) {
+                  tebCloudRuntime.fcmToken = token;
+                  syncFcmTokenToFirestore(token);
+                }
+              })
+              .catch(() => {});
+          }
           if ('serviceWorker' in navigator && /^https?:$/i.test(window.location.protocol)) {
             navigator.serviceWorker.register('./firebase-messaging-sw.js').then((reg) => {
               const targetWorker = reg.active || reg.waiting || reg.installing;
@@ -3673,10 +3754,11 @@
               if (typeof firebase !== 'undefined' && firebase.messaging && tebCloudRuntime.firebaseApp) {
                 try {
                   const msgSdk = firebase.messaging(tebCloudRuntime.firebaseApp);
-                  if (webCfg.vapidKey && Notification.permission === 'granted') {
-                    msgSdk.getToken({ vapidKey: webCfg.vapidKey, serviceWorkerRegistration: reg })
-                      .then((token) => { if (token) tebCloudRuntime.fcmToken = token; })
-                      .catch(() => {});
+                  acquireAndSyncToken(msgSdk, reg);
+                  if ('Notification' in window && Notification.permission === 'default') {
+                    Notification.requestPermission().then((perm) => {
+                      if (perm === 'granted') acquireAndSyncToken(msgSdk, reg);
+                    }).catch(() => {});
                   }
                   if (!tebCloudRuntime._boundOnMsg && msgSdk.onMessage) {
                     tebCloudRuntime._boundOnMsg = true;
@@ -3700,6 +3782,9 @@
 
       function isNotifPermissionGrantedWeb() {
         try {
+          if (window.AndroidBridge && typeof window.AndroidBridge.areNotificationsEnabled === 'function') {
+            return Boolean(window.AndroidBridge.areNotificationsEnabled());
+          }
           if (window.AndroidBridge && typeof window.AndroidBridge.isNotificationPermissionGranted === 'function') {
             return Boolean(window.AndroidBridge.isNotificationPermissionGranted());
           }
@@ -5601,8 +5686,22 @@
                 createdAtMillis: Date.now()
               };
               db.familyLinkRequests.unshift(req);
+              const flrMsg = '👨‍👩‍👧 طلب ربط عائلي جديد من ' + sourceAccount.fullName + ' (' + sourceAccount.phone + ') مع ' + targetAcc.fullName + ' (' + targetAcc.phone + ')';
+              const flrNotif = {
+                id: Date.now(),
+                message: flrMsg,
+                isRead: false,
+                targetAudience: 'ADMIN',
+                targetId: req.id,
+                senderLabel: bi('طلب ربط عائلي جديد', 'New Family Link Request'),
+                createdAtMillis: Date.now()
+              };
+              db.notifications.unshift(flrNotif);
               saveState(db);
               syncDocToFirestoreNamespace('family_link_requests', req.id, req);
+              syncDocToFirestoreNamespace('notifications', String(flrNotif.id), flrNotif);
+              triggerPlatformNotification('👨‍👩‍👧 طلب ربط عائلي جديد — طب الحجايزة', flrMsg, 'flr_' + req.id);
+              dispatchWorkerPush('FAMILY_LINK_REQUEST', '👨‍👩‍👧 طلب ربط عائلي جديد', flrMsg, 'ADMIN', req.id, CLOUD_PATHS.familyLinkRequests);
               closeModal();
               showToast(bi('تم إرسال طلب ربط الأسرة للإدارة للمراجعة والاعتماد', 'Family link request sent to Super Admin'));
               renderApp();
@@ -8883,6 +8982,7 @@
               } catch (e) {}
               closeModal();
               showToast(bi('تم فتح لوحة تحكم الإدارة العليا بنجاح', 'Super Admin dashboard unlocked'));
+              syncFcmTokenToFirestore();
               renderApp();
               pullCloudStateViaRestWeb(['accounts', 'messages', 'notifications', 'slots']);
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -9120,8 +9220,21 @@
               assignFreshUserOtp(db.account, db);
               const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id || normalizePhoneDigits(a.phone) === normalizePhoneDigits(db.account.phone));
               if (idx >= 0) db.accounts[idx] = db.account;
+              const otpReqMsg = '🔑 طلب كود تفعيل (OTP) جديد للعميل ' + db.account.fullName + ' (' + db.account.phone + '): ' + db.account.otpCode;
+              const otpNotif = {
+                id: Date.now(),
+                message: otpReqMsg,
+                isRead: false,
+                targetAudience: 'ADMIN',
+                targetId: db.account.id,
+                senderLabel: bi('طلب كود تفعيل OTP', 'OTP Activation Request'),
+                createdAtMillis: Date.now()
+              };
+              db.notifications.unshift(otpNotif);
               saveState(db);
               syncAccountToCloudNow(db.account);
+              syncDocToFirestoreNamespace('notifications', String(otpNotif.id), otpNotif);
+              dispatchWorkerPush('OTP_REQUESTED', '🔑 طلب كود تفعيل OTP جديد', otpReqMsg, 'ADMIN', db.account.id, CLOUD_PATHS.users);
               ui.otpErrorMsg = '';
               showToast(bi('تم توليد كود تفعيل جديد صالح لمدة 24 ساعة. اطلبه الآن عبر واتساب.', 'Generated a new 24h activation code. Request it via WhatsApp.'));
               refreshAccountModal();
@@ -9212,6 +9325,7 @@
               syncAccountToCloudNow(newAcc);
               syncDocToFirestoreNamespace('family_members', newSelfMem.id, newSelfMem);
               syncDocToFirestoreNamespace('notifications', String(regNotif.id), regNotif);
+              syncFcmTokenToFirestore();
               triggerPlatformNotification('👤 عميل جديد — طب الحجايزة', regAlertMsg, 'new_user_' + newAccId);
               dispatchWorkerPush('NEW_USER_REGISTERED', '👤 عميل جديد سجل الآن', regAlertMsg, 'ADMIN', newAccId, CLOUD_PATHS.users);
               authMode = 'NONE';
@@ -9255,6 +9369,7 @@
                 showToast(bi('تم تسجيل الدخول: ' + found.fullName, 'Signed in: ' + found.fullName));
               }
               saveState(db);
+              syncFcmTokenToFirestore();
               authMode = 'NONE';
               refreshAccountModal();
               renderApp();
@@ -10673,11 +10788,32 @@
                 createdAtMillis: Date.now()
               };
               db.records.unshift(newRxRec);
+              const rxTargetAcc = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === normalizePhoneDigits(slot.patientPhone));
+              const rxTargetId = rxTargetAcc ? rxTargetAcc.id : (slot.familyMemberId || '');
+              const rxMsg = '💊 تم إضافة روشتة وتقرير طبي جديد من ' + doc.doctorName + ' (' + (doc.clinicName || doc.doctorName) + '): ' + newRxRec.diagnosis;
+              const rxNotif = {
+                id: Date.now(),
+                doctorId: doc.id,
+                doctorName: doc.doctorName,
+                clinicName: doc.clinicName || doc.doctorName,
+                message: rxMsg,
+                isRead: false,
+                targetAudience: 'PATIENT',
+                targetId: rxTargetId,
+                senderLabel: doc.clinicName || doc.doctorName,
+                createdAtMillis: newRxRec.createdAtMillis
+              };
+              db.notifications.unshift(rxNotif);
               saveState(db);
+              syncDocToFirestoreNamespace('records', newRxRec.id, newRxRec);
+              syncDocToFirestoreNamespace('slots', slot.id, slot);
+              syncDocToFirestoreNamespace('notifications', String(rxNotif.id), rxNotif);
               createAndSyncPermanentMedicalLogWeb(newRxRec, 'CLINIC_VISIT', doc.doctorName);
               if (newRxRec.attachmentDataUrl) {
                 uploadFileToGoogleDriveWebApp(newRxRec, doc, doc.clinicName || doc.doctorName);
               }
+              triggerPlatformNotification('💊 ' + (doc.clinicName || doc.doctorName), rxMsg, 'rx_' + newRxRec.id);
+              dispatchWorkerPush('PRESCRIPTION_ADDED', '💊 روشتة جديدة — ' + (doc.clinicName || doc.doctorName), rxMsg, 'PATIENT', rxTargetId, CLOUD_PATHS.records);
               closeModal();
               showToast(bi('تم حفظ الروشتة والتقرير الثنائي وتدوينها في السجل الدائم مدى الحياة', 'Bilingual Rx saved & permanently logged'));
               renderApp();
@@ -11341,8 +11477,21 @@
             assignFreshUserOtp(db.account, db);
             const idx = (db.accounts || []).findIndex((a) => a.id === db.account.id || normalizePhoneDigits(a.phone) === normalizePhoneDigits(db.account.phone));
             if (idx >= 0) db.accounts[idx] = db.account;
+            const homeOtpMsg = '🔑 طلب كود تفعيل (OTP) جديد للعميل ' + db.account.fullName + ' (' + db.account.phone + '): ' + db.account.otpCode;
+            const homeOtpNotif = {
+              id: Date.now(),
+              message: homeOtpMsg,
+              isRead: false,
+              targetAudience: 'ADMIN',
+              targetId: db.account.id,
+              senderLabel: bi('طلب كود تفعيل OTP', 'OTP Activation Request'),
+              createdAtMillis: Date.now()
+            };
+            db.notifications.unshift(homeOtpNotif);
             saveState(db);
             syncAccountToCloudNow(db.account);
+            syncDocToFirestoreNamespace('notifications', String(homeOtpNotif.id), homeOtpNotif);
+            dispatchWorkerPush('OTP_REQUESTED', '🔑 طلب كود تفعيل OTP جديد', homeOtpMsg, 'ADMIN', db.account.id, CLOUD_PATHS.users);
             ui.otpErrorMsg = '';
             showToast(bi('تم توليد كود تفعيل جديد صالح لمدة 24 ساعة.', 'Generated a new 24h activation code.'));
             renderApp();
@@ -11555,6 +11704,7 @@
           ui.labSearchResults = [];
           ui.labTargetMemberId = '';
           ui.labTargetAccountPhone = '';
+          syncFcmTokenToFirestore();
           showToast(bi('مرحباً بكم في بوابة ' + found.labName, 'Welcome to ' + found.labName));
           renderApp();
         }
@@ -11707,7 +11857,25 @@
               createdAtMillis: Date.now()
             };
             db.records.unshift(newLabRec);
+            const labTargetAcc = (db.accounts || []).find((a) => a.id === member.accountId || normalizePhoneDigits(a.phone) === normalizePhoneDigits(newLabRec.patientPhone));
+            const labTargetId = labTargetAcc ? labTargetAcc.id : (member.accountId || member.id);
+            const labAlertText = '🧪 نتيجة تحليل جديدة من ' + lab.labName + ' (' + title + ') لملف ' + member.fullName;
+            const labNotif = {
+              id: Date.now(),
+              doctorId: lab.id,
+              doctorName: lab.labName,
+              clinicName: lab.labName,
+              message: labAlertText,
+              isRead: false,
+              targetAudience: 'PATIENT',
+              targetId: labTargetId,
+              senderLabel: lab.labName,
+              createdAtMillis: newLabRec.createdAtMillis
+            };
+            db.notifications.unshift(labNotif);
             saveState(db);
+            syncDocToFirestoreNamespace('records', newLabRec.id, newLabRec);
+            syncDocToFirestoreNamespace('notifications', String(labNotif.id), labNotif);
             createAndSyncPermanentMedicalLogWeb(newLabRec, 'LAB_REPORT', lab.labName);
             if (newLabRec.attachmentDataUrl) {
               uploadFileToGoogleDriveWebApp(newLabRec, '', lab.labName);
@@ -11720,9 +11888,9 @@
             dispatchWorkerPush(
               'LAB_RESULT_UPLOADED',
               lab.labName,
-              '🧪 نتيجة تحليل جديدة (' + title + ') لملف ' + member.fullName,
+              labAlertText,
               'PATIENT',
-              '',
+              labTargetId,
               CLOUD_PATHS.records
             );
             showToast(bi('تم إرسال نتيجة ' + title + ' وتدوينها في السجل الدائم لـ ' + member.fullName, 'Sent lab report & permanently logged for ' + member.fullName));
@@ -11754,6 +11922,7 @@
             return;
           }
           ui.loggedInDoctorId = found.id;
+          syncFcmTokenToFirestore();
           showToast(bi('مرحباً ' + found.doctorName, 'Welcome, ' + found.doctorName));
           renderApp();
         }
@@ -12218,6 +12387,7 @@
           globalToggle.onchange = function () {
             db.config.globalChatEnabled = Boolean(globalToggle.checked);
             saveState(db);
+            pushSettingsToCloudNow(db.config);
             showToast(bi(
               db.config.globalChatEnabled ? 'تم تفعيل دردشة المرضى والعيادات على مستوى المنصة' : 'تم إيقاف دردشة المرضى والعيادات على مستوى المنصة',
               db.config.globalChatEnabled ? 'Global chat enabled' : 'Global chat disabled'
@@ -12232,6 +12402,7 @@
             if (!docObj) return;
             docObj.chatEnabled = Boolean(chk.checked);
             saveState(db);
+            syncDocToFirestoreNamespace('doctors', docObj.id, docObj);
             showToast(bi(
               (docObj.chatEnabled ? 'تم تفعيل الدردشة لعيادة ' : 'تم إيقاف الدردشة لعيادة ') + docObj.doctorName,
               (docObj.chatEnabled ? 'Enabled chat for ' : 'Disabled chat for ') + docObj.doctorName
@@ -12295,6 +12466,7 @@
             saveState(db);
             syncDocToFirestoreNamespace('notifications', String(caNotif.id), caNotif);
             triggerPlatformNotification(bi('تنبيه إداري للعيادة', 'Clinic Alert'), '🔔 ' + msg, 'clinic_alert_' + Date.now());
+            dispatchWorkerPush('ADMIN_CLINIC_ALERT', '🔔 إشعار إداري للعيادات', '🔔 ' + msg, 'CLINIC', targetId, CLOUD_PATHS.notifications);
             showToast(bi('تم إرسال التنبيه للعيادة بنجاح', 'Clinic alert sent'));
             renderApp();
           };

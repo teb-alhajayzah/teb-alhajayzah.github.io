@@ -458,6 +458,7 @@ class TebRepository(
     suspend fun regenerateAccountOtp(
         accountId: String,
         nowMillis: Long = System.currentTimeMillis(),
+        notifyAdmin: Boolean = false,
     ): Result<PatientAccountEntity> {
         val acc = dao.getAccountById(accountId)
             ?: return Result.failure(IllegalStateException("الحساب غير موجود"))
@@ -477,6 +478,34 @@ class TebRepository(
         )
         pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(updated.phone, updated.id)) {
             FirestoreCloudSyncService.accountToJson(updated)
+        }
+        if (notifyAdmin) {
+            val otpMsg = "🔑 طلب كود تفعيل (OTP) جديد للعميل ${updated.fullName} (${updated.phone}): $freshCode"
+            val adminNotif = DelayNotificationEntity(
+                doctorId = "",
+                doctorName = updated.fullName,
+                clinicName = "طلب كود تفعيل",
+                delayMinutes = 0,
+                message = otpMsg,
+                createdAtMillis = nowMillis,
+                isRead = false,
+                targetAudience = NotificationAudience.ADMIN,
+                targetId = updated.id,
+                senderLabel = "طلب كود تفعيل OTP",
+            )
+            val notifRowId = dao.insertNotification(adminNotif)
+            val savedNotif = adminNotif.copy(id = notifRowId)
+            pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+                FirestoreCloudSyncService.notificationToJson(savedNotif)
+            }
+            dispatchWorkerPushAsync(
+                eventType = "OTP_REQUESTED",
+                title = "🔑 طلب كود تفعيل OTP جديد",
+                body = otpMsg,
+                targetAudience = NotificationAudience.ADMIN,
+                targetId = updated.id,
+                namespacePath = CloudNamespacePaths.USERS,
+            )
         }
         return Result.success(updated)
     }
@@ -1983,6 +2012,30 @@ class TebRepository(
         }
     }
 
+    suspend fun saveFcmDeviceToken(
+        userId: String,
+        token: String,
+        role: String = "PATIENT",
+    ): Boolean {
+        val cleanUser = userId.trim()
+        val cleanToken = token.trim()
+        if (cleanUser.isBlank() || cleanToken.isBlank()) return false
+        if (!FirestoreCloudSyncService.isCloudNetworkAllowed()) return false
+        val brand = runCatching { brandConfigFlow.first() }.getOrNull() ?: return false
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val payload = JSONObject().apply {
+                    put("userId", cleanUser)
+                    put("fcmToken", cleanToken)
+                    put("role", role)
+                    put("platform", "ANDROID_APK")
+                    put("updatedAtMillis", System.currentTimeMillis())
+                }
+                FirestoreCloudSyncService.upsertFcmToken(brand, cleanUser, payload)
+            }.getOrDefault(false)
+        }
+    }
+
     suspend fun generateDoctorSchedule(
         doctorId: String,
         startMinutes: Int,
@@ -2143,6 +2196,40 @@ class TebRepository(
                 clinicName = doctor.clinicName,
             )
         }
+        val patientTargetId = dao.getFamilyMemberById(slot.familyMemberId)?.accountId?.takeIf { it.isNotBlank() }
+            ?: dao.findAccountByPhone(slot.patientPhone)?.id
+            ?: slot.familyMemberId
+        val rxMsg = "💊 تم إضافة روشتة وتقرير طبي جديد من ${doctor.doctorName} (${doctor.clinicName}): ${bundle.diagnosisAr}"
+        val rxNotif = DelayNotificationEntity(
+            doctorId = doctor.id,
+            doctorName = doctor.doctorName,
+            clinicName = doctor.clinicName,
+            delayMinutes = 0,
+            message = rxMsg,
+            createdAtMillis = record.createdAtMillis,
+            isRead = false,
+            targetAudience = NotificationAudience.PATIENT,
+            targetId = patientTargetId,
+            senderLabel = doctor.clinicName,
+        )
+        val notifRowId = dao.insertNotification(rxNotif)
+        val savedNotif = rxNotif.copy(id = notifRowId)
+        pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+            FirestoreCloudSyncService.notificationToJson(savedNotif)
+        }
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "💊 روشتة جديدة من ${doctor.clinicName}",
+            body = rxMsg,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "PRESCRIPTION_ADDED",
+            title = "💊 روشتة جديدة — ${doctor.clinicName}",
+            body = rxMsg,
+            targetAudience = NotificationAudience.PATIENT,
+            targetId = patientTargetId,
+            namespacePath = CloudNamespacePaths.RECORDS,
+        )
         return Result.success(record)
     }
 
@@ -2413,6 +2500,24 @@ class TebRepository(
             clinicName = lab.labName,
         )
         val labMsg = "نتيجة تحليل جديدة من ${lab.labName} باسم ${member.fullName}: $cleanTitle"
+        val patientTargetId = member.accountId.ifBlank { member.id }
+        val labNotif = DelayNotificationEntity(
+            doctorId = lab.id,
+            doctorName = lab.labName,
+            clinicName = lab.labName,
+            delayMinutes = 0,
+            message = "🔬 $labMsg",
+            createdAtMillis = record.createdAtMillis,
+            isRead = false,
+            targetAudience = NotificationAudience.PATIENT,
+            targetId = patientTargetId,
+            senderLabel = lab.labName,
+        )
+        val notifRowId = dao.insertNotification(labNotif)
+        val savedNotif = labNotif.copy(id = notifRowId)
+        pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+            FirestoreCloudSyncService.notificationToJson(savedNotif)
+        }
         TebNotificationHelper.showHighPriorityNotification(
             context = appContext,
             title = "نتيجة تحليل طبية جديدة",
@@ -2423,7 +2528,7 @@ class TebRepository(
             title = "نتيجة تحليل جديدة — ${lab.labName}",
             body = labMsg,
             targetAudience = NotificationAudience.PATIENT,
-            targetId = member.accountId.ifBlank { member.id },
+            targetId = patientTargetId,
             namespacePath = CloudNamespacePaths.RECORDS,
         )
         return Result.success(record)
@@ -2500,9 +2605,12 @@ class TebRepository(
         if (existing != null) {
             return Result.failure(IllegalArgumentException("رقم الهاتف مسجل بالفعل"))
         }
+        val cleanPin = toAsciiDigits(password).trim()
+        if (cleanPin.length < 4 || !cleanPin.all { it in '0'..'9' }) {
+            return Result.failure(IllegalArgumentException("الرقم السري (PIN) يجب أن يتكون من 4 أرقام على الأقل (أرقام فقط)"))
+        }
         val accountId = "acc_${UUID.randomUUID()}"
         val generatedOtp = generateUniqueUserOtpCode()
-        val cleanPin = toAsciiDigits(password).trim().ifEmpty { "1234" }
         val account = PatientAccountEntity(
             id = accountId,
             fullName = fullName.trim(),
@@ -2629,6 +2737,14 @@ class TebRepository(
         )
         dao.insertDirectMessage(msg)
         pushDocAsync("messages", msg.id) { FirestoreCloudSyncService.messageToJson(msg) }
+        dispatchWorkerPushAsync(
+            eventType = "PATIENT_CLINIC_MESSAGE",
+            title = "💬 رسالة جديدة من ${account.fullName}",
+            body = cleanBody,
+            targetAudience = NotificationAudience.CLINIC,
+            targetId = doctor.id,
+            namespacePath = CloudNamespacePaths.MESSAGES,
+        )
         return Result.success(msg)
     }
 
@@ -2722,6 +2838,14 @@ class TebRepository(
         )
         dao.insertDirectMessage(msg)
         pushDocAsync("messages", msg.id) { FirestoreCloudSyncService.messageToJson(msg) }
+        dispatchWorkerPushAsync(
+            eventType = "CLINIC_REPLY_MESSAGE",
+            title = "💬 رد جديد من ${doctor.clinicName}",
+            body = cleanBody,
+            targetAudience = NotificationAudience.PATIENT,
+            targetId = patientAccountId,
+            namespacePath = CloudNamespacePaths.MESSAGES,
+        )
         return Result.success(msg)
     }
 
@@ -2752,6 +2876,14 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${saved.id}_${saved.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(saved)
         }
+        dispatchWorkerPushAsync(
+            eventType = "CLINIC_PATIENT_ALERT",
+            title = "🔔 تنبيه من ${doctor.clinicName}",
+            body = saved.message,
+            targetAudience = NotificationAudience.PATIENT,
+            targetId = patientAccountId,
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
         return Result.success(saved)
     }
 
@@ -2918,6 +3050,14 @@ class TebRepository(
         )
         dao.insertDirectMessage(msg)
         pushDocAsync("messages", msg.id) { FirestoreCloudSyncService.messageToJson(msg) }
+        dispatchWorkerPushAsync(
+            eventType = "ADMIN_CLINIC_REPLY",
+            title = "💬 رد من إدارة منصة طب الحجايزة",
+            body = cleanBody,
+            targetAudience = NotificationAudience.CLINIC,
+            targetId = doctor.id,
+            namespacePath = CloudNamespacePaths.MESSAGES,
+        )
         return Result.success(msg)
     }
 
@@ -2950,6 +3090,14 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${saved.id}_${saved.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(saved)
         }
+        dispatchWorkerPushAsync(
+            eventType = "ADMIN_CLINIC_ALERT",
+            title = "🔔 إشعار إداري للعيادات",
+            body = saved.message,
+            targetAudience = NotificationAudience.CLINIC,
+            targetId = doctor?.id.orEmpty(),
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
         return Result.success(saved)
     }
 
@@ -3352,6 +3500,37 @@ class TebRepository(
         )
         dao.insertFamilyLinkRequest(req)
         pushDocAsync("family_link_requests", req.id) { FirestoreCloudSyncService.familyLinkRequestToJson(req) }
+        val flrMsg = "👨‍👩‍👧 طلب ربط عائلي جديد من ${requester.fullName} (${requester.phone}) مع ${targetAccount.fullName} ($cleanPhone)"
+        val adminNotif = DelayNotificationEntity(
+            doctorId = "",
+            doctorName = requester.fullName,
+            clinicName = "ربط عائلي",
+            delayMinutes = 0,
+            message = flrMsg,
+            createdAtMillis = req.requestedAtMillis,
+            isRead = false,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = req.id,
+            senderLabel = "طلب ربط عائلي جديد",
+        )
+        val notifRowId = dao.insertNotification(adminNotif)
+        val savedNotif = adminNotif.copy(id = notifRowId)
+        pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
+            FirestoreCloudSyncService.notificationToJson(savedNotif)
+        }
+        TebNotificationHelper.showHighPriorityNotification(
+            context = appContext,
+            title = "👨‍👩‍👧 طلب ربط عائلي جديد — طب الحجايزة",
+            body = flrMsg,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "FAMILY_LINK_REQUEST",
+            title = "👨‍👩‍👧 طلب ربط عائلي جديد",
+            body = flrMsg,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = req.id,
+            namespacePath = CloudNamespacePaths.FAMILY_LINK_REQUESTS,
+        )
         return Result.success(req)
     }
 

@@ -1186,7 +1186,7 @@ class TebViewModel(
     fun regenerateActiveAccountOtp() {
         val acc = uiState.value.activeAccount ?: return
         viewModelScope.launch {
-            val res = repository.regenerateAccountOtp(acc.id)
+            val res = repository.regenerateAccountOtp(acc.id, notifyAdmin = true)
             res.onSuccess {
                 _snackbarMessages.tryEmit(
                     bi(

@@ -289,6 +289,37 @@ object FirestoreCloudSyncService {
         }.getOrDefault(false)
     }
 
+    fun fcmTokensDocUrl(projectId: String, apiKey: String): String =
+        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.FCM_TOKENS}?key=${enc(apiKey.trim())}"
+
+    suspend fun upsertFcmToken(
+        brand: PlatformBrandConfig,
+        userId: String,
+        tokenPayload: JSONObject,
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!isCloudNetworkAllowed() || !brand.isCloudConfigured || userId.isBlank()) return@withContext false
+        val safeKey = safeCloudDocId(userId)
+        val okData = upsertDocument(brand, "fcm_tokens", safeKey, tokenPayload)
+        val okRootDoc = runCatching {
+            val maskParam = "&updateMask.fieldPaths=${enc(safeKey)}&updateMask.fieldPaths=_cloudNamespace"
+            val url = "${fcmTokensDocUrl(brand.firebaseProjectId, brand.firebaseApiKey)}$maskParam"
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "PATCH"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            }
+            val rootWrapper = JSONObject().put(safeKey, tokenPayload)
+            val body = JSONObject().put("fields", toFirestoreFields(rootWrapper))
+            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..299
+        }.getOrDefault(false)
+        okData || okRootDoc
+    }
+
     suspend fun deleteDocument(
         brand: PlatformBrandConfig,
         subCollection: String,

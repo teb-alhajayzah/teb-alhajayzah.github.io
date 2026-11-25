@@ -204,7 +204,7 @@ class ExampleRobolectricTest {
             fullName = "محمود حسن علي",
             phone = "01099887766",
             nationalId = "29501011200123",
-            password = "pass123",
+            password = "1234",
         )
         assertTrue(regRes.isSuccess)
         val acc = regRes.getOrThrow()
@@ -310,7 +310,7 @@ class ExampleRobolectricTest {
             fullName = "محمود حسن علي",
             phone = "01099887766",
             nationalId = "29501011200123",
-            password = "pass123",
+            password = "1234",
         )
         assertTrue(regRes.isSuccess)
         val createdAcc = regRes.getOrThrow()
@@ -356,7 +356,7 @@ class ExampleRobolectricTest {
             fullName = "حساب ثاني",
             phone = "01088776655",
             nationalId = "",
-            password = "pass",
+            password = "5678",
         ).getOrThrow()
         assertTrue(
             repository.verifyAndBurnActivationCode(
@@ -484,7 +484,7 @@ class ExampleRobolectricTest {
             fullName = "أحمد مصطفى سالم",
             phone = "01012345678",
             nationalId = "",
-            password = "secret",
+            password = "1122",
         ).getOrThrow()
         assertFalse(accA.isPhoneVerified)
 
@@ -506,7 +506,7 @@ class ExampleRobolectricTest {
             fullName = "منى إبراهيم علي",
             phone = "01199887766",
             nationalId = "",
-            password = "passb",
+            password = "3344",
         ).getOrThrow()
         repository.addFamilyMember(
             accountId = accB.id,
@@ -561,7 +561,7 @@ class ExampleRobolectricTest {
             fullName = "خالد عبد الرحمن",
             phone = "01022334455",
             nationalId = "",
-            password = "pass1",
+            password = "1020",
             nowMillis = t0,
         ).getOrThrow()
 
@@ -608,7 +608,7 @@ class ExampleRobolectricTest {
             fullName = "هبة سعيد محمد",
             phone = "01066778899",
             nationalId = "",
-            password = "pass2",
+            password = "3040",
             nowMillis = tRegen,
         ).getOrThrow()
         assertFalse(user2.otpCode == regenerated.otpCode)
@@ -645,7 +645,7 @@ class ExampleRobolectricTest {
             fullName = "سعيد إبراهيم محمد",
             phone = "01077665544",
             nationalId = "",
-            password = "pass_bio",
+            password = "7788",
         ).getOrThrow()
         val member = repository.observeFamilyMembers(acc.id).first().first()
 
@@ -831,7 +831,7 @@ class ExampleRobolectricTest {
             fullName = "أحمد محمود علي",
             phone = "01055443322",
             nationalId = "",
-            password = "pass_msg",
+            password = "4321",
         ).getOrThrow()
 
         // 1) Patient -> Clinic works by default
@@ -1625,5 +1625,116 @@ class ExampleRobolectricTest {
         val verifiedAcc = db.tebDao().getAccountById(acc.id)!!
         assertTrue(verifiedAcc.isPhoneVerified)
         assertEquals("كود OTP", verifiedAcc.verifiedBy)
+    }
+
+    @Test
+    fun auditGapChecksNumericPinFcmPathOtpFamilyLinkRxAndLabNotificationsWork() = runBlocking {
+        repository.ensureSeeded()
+
+        // 1. Numeric-only PIN enforcement on registerPatientAccount
+        val nonNumericPinRes = repository.registerPatientAccount(
+            fullName = "عميل تجربة",
+            phone = "01011223344",
+            nationalId = "",
+            password = "abc123",
+        )
+        assertTrue(nonNumericPinRes.isFailure)
+
+        val shortPinRes = repository.registerPatientAccount(
+            fullName = "عميل تجربة",
+            phone = "01011223344",
+            nationalId = "",
+            password = "123",
+        )
+        assertTrue(shortPinRes.isFailure)
+
+        // 2. FCM tokens namespace & URL builder
+        assertEquals("teb_alhajayzah/fcm_tokens", com.example.config.CloudNamespacePaths.FCM_TOKENS)
+        assertEquals("teb_alhajayzah/data/fcm_tokens", com.example.config.CloudNamespacePaths.DATA_FCM_TOKENS)
+        val fcmDocUrl = com.example.data.remote.FirestoreCloudSyncService.fcmTokensDocUrl(
+            projectId = "gen-lang-client-0015800098",
+            apiKey = "test-key",
+        )
+        assertTrue(fcmDocUrl.contains("/teb_alhajayzah/fcm_tokens?"))
+
+        // 3. Valid registration + regenerateAccountOtp(notifyAdmin = true) emits ADMIN notification
+        val p1 = repository.registerPatientAccount(
+            fullName = "طارق محمود سالم",
+            phone = "01011223344",
+            nationalId = "29201011200999",
+            password = "5678",
+        ).getOrThrow()
+        val p2 = repository.registerPatientAccount(
+            fullName = "سارة أحمد علي",
+            phone = "01022334455",
+            nationalId = "",
+            password = "9012",
+        ).getOrThrow()
+
+        val renewedWithNotify = repository.regenerateAccountOtp(p1.id, notifyAdmin = true).getOrThrow()
+        val otpAdminNotifs = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.ADMIN &&
+                it.targetId == p1.id &&
+                it.message.contains(renewedWithNotify.otpCode)
+        }
+        assertEquals(1, otpAdminNotifs.size)
+
+        // 4. Family link request creates ADMIN notification
+        val flr = repository.submitFamilyLinkRequest(
+            requesterAccountId = p1.id,
+            targetPhone = p2.phone,
+            relation = "SPOUSE",
+        ).getOrThrow()
+        val flrNotifs = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.ADMIN &&
+                it.targetId == flr.id
+        }
+        assertEquals(1, flrNotifs.size)
+
+        // 5. Completing visit with prescription emits PATIENT notification
+        val doc = repository.doctorsFlow.first().first()
+        val slot = repository.observeSlotsForDoctor(doc.id).first().first()
+        val member1 = repository.observeFamilyMembers(p1.id).first().first()
+        assertTrue(repository.bookSlot(slot.id, p1.fullName, p1.phone, member1.id, BookingSource.APP).isSuccess)
+        val rxRecord = repository.completeVisitAndSavePrescription(
+            slotId = slot.id,
+            diagnosis = "التهاب الحلق الحاد",
+            medications = "أوجمنتين 1 جم كل 12 ساعة",
+            notes = "شرب سوائل دافئة",
+            attachmentPath = "",
+        ).getOrThrow()
+        assertEquals(com.example.data.local.MedicalRecordType.PRESCRIPTION, rxRecord.recordType)
+        val rxPatientNotifs = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.PATIENT &&
+                it.targetId == p1.id &&
+                it.message.contains("التهاب الحلق الحاد")
+        }
+        assertEquals(1, rxPatientNotifs.size)
+
+        // 6. Uploading lab result emits PATIENT notification
+        val lab = repository.labsFlow.first().firstOrNull() ?: repository.addLabByAdmin(
+            labName = "معمل الشفاء للتحاليل",
+            phone = "01155443322",
+            locationLabel = "الحجايزة",
+            username = "shifa_lab",
+            password = "1234",
+        ).getOrThrow()
+        val labRecord = repository.addLabResultRecord(
+            lab = lab,
+            member = member1,
+            accountPhone = p1.phone,
+            testTitle = "تحليل صورة دم كاملة CBC",
+            notes = "الهيموجلوبين طبيعي",
+            attachmentPath = "/tmp/cbc_report.pdf",
+            attachmentMimeType = "application/pdf",
+            attachmentName = "cbc_report.pdf",
+        ).getOrThrow()
+        assertEquals(com.example.data.local.MedicalRecordType.LAB_RESULT, labRecord.recordType)
+        val labPatientNotifs = repository.notificationsFlow.first().filter {
+            it.targetAudience == com.example.data.local.NotificationAudience.PATIENT &&
+                it.targetId == p1.id &&
+                it.message.contains("CBC")
+        }
+        assertEquals(1, labPatientNotifs.size)
     }
 }
