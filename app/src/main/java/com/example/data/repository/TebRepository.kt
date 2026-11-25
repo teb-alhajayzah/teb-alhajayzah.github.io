@@ -105,6 +105,12 @@ class TebRepository(
     private val geminiAnalyzer by lazy { GeminiMedicalAnalyzer() }
     @Volatile
     private var lastSyncedRemoteMessageIds: Set<String> = emptySet()
+    @Volatile
+    private var hasSyncedAccountsBaseline: Boolean = false
+    @Volatile
+    private var lastSyncedRemoteAccountKeys: Set<String> = emptySet()
+    @Volatile
+    private var hasSyncedMessagesBaseline: Boolean = false
     private val locallyDeletedMessageIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     private val activeAccountKey = stringPreferencesKey("active_account_id")
@@ -1752,7 +1758,7 @@ class TebRepository(
                     }
                 }
 
-                // 2) مزامنة العيادات والأطباء (teb_alhajayzah/data/doctors)
+                // 2) مزامنة العيادات والأطباء (teb_alhajayzah_clinics)
                 FirestoreCloudSyncService.listCollection(brand, "doctors")?.let { remoteDocs ->
                     val localDocs = dao.observeDoctors().first()
                     if (remoteDocs.isEmpty() && localDocs.isNotEmpty()) {
@@ -1765,7 +1771,7 @@ class TebRepository(
                     }
                 }
 
-                // 3) مزامنة المعامل (teb_alhajayzah/data/labs)
+                // 3) مزامنة المعامل (teb_alhajayzah_labs)
                 FirestoreCloudSyncService.listCollection(brand, "labs")?.let { remoteLabs ->
                     val localLabs = dao.observeLabs().first()
                     if (remoteLabs.isEmpty() && localLabs.isNotEmpty()) {
@@ -1777,7 +1783,7 @@ class TebRepository(
                     }
                 }
 
-                // 4) مزامنة الحسابات (teb_alhajayzah/data/accounts/{phone})
+                // 4) مزامنة الحسابات (teb_alhajayzah_accounts/{phone}) + إشعار فوري للمدير عند تسجيل عميل جديد عن بُعد
                 FirestoreCloudSyncService.listCollection(brand, "accounts")?.let { remoteAccs ->
                     val localAccs = dao.getAllAccountsOnce()
                     if (remoteAccs.isEmpty() && localAccs.isNotEmpty()) {
@@ -1806,14 +1812,56 @@ class TebRepository(
                         val localByPhone = localAccs.associateBy {
                             FirestoreCloudSyncService.accountCloudDocId(it.phone, it.id)
                         }
+                        val adminSessionActive = isAdminLoggedInFlow.first()
+                        val newUnverifiedArrivals = mutableListOf<PatientAccountEntity>()
                         mergedByPhone.forEach { (phoneKey, remoteAcc) ->
                             val existingLocal = localByPhone[phoneKey]
+                            if (hasSyncedAccountsBaseline &&
+                                existingLocal == null &&
+                                !lastSyncedRemoteAccountKeys.contains(phoneKey) &&
+                                !remoteAcc.isPhoneVerified
+                            ) {
+                                newUnverifiedArrivals += remoteAcc
+                            }
                             val toSave = if (existingLocal != null && existingLocal.id != remoteAcc.id) {
                                 remoteAcc.copy(id = existingLocal.id)
                             } else {
                                 remoteAcc
                             }
                             dao.insertAccount(toSave)
+                        }
+                        lastSyncedRemoteAccountKeys = mergedByPhone.keys.toSet()
+                        hasSyncedAccountsBaseline = true
+                        if (newUnverifiedArrivals.isNotEmpty()) {
+                            val currentNotifs = dao.observeNotifications().first()
+                            newUnverifiedArrivals.forEach { arriving ->
+                                val alreadyNotified = currentNotifs.any {
+                                    it.targetAudience == NotificationAudience.ADMIN && it.targetId == arriving.id
+                                }
+                                if (!alreadyNotified) {
+                                    dao.insertNotification(
+                                        DelayNotificationEntity(
+                                            doctorId = "",
+                                            doctorName = "تسجيل عميل جديد",
+                                            clinicName = "العملاء الجدد",
+                                            delayMinutes = 0,
+                                            message = "👤 عميل جديد سجل الآن: ${arriving.fullName} - ${arriving.phone}",
+                                            createdAtMillis = System.currentTimeMillis(),
+                                            isRead = false,
+                                            targetAudience = NotificationAudience.ADMIN,
+                                            targetId = arriving.id,
+                                            senderLabel = "تسجيل عميل جديد",
+                                        )
+                                    )
+                                }
+                                if (adminSessionActive) {
+                                    TebNotificationHelper.showHighPriorityNotification(
+                                        context = appContext,
+                                        title = "👤 عميل جديد سجل الآن — طب الحجايزة",
+                                        body = "${arriving.fullName} - ${arriving.phone}",
+                                    )
+                                }
+                            }
                         }
                         localAccs.forEach { localAcc ->
                             val key = FirestoreCloudSyncService.accountCloudDocId(localAcc.phone, localAcc.id)
@@ -1827,9 +1875,12 @@ class TebRepository(
                             }
                         }
                     }
+                    if (!hasSyncedAccountsBaseline) {
+                        hasSyncedAccountsBaseline = true
+                    }
                 }
 
-                // 5) مزامنة ملفات الأسرة (teb_alhajayzah/data/family_members)
+                // 5) مزامنة ملفات الأسرة (teb_alhajayzah_family_members)
                 FirestoreCloudSyncService.listCollection(brand, "family_members")?.let { remoteMembers ->
                     val localMembers = dao.observeAllFamilyMembers().first()
                     if (remoteMembers.isEmpty() && localMembers.isNotEmpty()) {
@@ -1842,7 +1893,7 @@ class TebRepository(
                     }
                 }
 
-                // 6) مزامنة المواعيد (teb_alhajayzah/data/slots)
+                // 6) مزامنة المواعيد (teb_alhajayzah_appointments)
                 FirestoreCloudSyncService.listCollection(brand, "slots")?.let { remoteSlots ->
                     val localSlots = dao.observeAllSlots().first()
                     if (remoteSlots.isEmpty() && localSlots.isNotEmpty()) {
@@ -1855,7 +1906,7 @@ class TebRepository(
                     }
                 }
 
-                // 7) مزامنة السجلات الطبية (teb_alhajayzah/data/records) مع الحفاظ على المسارات المحلية للمرفقات
+                // 7) مزامنة السجلات الطبية (teb_alhajayzah_records) مع الحفاظ على المسارات المحلية للمرفقات
                 FirestoreCloudSyncService.listCollection(brand, "records")?.let { remoteRecs ->
                     val localRecs = dao.observeAllMedicalRecords().first()
                     if (remoteRecs.isEmpty() && localRecs.isNotEmpty()) {
@@ -1873,7 +1924,7 @@ class TebRepository(
                     }
                 }
 
-                // 8) مزامنة الإشعارات (teb_alhajayzah/data/notifications)
+                // 8) مزامنة الإشعارات (teb_alhajayzah_notifications)
                 FirestoreCloudSyncService.listCollection(brand, "notifications")?.let { remoteNotifs ->
                     val localNotifs = dao.observeNotifications().first()
                     if (remoteNotifs.isEmpty() && localNotifs.isNotEmpty()) {
@@ -1890,7 +1941,7 @@ class TebRepository(
                     }
                 }
 
-                // 9) مزامنة المحادثات المباشرة (teb_alhajayzah/data/messages)
+                // 9) مزامنة المحادثات المباشرة (teb_alhajayzah_messages) + تنبيه المدير عند وصول رسالة جديدة
                 FirestoreCloudSyncService.listCollection(brand, "messages")?.let { remoteMsgs ->
                     val localMsgs = dao.observeAllDirectMessages().first()
                     if (remoteMsgs.isEmpty() && localMsgs.isNotEmpty() && lastSyncedRemoteMessageIds.isEmpty()) {
@@ -1902,20 +1953,44 @@ class TebRepository(
                     } else {
                         val parsedRemote = remoteMsgs.mapNotNull { FirestoreCloudSyncService.messageFromJson(it) }
                         val remoteIds = parsedRemote.map { it.id }.toSet()
+                        val localIds = localMsgs.map { it.id }.toSet()
                         val deletedRemotely = lastSyncedRemoteMessageIds - remoteIds
                         deletedRemotely.forEach { goneId ->
                             dao.deleteDirectMessageById(goneId)
                         }
+                        val adminSessionActive = isAdminLoggedInFlow.first()
+                        val newAdminInboundMsgs = mutableListOf<DirectMessageEntity>()
                         parsedRemote.forEach { rm ->
                             if (rm.id !in locallyDeletedMessageIds) {
+                                if (hasSyncedMessagesBaseline &&
+                                    rm.id !in localIds &&
+                                    rm.id !in lastSyncedRemoteMessageIds &&
+                                    !rm.isReadByAdmin &&
+                                    ((rm.threadType == ChatThreadType.PATIENT_ADMIN && rm.senderRole == MessageSenderRole.PATIENT) ||
+                                        (rm.threadType == ChatThreadType.CLINIC_ADMIN && rm.senderRole == MessageSenderRole.CLINIC))
+                                ) {
+                                    newAdminInboundMsgs += rm
+                                }
                                 dao.insertDirectMessage(rm)
                             }
                         }
+                        if (adminSessionActive && newAdminInboundMsgs.isNotEmpty()) {
+                            val latestMsg = newAdminInboundMsgs.maxByOrNull { it.createdAtMillis } ?: newAdminInboundMsgs.first()
+                            TebNotificationHelper.showHighPriorityNotification(
+                                context = appContext,
+                                title = "📩 رسالة دعم جديدة — ${latestMsg.senderName}",
+                                body = latestMsg.body,
+                            )
+                        }
                         lastSyncedRemoteMessageIds = remoteIds
+                        hasSyncedMessagesBaseline = true
+                    }
+                    if (!hasSyncedMessagesBaseline) {
+                        hasSyncedMessagesBaseline = true
                     }
                 }
 
-                // 10) مزامنة الأرقام المحظورة والأكواد (teb_alhajayzah/data/blocked_phones & activation_codes)
+                // 10) مزامنة الأرقام المحظورة والأكواد (teb_alhajayzah_blocked_phones & teb_alhajayzah_activation_codes)
                 FirestoreCloudSyncService.listCollection(brand, "blocked_phones")?.let { remoteBlocked ->
                     val localBlocked = dao.observeBlockedPhones().first()
                     if (remoteBlocked.isEmpty() && localBlocked.isNotEmpty()) {
@@ -1938,7 +2013,7 @@ class TebRepository(
                     }
                 }
 
-                // 11) مزامنة السجل الطبي التاريخي الدائم مدى الحياة (teb_alhajayzah/data/permanent_logs)
+                // 11) مزامنة السجل الطبي التاريخي الدائم مدى الحياة (teb_alhajayzah_permanent_logs)
                 FirestoreCloudSyncService.listCollection(brand, "permanent_logs")?.let { remoteLogs ->
                     val localLogs = dao.observeAllPermanentLogs().first()
                     if (remoteLogs.isEmpty() && localLogs.isNotEmpty()) {
@@ -1951,7 +2026,7 @@ class TebRepository(
                     }
                 }
 
-                // 12) مزامنة طلبات ربط الأسرة (teb_alhajayzah/data/family_link_requests)
+                // 12) مزامنة طلبات ربط الأسرة (teb_alhajayzah_family_link_requests)
                 FirestoreCloudSyncService.listCollection(brand, "family_link_requests")?.let { remoteReqs ->
                     val localReqs = dao.observeFamilyLinkRequests().first()
                     if (remoteReqs.isEmpty() && localReqs.isNotEmpty()) {
@@ -1964,7 +2039,7 @@ class TebRepository(
                     }
                 }
 
-                // 13) مزامنة إحصائيات الزيارات (teb_alhajayzah/data/visitor_hits)
+                // 13) مزامنة إحصائيات الزيارات (teb_alhajayzah_visitor_hits)
                 FirestoreCloudSyncService.listCollection(brand, "visitor_hits")?.let { remoteHits ->
                     val parsed = remoteHits.mapNotNull { FirestoreCloudSyncService.visitorHitFromJson(it) }
                     parsed.forEach { dao.insertVisitorHit(it) }
@@ -2625,6 +2700,23 @@ class TebRepository(
             otpExpiresAtMillis = nowMillis + OTP_TTL_MILLIS,
             otpUsed = false,
         )
+        val cloudAccDocId = FirestoreCloudSyncService.accountCloudDocId(account.phone, account.id)
+        if (FirestoreCloudSyncService.isCloudNetworkAllowed()) {
+            val brand = brandConfigFlow.first()
+            if (brand.isCloudConfigured) {
+                val cloudSaved = FirestoreCloudSyncService.upsertDocument(
+                    brand = brand,
+                    subCollection = "accounts",
+                    docId = cloudAccDocId,
+                    payloadJson = FirestoreCloudSyncService.accountToJson(account),
+                )
+                if (!cloudSaved) {
+                    return Result.failure(
+                        IllegalStateException("⚠️ تعذر الاتصال بالإنترنت أو قاعدة البيانات السحابية. يرجى التأكد من الاتصال بالإنترنت لإتمام التسجيل ومزامنة الحساب.")
+                    )
+                }
+            }
+        }
         dao.insertAccount(account)
         val selfMemberId = "mem_${UUID.randomUUID()}"
         val selfMember = FamilyMemberEntity(
@@ -2637,9 +2729,6 @@ class TebRepository(
             nationalId = account.nationalId,
         )
         dao.insertFamilyMember(selfMember)
-        pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(account.phone, account.id)) {
-            FirestoreCloudSyncService.accountToJson(account)
-        }
         pushDocAsync("family_members", selfMember.id) { FirestoreCloudSyncService.familyMemberToJson(selfMember) }
         val adminRegMsg = "👤 عميل جديد سجل الآن: ${account.fullName} - ${account.phone}"
         val adminNotif = DelayNotificationEntity(
@@ -2670,7 +2759,7 @@ class TebRepository(
             body = "${account.fullName} - ${account.phone}",
             targetAudience = NotificationAudience.ADMIN,
             targetId = account.id,
-            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+            namespacePath = CloudNamespacePaths.USERS,
         )
         appContext.tebDataStore.edit { prefs ->
             prefs[activeAccountKey] = accountId

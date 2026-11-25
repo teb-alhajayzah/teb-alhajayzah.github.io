@@ -907,14 +907,19 @@ class ExampleRobolectricTest {
         // 1. Verify namespace isolation paths, embedded cloud defaults, and locked v1.0.0 metadata
         assertEquals("1.0.0", BuildConfig.VERSION_NAME)
         assertEquals(1, BuildConfig.VERSION_CODE)
+        assertEquals(
+            "ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864",
+            com.example.config.CloudNamespacePaths.FIRESTORE_DATABASE_ID,
+        )
         assertEquals("teb_alhajayzah", com.example.config.CloudNamespacePaths.ROOT)
-        assertEquals("teb_alhajayzah/settings", com.example.config.CloudNamespacePaths.SETTINGS)
-        assertEquals("teb_alhajayzah/data", com.example.config.CloudNamespacePaths.DATA_ROOT)
-        assertEquals("teb_alhajayzah/data/accounts", com.example.config.CloudNamespacePaths.USERS)
-        assertEquals("teb_alhajayzah/data/doctors", com.example.config.CloudNamespacePaths.CLINICS)
-        assertEquals("teb_alhajayzah/data/slots", com.example.config.CloudNamespacePaths.APPOINTMENTS)
-        assertEquals("teb_alhajayzah/data/messages", com.example.config.CloudNamespacePaths.MESSAGES)
-        assertEquals("teb_alhajayzah/data/notifications", com.example.config.CloudNamespacePaths.NOTIFICATIONS)
+        assertEquals("teb_alhajayzah_settings", com.example.config.CloudNamespacePaths.SETTINGS)
+        assertEquals("settings", com.example.config.CloudNamespacePaths.SETTINGS_DOC)
+        assertEquals("teb_alhajayzah_accounts", com.example.config.CloudNamespacePaths.USERS)
+        assertEquals("teb_alhajayzah_clinics", com.example.config.CloudNamespacePaths.CLINICS)
+        assertEquals("teb_alhajayzah_appointments", com.example.config.CloudNamespacePaths.APPOINTMENTS)
+        assertEquals("teb_alhajayzah_messages", com.example.config.CloudNamespacePaths.MESSAGES)
+        assertEquals("teb_alhajayzah_notifications", com.example.config.CloudNamespacePaths.NOTIFICATIONS)
+        assertEquals("teb_alhajayzah_records", com.example.config.CloudNamespacePaths.RECORDS)
 
         val initialBrand = repository.brandConfigFlow.first()
         assertTrue(initialBrand.isCloudConfigured)
@@ -1157,7 +1162,7 @@ class ExampleRobolectricTest {
         repository.ensureSeeded()
         assertEquals("1.0.0", BuildConfig.VERSION_NAME)
         assertEquals(1, BuildConfig.VERSION_CODE)
-        assertEquals("teb_alhajayzah/data/permanent_logs", com.example.config.CloudNamespacePaths.PERMANENT_LOGS)
+        assertEquals("teb_alhajayzah_permanent_logs", com.example.config.CloudNamespacePaths.PERMANENT_LOGS)
 
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
 
@@ -1554,7 +1559,7 @@ class ExampleRobolectricTest {
     fun accountPhoneCloudKeySupportMessageAdminAlertAndMessageReadCompatibilityWork() = runBlocking {
         repository.ensureSeeded()
 
-        // 1. Account cloud document key resolves to normalized phone digits under teb_alhajayzah/data/accounts/{phone}
+        // 1. Account cloud document key resolves to normalized phone digits under named DB + teb_alhajayzah_accounts/{phone}
         assertEquals(
             "01012345678",
             com.example.data.remote.FirestoreCloudSyncService.accountCloudDocId("٠١٠١٢٣٤٥٦٧٨", "acc_fallback"),
@@ -1569,7 +1574,29 @@ class ExampleRobolectricTest {
             subCollection = "accounts",
             docId = com.example.data.remote.FirestoreCloudSyncService.accountCloudDocId("01099887766", "acc_x"),
         )
-        assertTrue(url.contains("/teb_alhajayzah/data/accounts/01099887766?"))
+        assertTrue(
+            url.contains(
+                "/databases/${com.example.config.CloudNamespacePaths.FIRESTORE_DATABASE_ID}/documents/teb_alhajayzah_accounts/01099887766?"
+            )
+        )
+        val sampleAccUnverified = com.example.data.local.PatientAccountEntity(
+            id = "acc_rt_1",
+            fullName = "تجربة موثق",
+            phone = "01099887766",
+            nationalId = "",
+            password = "1234",
+            isPhoneVerified = false,
+            otpCode = "654321",
+        )
+        val unverifiedJson = com.example.data.remote.FirestoreCloudSyncService.accountToJson(sampleAccUnverified)
+        assertFalse(unverifiedJson.getBoolean("isVerified"))
+        assertFalse(unverifiedJson.getBoolean("isPhoneVerified"))
+        assertFalse(com.example.data.remote.FirestoreCloudSyncService.accountFromJson(unverifiedJson)!!.isPhoneVerified)
+        val verifiedJson = com.example.data.remote.FirestoreCloudSyncService.accountToJson(
+            sampleAccUnverified.copy(isPhoneVerified = true)
+        )
+        assertTrue(verifiedJson.getBoolean("isVerified"))
+        assertTrue(com.example.data.remote.FirestoreCloudSyncService.accountFromJson(verifiedJson)!!.isPhoneVerified)
 
         // 2. Web message JSON with only legacy isRead=false maps accurately to unread for target role
         val webSupportMsgJson = org.json.JSONObject().apply {
@@ -1649,13 +1676,18 @@ class ExampleRobolectricTest {
         assertTrue(shortPinRes.isFailure)
 
         // 2. FCM tokens namespace & URL builder
-        assertEquals("teb_alhajayzah/fcm_tokens", com.example.config.CloudNamespacePaths.FCM_TOKENS)
-        assertEquals("teb_alhajayzah/data/fcm_tokens", com.example.config.CloudNamespacePaths.DATA_FCM_TOKENS)
+        assertEquals("teb_alhajayzah_fcm_tokens", com.example.config.CloudNamespacePaths.FCM_TOKENS)
+        assertEquals("teb_alhajayzah_fcm_tokens", com.example.config.CloudNamespacePaths.DATA_FCM_TOKENS)
         val fcmDocUrl = com.example.data.remote.FirestoreCloudSyncService.fcmTokensDocUrl(
             projectId = "gen-lang-client-0015800098",
             apiKey = "test-key",
+            docId = "user_010",
         )
-        assertTrue(fcmDocUrl.contains("/teb_alhajayzah/fcm_tokens?"))
+        assertTrue(
+            fcmDocUrl.contains(
+                "/databases/${com.example.config.CloudNamespacePaths.FIRESTORE_DATABASE_ID}/documents/teb_alhajayzah_fcm_tokens/user_010?"
+            )
+        )
 
         // 3. Valid registration + regenerateAccountOtp(notifyAdmin = true) emits ADMIN notification
         val p1 = repository.registerPatientAccount(

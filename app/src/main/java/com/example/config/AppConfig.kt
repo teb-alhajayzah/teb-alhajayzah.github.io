@@ -60,23 +60,26 @@ data class PlatformBrandConfig(
  * تضمن عدم تداخل أي بيانات مع مشاريع أخرى مستضافة على نفس الحساب السحابي.
  */
 object CloudNamespacePaths {
+    const val FIRESTORE_DATABASE_ID = "ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864"
     const val ROOT = "teb_alhajayzah"
-    const val SETTINGS = "$ROOT/settings"
-    const val DATA_ROOT = "$ROOT/data"
-    const val USERS = "$DATA_ROOT/accounts"
-    const val FAMILY_MEMBERS = "$DATA_ROOT/family_members"
-    const val CLINICS = "$DATA_ROOT/doctors"
-    const val LABS = "$DATA_ROOT/labs"
-    const val APPOINTMENTS = "$DATA_ROOT/slots"
-    const val RECORDS = "$DATA_ROOT/records"
-    const val PERMANENT_LOGS = "$DATA_ROOT/permanent_logs"
-    const val MESSAGES = "$DATA_ROOT/messages"
-    const val NOTIFICATIONS = "$DATA_ROOT/notifications"
-    const val BLOCKED_PHONES = "$DATA_ROOT/blocked_phones"
-    const val ACTIVATION_CODES = "$DATA_ROOT/activation_codes"
-    const val FAMILY_LINK_REQUESTS = "$DATA_ROOT/family_link_requests"
-    const val FCM_TOKENS = "$ROOT/fcm_tokens"
-    const val DATA_FCM_TOKENS = "$DATA_ROOT/fcm_tokens"
+    const val SETTINGS_DOC = "settings"
+    const val SETTINGS = "teb_alhajayzah_settings"
+    const val DATA_ROOT = "teb_alhajayzah"
+    const val USERS = "teb_alhajayzah_accounts"
+    const val FAMILY_MEMBERS = "teb_alhajayzah_family_members"
+    const val CLINICS = "teb_alhajayzah_clinics"
+    const val LABS = "teb_alhajayzah_labs"
+    const val APPOINTMENTS = "teb_alhajayzah_appointments"
+    const val RECORDS = "teb_alhajayzah_records"
+    const val PERMANENT_LOGS = "teb_alhajayzah_permanent_logs"
+    const val MESSAGES = "teb_alhajayzah_messages"
+    const val NOTIFICATIONS = "teb_alhajayzah_notifications"
+    const val BLOCKED_PHONES = "teb_alhajayzah_blocked_phones"
+    const val ACTIVATION_CODES = "teb_alhajayzah_activation_codes"
+    const val FAMILY_LINK_REQUESTS = "teb_alhajayzah_family_link_requests"
+    const val VISITOR_HITS = "teb_alhajayzah_visitor_hits"
+    const val FCM_TOKENS = "teb_alhajayzah_fcm_tokens"
+    const val DATA_FCM_TOKENS = FCM_TOKENS
     const val CONFIG = SETTINGS
 }
 

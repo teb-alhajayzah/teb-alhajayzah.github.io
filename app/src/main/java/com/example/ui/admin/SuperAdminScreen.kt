@@ -244,7 +244,7 @@ fun SuperAdminDashboardScreen(
     var activeBookingsExpanded by remember { mutableStateOf(false) }
     var chatBroadcastExpanded by remember { mutableStateOf(false) }
     var clinicChatExpanded by remember { mutableStateOf(false) }
-    var threadsListExpanded by remember { mutableStateOf(false) }
+    var threadsListExpanded by remember { mutableStateOf(true) }
     var familyLinksAccordionExpanded by remember { mutableStateOf(false) }
 
     var selectedDriveDocId by remember(state.doctors) { mutableStateOf(state.doctors.firstOrNull()?.id.orEmpty()) }
@@ -458,9 +458,9 @@ fun SuperAdminDashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Text(bi(isEn, "💬 الرسائل والإشعارات", "💬 Messaging & Alerts"))
+                                Text(bi(isEn, "📩 الرسائل والدعم الفني", "📩 Messages & Support"))
                                 if (unreadAdminInbox > 0) {
-                                    Badge(containerColor = SlotBookedBorder, contentColor = Color.White) {
+                                    Badge(containerColor = Color(0xFFDC2626), contentColor = Color.White) {
                                         Text(unreadAdminInbox.toString())
                                     }
                                 }
@@ -1228,7 +1228,7 @@ fun SuperAdminDashboardScreen(
                                                 color = SlotAvailableText,
                                             )
                                             Text(
-                                                text = "teb_alhajayzah/settings • Worker & Firebase FCM",
+                                                text = "teb_alhajayzah_settings • Worker & Firebase FCM",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
@@ -1253,15 +1253,15 @@ fun SuperAdminDashboardScreen(
                                                 Text(
                                                     text = bi(
                                                         isEn,
-                                                        "🟢 Auto-Synced Cloud Paths (teb_alhajayzah/settings & teb_alhajayzah/data/*):",
-                                                        "🟢 متصل تلقائياً بالسحابة تحت مسار العزل (teb_alhajayzah/settings):",
+                                                        "🟢 Auto-Synced Cloud Collections (Named DB: ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864):",
+                                                        "🟢 متصل تلقائياً بقاعدة Firestore المسماة والمجموعات المعزولة:",
                                                     ),
                                                     style = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.Bold,
                                                     color = SlotAvailableText,
                                                 )
                                                 Text(
-                                                    text = "teb_alhajayzah/settings • teb_alhajayzah/data/doctors • accounts • slots • records • messages • notifications",
+                                                    text = "teb_alhajayzah_accounts • teb_alhajayzah_clinics • teb_alhajayzah_appointments • teb_alhajayzah_messages • teb_alhajayzah_settings • teb_alhajayzah_records",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = SlotAvailableText,
                                                 )
@@ -2339,7 +2339,7 @@ private fun AdminUserManageCard(
                     border = if (verified) null else BorderStroke(1.dp, Color(0xFFEF4444)),
                 ) {
                     Text(
-                        text = if (verified) bi(isEn, "موثق ✓", "Verified ✓") else bi(isEn, "⚠️ بانتظار التوثيق (غير مفعل)", "⚠️ Pending Verification"),
+                        text = if (verified) bi(isEn, "موثق ✓", "Verified ✓") else bi(isEn, "⚠️ بانتظار التوثيق", "⚠️ Pending Verification"),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (verified) SlotAvailableText else Color(0xFF991B1B),
                         fontWeight = FontWeight.Bold,
@@ -2504,7 +2504,7 @@ private fun AdminUserManageCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = bi(isEn, "✅ توثيق الحساب فوراً (بدون كود)", "✅ Verify Now (No OTP)"),
+                                text = bi(isEn, "✅ توثيق أوتوماتيك فوراً (بدون OTP)", "✅ Verify Now (No OTP)"),
                                 maxLines = 1,
                             )
                         }
@@ -2522,7 +2522,7 @@ private fun AdminUserManageCard(
                             Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = bi(isEn, "💬 مراسلة / إرسال تحذير", "💬 Chat / Warn"),
+                                text = bi(isEn, "💬 مراسلة / ⚠️ إرسال تحذير إداري", "💬 Chat / ⚠️ Warning"),
                                 maxLines = 1,
                             )
                         }

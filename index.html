@@ -17,8 +17,35 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js"></script>
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      doc,
+      setDoc,
+      deleteDoc,
+      getDoc,
+      getDocs,
+      onSnapshot,
+      writeBatch
+    } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+    window.__tebModularFs = {
+      initializeApp,
+      getApps,
+      getFirestore,
+      collection,
+      doc,
+      setDoc,
+      deleteDoc,
+      getDoc,
+      getDocs,
+      onSnapshot,
+      writeBatch
+    };
+    window.dispatchEvent(new CustomEvent('teb-modular-fs-ready'));
+  </script>
   <style>
     :root {
       --teal: #0D7377;
@@ -1655,26 +1682,28 @@
         fileRetentionDays: 360
       };
 
+      const CLOUD_DATABASE_ID = 'ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864';
       const CLOUD_NAMESPACE = 'teb_alhajayzah';
       const CLOUD_PATHS = {
-        settings: CLOUD_NAMESPACE + '/settings',
-        dataRoot: CLOUD_NAMESPACE + '/data',
-        users: CLOUD_NAMESPACE + '/data/accounts',
-        familyMembers: CLOUD_NAMESPACE + '/data/family_members',
-        clinics: CLOUD_NAMESPACE + '/data/doctors',
-        labs: CLOUD_NAMESPACE + '/data/labs',
-        appointments: CLOUD_NAMESPACE + '/data/slots',
-        records: CLOUD_NAMESPACE + '/data/records',
-        permanentLogs: CLOUD_NAMESPACE + '/data/permanent_logs',
-        notifications: CLOUD_NAMESPACE + '/data/notifications',
-        messages: CLOUD_NAMESPACE + '/data/messages',
-        blockedPhones: CLOUD_NAMESPACE + '/data/blocked_phones',
-        activationCodes: CLOUD_NAMESPACE + '/data/activation_codes',
-        familyLinkRequests: CLOUD_NAMESPACE + '/data/family_link_requests',
-        visitorHits: CLOUD_NAMESPACE + '/data/visitor_hits',
-        fcmTokens: CLOUD_NAMESPACE + '/fcm_tokens',
-        dataFcmTokens: CLOUD_NAMESPACE + '/data/fcm_tokens',
-        config: CLOUD_NAMESPACE + '/settings'
+        settingsDoc: 'settings',
+        settings: 'teb_alhajayzah_settings',
+        dataRoot: 'teb_alhajayzah',
+        users: 'teb_alhajayzah_accounts',
+        familyMembers: 'teb_alhajayzah_family_members',
+        clinics: 'teb_alhajayzah_clinics',
+        labs: 'teb_alhajayzah_labs',
+        appointments: 'teb_alhajayzah_appointments',
+        records: 'teb_alhajayzah_records',
+        permanentLogs: 'teb_alhajayzah_permanent_logs',
+        notifications: 'teb_alhajayzah_notifications',
+        messages: 'teb_alhajayzah_messages',
+        blockedPhones: 'teb_alhajayzah_blocked_phones',
+        activationCodes: 'teb_alhajayzah_activation_codes',
+        familyLinkRequests: 'teb_alhajayzah_family_link_requests',
+        visitorHits: 'teb_alhajayzah_visitor_hits',
+        fcmTokens: 'teb_alhajayzah_fcm_tokens',
+        dataFcmTokens: 'teb_alhajayzah_fcm_tokens',
+        config: 'teb_alhajayzah_settings'
       };
       const PATIENT_MODIFY_CUTOFF_MINUTES = 120;
 
@@ -2725,9 +2754,11 @@
                 if (!Array.isArray(parsed.activationCodes)) parsed.activationCodes = generateUniqueCodeList(5, [], 'SYSTEM');
                 let didAssignLegacyOtp = false;
                 parsed.accounts = parsed.accounts.map((a) => {
+                  const hasBoolVer = a && typeof a.isPhoneVerified === 'boolean'
+                    ? a.isPhoneVerified
+                    : (a && typeof a.isVerified === 'boolean' ? a.isVerified : true);
                   const normalized = Object.assign({
-                    isPhoneVerified: a && a.isPhoneVerified !== false,
-                    verifiedBy: a && a.verifiedBy ? a.verifiedBy : (a && a.isPhoneVerified !== false ? 'كود OTP' : ''),
+                    verifiedBy: a && a.verifiedBy ? a.verifiedBy : (hasBoolVer ? 'كود OTP' : ''),
                     verifiedAtMillis: a && a.verifiedAtMillis ? a.verifiedAtMillis : 0,
                     otpCode: a && a.otpCode ? toAsciiDigits(a.otpCode).replace(/\D/g, '') : '',
                     otpCreatedAtMillis: a && a.otpCreatedAtMillis ? a.otpCreatedAtMillis : 0,
@@ -2735,7 +2766,10 @@
                     otpUsed: Boolean(a && a.otpUsed),
                     spouseAccountId: String((a && a.spouseAccountId) || ''),
                     allowSpouseViewPersonalRecords: Boolean(a && a.allowSpouseViewPersonalRecords)
-                  }, a);
+                  }, a, {
+                    isPhoneVerified: Boolean(hasBoolVer),
+                    isVerified: Boolean(hasBoolVer)
+                  });
                   if (!normalized.isPhoneVerified && (!normalized.otpCode || normalized.otpCode.length !== 6)) {
                     assignFreshUserOtp(normalized, parsed);
                     didAssignLegacyOtp = true;
@@ -2967,9 +3001,29 @@
         );
       }
 
+      function resolveFsCollectionName(subCollection) {
+        const raw = String(subCollection || '').trim().toLowerCase();
+        if (raw === 'accounts' || raw === 'users' || raw === CLOUD_PATHS.users) return CLOUD_PATHS.users;
+        if (raw === 'doctors' || raw === 'clinics' || raw === CLOUD_PATHS.clinics) return CLOUD_PATHS.clinics;
+        if (raw === 'slots' || raw === 'appointments' || raw === CLOUD_PATHS.appointments) return CLOUD_PATHS.appointments;
+        if (raw === 'messages' || raw === CLOUD_PATHS.messages) return CLOUD_PATHS.messages;
+        if (raw === 'records' || raw === CLOUD_PATHS.records) return CLOUD_PATHS.records;
+        if (raw === 'fcm_tokens' || raw === CLOUD_PATHS.fcmTokens) return CLOUD_PATHS.fcmTokens;
+        if (raw === 'settings' || raw === 'config' || raw === CLOUD_PATHS.settings) return CLOUD_PATHS.settings;
+        if (raw === 'family_members' || raw === CLOUD_PATHS.familyMembers) return CLOUD_PATHS.familyMembers;
+        if (raw === 'labs' || raw === CLOUD_PATHS.labs) return CLOUD_PATHS.labs;
+        if (raw === 'permanent_logs' || raw === CLOUD_PATHS.permanentLogs) return CLOUD_PATHS.permanentLogs;
+        if (raw === 'notifications' || raw === CLOUD_PATHS.notifications) return CLOUD_PATHS.notifications;
+        if (raw === 'blocked_phones' || raw === CLOUD_PATHS.blockedPhones) return CLOUD_PATHS.blockedPhones;
+        if (raw === 'activation_codes' || raw === CLOUD_PATHS.activationCodes) return CLOUD_PATHS.activationCodes;
+        if (raw === 'family_link_requests' || raw === CLOUD_PATHS.familyLinkRequests) return CLOUD_PATHS.familyLinkRequests;
+        if (raw === 'visitor_hits' || raw === CLOUD_PATHS.visitorHits) return CLOUD_PATHS.visitorHits;
+        const trimmed = String(subCollection || 'items').trim();
+        return trimmed.indexOf(CLOUD_NAMESPACE + '_') === 0 ? trimmed : (CLOUD_NAMESPACE + '_' + trimmed);
+      }
+
       function getOrCreateFirestore(cfg) {
         try {
-          if (typeof firebase === 'undefined' || !firebase || typeof firebase.firestore !== 'function') return null;
           const c = cfg || (db && db.config) || {};
           if (!isFirebaseCloudConfigured(c)) return null;
           const fbConfig = {
@@ -2981,12 +3035,18 @@
             appId: String(c.firebaseAppId || '').trim()
           };
           const appName = 'teb_alhajayzah_app_' + fbConfig.projectId + '_' + fbConfig.apiKey.slice(-6);
-          let app = (firebase.apps || []).find((a) => a.name === appName);
-          if (!app) {
-            app = firebase.initializeApp(fbConfig, appName);
+          if (typeof firebase !== 'undefined' && firebase && typeof firebase.initializeApp === 'function') {
+            let compatApp = (firebase.apps || []).find((a) => a.name === appName);
+            if (!compatApp) {
+              compatApp = firebase.initializeApp(fbConfig, appName);
+            }
+            tebCloudRuntime.firebaseApp = compatApp;
           }
-          tebCloudRuntime.firebaseApp = app;
-          tebCloudRuntime.firestore = firebase.firestore(app);
+          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+          if (!mfs || typeof mfs.getFirestore !== 'function') return null;
+          const modApp = (mfs.getApps() || []).find((a) => a.name === appName) || mfs.initializeApp(fbConfig, appName);
+          tebCloudRuntime.modularApp = modApp;
+          tebCloudRuntime.firestore = mfs.getFirestore(modApp, CLOUD_DATABASE_ID);
           return tebCloudRuntime.firestore;
         } catch (e) {
           return null;
@@ -3072,16 +3132,20 @@
         return out;
       }
 
+      function firestoreRestDocsBase(projectId) {
+        return 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
+          '/databases/' + encodeURIComponent(CLOUD_DATABASE_ID) + '/documents';
+      }
+
       async function upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj) {
         if (typeof fetch !== 'function') return false;
         const projectId = String((cfg && cfg.firebaseProjectId) || '').trim();
         const apiKey = String((cfg && cfg.firebaseApiKey) || '').trim();
         if (!projectId || !apiKey) return false;
         const docPath = (subCollection === 'config' || subCollection === 'settings')
-          ? CLOUD_PATHS.settings
-          : (CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(String(subCollection || 'items')) + '/' + encodeURIComponent(safeId));
-        const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-          '/databases/(default)/documents/' + docPath + '?key=' + encodeURIComponent(apiKey);
+          ? (CLOUD_PATHS.settings + '/' + CLOUD_PATHS.settingsDoc)
+          : (encodeURIComponent(resolveFsCollectionName(subCollection)) + '/' + encodeURIComponent(safeId));
+        const url = firestoreRestDocsBase(projectId) + '/' + docPath + '?key=' + encodeURIComponent(apiKey);
         const resp = await fetch(url, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -3095,9 +3159,8 @@
         const projectId = String((cfg && cfg.firebaseProjectId) || '').trim();
         const apiKey = String((cfg && cfg.firebaseApiKey) || '').trim();
         if (!projectId || !apiKey) return false;
-        const docPath = CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(String(subCollection || 'items')) + '/' + encodeURIComponent(safeId);
-        const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-          '/databases/(default)/documents/' + docPath + '?key=' + encodeURIComponent(apiKey);
+        const docPath = encodeURIComponent(resolveFsCollectionName(subCollection)) + '/' + encodeURIComponent(safeId);
+        const url = firestoreRestDocsBase(projectId) + '/' + docPath + '?key=' + encodeURIComponent(apiKey);
         const resp = await fetch(url, { method: 'DELETE' });
         return Boolean(resp && (resp.ok || resp.status === 404));
       }
@@ -3109,8 +3172,8 @@
         const apiKey = String(c.firebaseApiKey || '').trim();
         if (!projectId || !apiKey) return null;
         try {
-          const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-            '/databases/(default)/documents/' + CLOUD_PATHS.settings + '?key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
+          const url = firestoreRestDocsBase(projectId) + '/' + CLOUD_PATHS.settings + '/' + CLOUD_PATHS.settingsDoc +
+            '?key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
           const resp = await fetch(url, { cache: 'no-store' });
           if (!resp || !resp.ok) return null;
           const docJson = await resp.json();
@@ -3128,12 +3191,12 @@
         if (!projectId || !apiKey) return null;
         try {
           const results = [];
+          const resolvedCol = resolveFsCollectionName(fsCol);
           let pageToken = '';
           let guard = 0;
           do {
             guard++;
-            let url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-              '/databases/(default)/documents/' + CLOUD_PATHS.dataRoot + '/' + encodeURIComponent(fsCol) +
+            let url = firestoreRestDocsBase(projectId) + '/' + encodeURIComponent(resolvedCol) +
               '?pageSize=500&key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
             if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
             const resp = await fetch(url, { cache: 'no-store' });
@@ -3158,43 +3221,47 @@
         try {
           const cfg = (db && db.config) || DEFAULT_CONFIG;
           if (!isFirebaseCloudConfigured(cfg)) return false;
-          const normalizedSub = subCollection === 'appointments'
-            ? 'slots'
-            : (subCollection === 'users'
-                ? 'accounts'
-                : (subCollection === 'familyLinkRequests' ? 'family_link_requests' : subCollection));
+          const normalizedSub = resolveFsCollectionName(subCollection);
           const safeId = safeCloudDocId(docId);
           const fsDb = getOrCreateFirestore(cfg);
-          if (fsDb) {
+          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+          if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
             try {
-              if (normalizedSub === 'config' || normalizedSub === 'settings') {
-                await fsDb.doc(CLOUD_PATHS.settings).set(prepareDocForFirestore(payloadObj, 'settings'), { merge: true });
+              if (normalizedSub === CLOUD_PATHS.settings) {
+                await mfs.setDoc(
+                  mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
+                  prepareDocForFirestore(payloadObj, 'settings'),
+                  { merge: true }
+                );
               } else {
-                await fsDb.collection(CLOUD_PATHS.dataRoot + '/' + normalizedSub).doc(safeId).set(
-                  prepareDocForFirestore(payloadObj, normalizedSub),
+                await mfs.setDoc(
+                  mfs.doc(fsDb, normalizedSub, safeId),
+                  prepareDocForFirestore(payloadObj, subCollection),
                   { merge: true }
                 );
               }
               return true;
             } catch (sdkErr) { /* fall through to REST PATCH */ }
           }
-          return await upsertDocViaRestWeb(cfg, normalizedSub, safeId, payloadObj);
+          return await upsertDocViaRestWeb(cfg, subCollection, safeId, payloadObj);
         } catch (e) {
           return false;
         }
       }
 
       function syncAccountToCloudNow(acc) {
-        if (!acc) return;
+        if (!acc) return Promise.resolve(false);
         const phoneDocId = getAccountCloudDocId(acc);
-        if (!phoneDocId) return;
+        if (!phoneDocId) return Promise.resolve(false);
+        const verifiedVal = (typeof acc.isPhoneVerified === 'boolean')
+          ? acc.isPhoneVerified
+          : (typeof acc.isVerified === 'boolean' ? acc.isVerified : false);
         const cleanAcc = Object.assign({
           id: acc.id,
           fullName: acc.fullName || '',
           phone: acc.phone || '',
           nationalId: acc.nationalId || '',
           password: acc.password || '',
-          isPhoneVerified: acc.isPhoneVerified !== false,
           verifiedBy: acc.verifiedBy || '',
           verifiedAtMillis: Number(acc.verifiedAtMillis) || 0,
           otpCode: acc.otpCode || '',
@@ -3203,8 +3270,11 @@
           otpUsed: Boolean(acc.otpUsed),
           spouseAccountId: String(acc.spouseAccountId || ''),
           allowSpouseViewPersonalRecords: Boolean(acc.allowSpouseViewPersonalRecords)
-        }, acc);
-        syncDocToFirestoreNamespace('accounts', phoneDocId, cleanAcc);
+        }, acc, {
+          isPhoneVerified: Boolean(verifiedVal),
+          isVerified: Boolean(verifiedVal)
+        });
+        return syncDocToFirestoreNamespace('accounts', phoneDocId, cleanAcc);
       }
 
       async function deleteDocFromFirestoreNamespace(subCollection, docId) {
@@ -3212,10 +3282,12 @@
           const cfg = (db && db.config) || DEFAULT_CONFIG;
           if (!isFirebaseCloudConfigured(cfg)) return false;
           const safeId = safeCloudDocId(docId);
+          const resolvedCol = resolveFsCollectionName(subCollection);
           const fsDb = getOrCreateFirestore(cfg);
-          if (fsDb) {
+          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+          if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.deleteDoc === 'function') {
             try {
-              await fsDb.collection(CLOUD_PATHS.dataRoot + '/' + subCollection).doc(safeId).delete();
+              await mfs.deleteDoc(mfs.doc(fsDb, resolvedCol, safeId));
               return true;
             } catch (sdkErr) { /* fall through to REST DELETE */ }
           }
@@ -3233,18 +3305,23 @@
         tebCloudRuntime.lastSettingsJson = JSON.stringify(payload);
         try {
           const fsDb = getOrCreateFirestore(payload);
-          if (fsDb) {
-            await fsDb.doc(CLOUD_PATHS.settings).set(prepareDocForFirestore(payload, 'settings'), { merge: true });
+          const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+          if (fsDb && mfs && typeof mfs.doc === 'function' && typeof mfs.setDoc === 'function') {
+            await mfs.setDoc(
+              mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc),
+              prepareDocForFirestore(payload, 'settings'),
+              { merge: true }
+            );
             return true;
           }
         } catch (e) { /* fallback to REST */ }
-        await upsertDocViaRestWeb(payload, 'settings', 'settings', payload);
-        return true;
+        return await upsertDocViaRestWeb(payload, 'settings', CLOUD_PATHS.settingsDoc, payload);
       }
 
       async function pushCollectionChangesToFirestore(fsDb, colDef, itemsArr) {
         const cfg = (db && db.config) || DEFAULT_CONFIG;
         const fsCol = colDef.fsCollection;
+        const resolvedCol = resolveFsCollectionName(fsCol);
         const prevMap = tebCloudRuntime.lastCloudMap[fsCol] || {};
         const nextMap = {};
         const ops = [];
@@ -3270,14 +3347,14 @@
         tebCloudRuntime.lastCloudMap[fsCol] = nextMap;
         if (ops.length === 0) return;
 
-        if (fsDb) {
+        const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+        if (fsDb && mfs && typeof mfs.writeBatch === 'function' && typeof mfs.doc === 'function') {
           try {
-            const colRef = fsDb.collection(CLOUD_PATHS.dataRoot + '/' + fsCol);
             for (let i = 0; i < ops.length; i += 350) {
               const chunk = ops.slice(i, i + 350);
-              const batch = fsDb.batch();
+              const batch = mfs.writeBatch(fsDb);
               chunk.forEach((op) => {
-                const ref = colRef.doc(op.docId);
+                const ref = mfs.doc(fsDb, resolvedCol, op.docId);
                 if (op.type === 'delete') batch.delete(ref);
                 else batch.set(ref, op.data, { merge: true });
               });
@@ -3357,7 +3434,9 @@
         const fsCol = colDef.fsCollection;
         if (!Array.isArray(rawItems)) return false;
 
-        if (rawItems.length === 0 && !tebCloudRuntime.hydratedCols[fsCol]) {
+        const wasHydrated = Boolean(tebCloudRuntime.hydratedCols[fsCol]);
+
+        if (rawItems.length === 0 && !wasHydrated) {
           tebCloudRuntime.hydratedCols[fsCol] = true;
           const localArr = Array.isArray(db[colDef.stateKey]) ? db[colDef.stateKey] : [];
           if (localArr.length > 0) {
@@ -3388,7 +3467,11 @@
             return;
           }
           if (colDef.stateKey === 'accounts') {
-            clean.isPhoneVerified = clean.isPhoneVerified !== false;
+            const resolvedVer = (typeof clean.isPhoneVerified === 'boolean')
+              ? clean.isPhoneVerified
+              : (typeof clean.isVerified === 'boolean' ? clean.isVerified : false);
+            clean.isPhoneVerified = Boolean(resolvedVer);
+            clean.isVerified = Boolean(resolvedVer);
             clean.otpUsed = Boolean(clean.otpUsed);
             if (!clean.id) clean.id = 'acc_' + docId;
             delete clean._docId;
@@ -3433,6 +3516,54 @@
             }
           }
         });
+
+        // Live Admin notification alerts when new unverified accounts or support messages arrive remotely
+        if (wasHydrated && colDef.stateKey === 'accounts') {
+          const prevPhones = {};
+          existingLocal.forEach((a) => {
+            const p = normalizePhoneDigits(a && a.phone);
+            if (p) prevPhones[p] = true;
+          });
+          remoteList.forEach((ra) => {
+            const p = normalizePhoneDigits(ra && ra.phone);
+            if (p && !prevPhones[p] && !prevMap[safeCloudDocId(colDef.idFn(ra))] && ra.isPhoneVerified === false) {
+              const alertTitle = '👤 عميل جديد سجل الآن — طب الحجايزة';
+              const alertBody = (ra.fullName || 'عميل جديد') + ' - ' + (ra.phone || '') + (ra.otpCode ? ' (OTP: ' + ra.otpCode + ')' : '');
+              const alreadyNotif = (db.notifications || []).some((n) => n && n.targetAudience === 'ADMIN' && n.targetId === ra.id);
+              if (!alreadyNotif) {
+                db.notifications = (db.notifications || []);
+                db.notifications.unshift({
+                  id: Date.now() + Math.floor(Math.random() * 100),
+                  message: '👤 عميل جديد سجل الآن: ' + alertBody,
+                  isRead: false,
+                  targetAudience: 'ADMIN',
+                  targetId: ra.id,
+                  senderLabel: bi('تسجيل عميل جديد', 'New Customer Registration'),
+                  createdAtMillis: Date.now()
+                });
+              }
+              if (ui && ui.isAdminLoggedIn) {
+                triggerPlatformNotification(alertTitle, alertBody, 'remote_user_' + ra.id);
+                showToast(alertTitle + ': ' + (ra.fullName || ''), 4500);
+              }
+            }
+          });
+        } else if (wasHydrated && colDef.stateKey === 'messages') {
+          const prevMsgIds = {};
+          existingLocal.forEach((m) => { if (m && m.id) prevMsgIds[m.id] = true; });
+          const newAdminMsgs = remoteList.filter((rm) =>
+            rm && rm.id && !prevMsgIds[rm.id] && !prevMap[safeCloudDocId(rm.id)] &&
+            !isMessageReadForRole(rm, 'ADMIN') &&
+            ((rm.threadType === 'PATIENT_ADMIN' && rm.senderRole === 'PATIENT') ||
+             (rm.threadType === 'CLINIC_ADMIN' && rm.senderRole === 'CLINIC'))
+          );
+          if (newAdminMsgs.length > 0 && ui && ui.isAdminLoggedIn) {
+            const lastNew = newAdminMsgs[newAdminMsgs.length - 1];
+            const msgTitle = '📩 رسالة دعم جديدة — ' + (lastNew.patientName || lastNew.senderName || 'عميل');
+            triggerPlatformNotification(msgTitle, lastNew.body || '', 'remote_msg_' + lastNew.id);
+            showToast(msgTitle, 4500);
+          }
+        }
 
         if (colDef.stateKey === 'slots') {
           mergedList.sort((a, b) => (a.startMinutes || 0) - (b.startMinutes || 0));
@@ -3550,7 +3681,9 @@
         const cfg = (db && db.config) || DEFAULT_CONFIG;
         if (!isFirebaseCloudConfigured(cfg)) return;
 
-        const sig = getCloudConfigSig(cfg);
+        const mfs = typeof window !== 'undefined' ? window.__tebModularFs : null;
+        const hasSdkReady = Boolean(mfs && typeof mfs.onSnapshot === 'function');
+        const sig = getCloudConfigSig(cfg) + '|' + (hasSdkReady ? 'SDK' : 'REST');
         if (tebCloudRuntime.isConnected && tebCloudRuntime.activeConfigSig === sig) return;
 
         stopRealtimeCloudSync();
@@ -3561,15 +3694,16 @@
         pullCloudStateViaRestWeb();
 
         const fsDb = getOrCreateFirestore(cfg);
-        if (!fsDb) {
+        if (!fsDb || !hasSdkReady) {
           ensureRestFallbackPollingLoop();
           return;
         }
 
         try {
-          // 1. Real-time sync for teb_alhajayzah/settings across all devices
-          const unsubSettings = fsDb.doc(CLOUD_PATHS.settings).onSnapshot(function (docSnap) {
-            if (!docSnap || !docSnap.exists) {
+          // 1. Real-time sync for teb_alhajayzah_settings/settings across all devices (Named DB)
+          const settingsRef = mfs.doc(fsDb, CLOUD_PATHS.settings, CLOUD_PATHS.settingsDoc);
+          const unsubSettings = mfs.onSnapshot(settingsRef, function (docSnap) {
+            if (!docSnap || !docSnap.exists()) {
               pushSettingsToCloudNow(db.config).catch(function () {});
               return;
             }
@@ -3580,11 +3714,12 @@
           });
           tebCloudRuntime.unsubscribers.push(unsubSettings);
 
-          // 2. Real-time sync for all platform collections under teb_alhajayzah/data/*
+          // 2. Real-time sync for all isolated flat teb_alhajayzah_* collections
           CLOUD_SYNC_COLLECTIONS.forEach(function (colDef) {
             const fsCol = colDef.fsCollection;
-            const colPath = CLOUD_PATHS.dataRoot + '/' + fsCol;
-            const unsubCol = fsDb.collection(colPath).onSnapshot(function (snap) {
+            const resolvedCol = resolveFsCollectionName(fsCol);
+            const colRef = mfs.collection(fsDb, resolvedCol);
+            const unsubCol = mfs.onSnapshot(colRef, function (snap) {
               if (!snap) return;
               if (snap.metadata && snap.metadata.hasPendingWrites) return;
               tebCloudRuntime.sdkHealthyCount += 1;
@@ -3609,6 +3744,12 @@
         } catch (e) {
           ensureRestFallbackPollingLoop();
         }
+      }
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('teb-modular-fs-ready', function () {
+          try { startRealtimeCloudSync(); } catch (e) {}
+        });
       }
 
       function saveState(nextState, opts) {
@@ -3689,32 +3830,7 @@
             platform: (window.AndroidBridge ? 'ANDROID_WEBVIEW' : 'WEB'),
             updatedAtMillis: Date.now()
           };
-          await syncDocToFirestoreNamespace('fcm_tokens', ownerKey, payload);
-          const fsDb = getOrCreateFirestore(cfg);
-          if (fsDb) {
-            try {
-              const mapObj = {};
-              mapObj[ownerKey] = payload;
-              await fsDb.doc(CLOUD_PATHS.fcmTokens).set(mapObj, { merge: true });
-              return true;
-            } catch (sdkErr) { /* fall through to REST PATCH */ }
-          }
-          const projectId = String(cfg.firebaseProjectId || '').trim();
-          const apiKey = String(cfg.firebaseApiKey || '').trim();
-          if (projectId && apiKey && typeof fetch === 'function') {
-            const mapPatch = {};
-            mapPatch[ownerKey] = payload;
-            const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) +
-              '/databases/(default)/documents/' + CLOUD_PATHS.fcmTokens +
-              '?updateMask.fieldPaths=' + encodeURIComponent(ownerKey) +
-              '&key=' + encodeURIComponent(apiKey);
-            await fetch(url, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: toFirestoreFields(mapPatch) })
-            }).catch(() => {});
-          }
-          return true;
+          return await syncDocToFirestoreNamespace('fcm_tokens', ownerKey, payload);
         } catch (e) {
           return false;
         }
@@ -4152,7 +4268,7 @@
         adminUsersFilter: 'ALL', // ALL | VERIFIED | UNVERIFIED
         adminAlertDocId: '',
         cloudSettingsExpanded: false,
-        adminAccordions: {}, // All admin sections default collapsed
+        adminAccordions: { usersList: true, threadsList: true }, // Users & support threads open cleanly
         adminDriveSelectedDocId: '',
         expandedAdminThreads: {},
         logoTapCount: 0,
@@ -6058,6 +6174,7 @@
         const now = Date.now();
         if (account) {
           account.isPhoneVerified = true;
+          account.isVerified = true;
           account.verifiedBy = source;
           account.verifiedAtMillis = now;
           account.otpUsed = true;
@@ -6067,6 +6184,7 @@
           );
           if (idx >= 0) {
             db.accounts[idx].isPhoneVerified = true;
+            db.accounts[idx].isVerified = true;
             db.accounts[idx].verifiedBy = source;
             db.accounts[idx].verifiedAtMillis = now;
             db.accounts[idx].otpUsed = true;
@@ -6075,6 +6193,7 @@
             }
           } else if (db.account && db.account.id === account.id) {
             db.account.isPhoneVerified = true;
+            db.account.isVerified = true;
             db.account.verifiedBy = source;
             db.account.verifiedAtMillis = now;
             db.account.otpUsed = true;
@@ -8252,7 +8371,7 @@
                           '<div style="font-size:0.8rem;color:var(--teal-text);margin-top:3px;">👨‍👩‍👧 ' + esc(bi('أفراد الأسرة: ', 'Family: ')) + famSummary + '</div>' +
                         '</div>' +
                         (!isVer
-                          ? '<span class="badge" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;font-weight:800;">' + esc(bi('⚠️ بانتظار التوثيق (غير مفعل)', '⚠️ Pending Verification')) + '</span>'
+                          ? '<span class="badge" style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;font-weight:800;">' + esc(bi('⚠️ بانتظار التوثيق', '⚠️ Pending Verification')) + '</span>'
                           : '<span class="badge badge-avail">' + esc(bi('موثق ✓ — ' + verSource, 'Verified ✓ — ' + verSource)) + '</span>') +
                       '</div>' +
                       (!isVer
@@ -8272,9 +8391,9 @@
                         : '') +
                       '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
                         (!isVer
-                          ? '<button class="btn btn-green" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="flex:1;min-height:42px;">✅ ' + esc(bi('توثيق الحساب فوراً (بدون كود)', 'Verify Immediately (No Code)')) + '</button>'
+                          ? '<button class="btn btn-green" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="flex:1;min-height:42px;">✅ ' + esc(bi('توثيق أوتوماتيك فوراً (بدون OTP)', 'Verify Now (No OTP)')) + '</button>'
                           : '<button class="btn btn-outline" type="button" data-admin-toggle-verify="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">' + esc(bi('إلغاء التفعيل', 'Unverify')) + '</button>') +
-                        '<button class="btn btn-warn" type="button" data-admin-chat-user="' + esc(acc.id) + '" style="flex:1;min-height:42px;">💬 ' + esc(bi('مراسلة / إرسال تحذير', 'Message / Send Warning')) + '</button>' +
+                        '<button class="btn btn-warn" type="button" data-admin-chat-user="' + esc(acc.id) + '" style="flex:1;min-height:42px;">💬 ' + esc(bi('مراسلة / ⚠️ إرسال تحذير إداري', 'Chat / ⚠️ Send Warning')) + '</button>' +
                         '<button class="btn btn-outline" type="button" data-admin-edit-user="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">✏️ ' + esc(bi('تعديل', 'Edit')) + '</button>' +
                         '<button class="btn btn-danger-outline" type="button" data-admin-delete-user="' + esc(acc.id) + '" style="min-height:38px;padding:6px 10px;font-size:0.82rem;">🗑️ ' + esc(bi('حذف', 'Delete')) + '</button>' +
                       '</div>' +
@@ -8633,7 +8752,7 @@
             '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين (Users)', 'Users List')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'FAMILY_LINKS' ? 'active' : '') + '" type="button" data-admin-tab="FAMILY_LINKS">👨‍👩‍👧‍👦 ' + esc(bi('طلبات ربط الأسرة', 'Family Links')) + (pendingFamLinkCount > 0 ? ' (' + pendingFamLinkCount + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
-            '<button class="chip ' + (ui.adminTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-admin-tab="MESSAGES">💬 ' + esc(bi('التحكم في الرسائل والإشعارات', 'Messaging & Alerts')) + (unreadAdminInbox > 0 ? ' (' + unreadAdminInbox + ')' : '') + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-admin-tab="MESSAGES">📩 ' + esc(bi('الرسائل والدعم الفني', 'Messages & Support')) + (unreadAdminInbox > 0 ? ' <span class="badge" style="background:#DC2626;color:#fff;padding:2px 7px;border-radius:999px;font-size:0.74rem;font-weight:800;">' + unreadAdminInbox + '</span>' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'SETTINGS' ? 'active' : '') + '" type="button" data-admin-tab="SETTINGS">⚙️ ' + esc(bi('الإعدادات و Drive و الـ PIN', 'Settings, Drive & PIN')) + '</button>' +
           '</div>' +
 
@@ -9083,6 +9202,7 @@
                     '<button class="legal-link-btn" type="button" data-acc-legal="PRIVACY" style="font-size:0.76rem;padding:4px 10px;">📜 ' + esc(bi('سياسة الخصوصية', 'Privacy Policy')) + '</button>' +
                     '<button class="legal-link-btn" type="button" data-acc-legal="TERMS" style="font-size:0.76rem;padding:4px 10px;">⚖️ ' + esc(bi('شروط الاستخدام', 'Terms of Use')) + '</button>' +
                   '</div>' +
+                  '<div id="regCloudErrorBox" style="display:none;background:#FEF2F2;border:1.5px solid #DC2626;color:#991B1B;border-radius:10px;padding:8px 10px;font-size:0.84rem;font-weight:700;"></div>' +
                   '<button class="btn btn-primary btn-block" id="btnSubmitRegister" type="button">' + esc(bi('إنشاء الحساب والانتقال للتفعيل', 'Register & Proceed to Activation')) + '</button>' +
                 '</div>'
               : (authMode === 'LOGIN'
@@ -9259,26 +9379,40 @@
 
           const submitRegBtn = document.getElementById('btnSubmitRegister');
           if (submitRegBtn) {
-            submitRegBtn.onclick = function () {
+            submitRegBtn.onclick = async function () {
+              const errBox = document.getElementById('regCloudErrorBox');
+              function showRegErr(msg) {
+                if (errBox) {
+                  errBox.textContent = msg;
+                  errBox.style.display = 'block';
+                }
+                showToast(msg, 4500);
+              }
+              if (errBox) errBox.style.display = 'none';
+
               const fullName = document.getElementById('regFullName').value.trim();
               const phone = toAsciiDigits(document.getElementById('regPhone').value.trim());
               const nationalId = toAsciiDigits(document.getElementById('regNationalId').value.trim());
               const password = toAsciiDigits(document.getElementById('regPassword').value.trim());
               if (!fullName || normalizePhoneDigits(phone).length < 10 || !password) {
-                showToast(bi('يرجى إدخال الاسم ورقم هاتف صحيح (11 رقم) والرقم السري', 'Enter full name, valid phone number, and Numeric PIN'));
+                showRegErr(bi('يرجى إدخال الاسم ورقم هاتف صحيح (11 رقم) والرقم السري', 'Enter full name, valid phone number, and Numeric PIN'));
                 return;
               }
               if (!/^\d{4,}$/.test(password)) {
-                showToast(bi('الرقم السري (PIN) يجب أن يتكون من أرقام فقط (4 أرقام على الأقل)', 'PIN must be numeric digits only (4+ digits)'));
+                showRegErr(bi('الرقم السري (PIN) يجب أن يتكون من أرقام فقط (4 أرقام على الأقل)', 'PIN must be numeric digits only (4+ digits)'));
                 return;
               }
               if (isPhoneBlocked(phone)) {
-                showToast(bi('عذراً، هذا الرقم محظور من التسجيل في المنصة', 'Sorry, this phone number is blocked'));
+                showRegErr(bi('عذراً، هذا الرقم محظور من التسجيل في المنصة', 'Sorry, this phone number is blocked'));
                 return;
               }
               const duplicate = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === normalizePhoneDigits(phone));
               if (duplicate) {
-                showToast(bi('رقم الهاتف مسجل بالفعل، يمكنك تسجيل الدخول', 'Phone number already registered. Sign in instead.'));
+                showRegErr(bi('رقم الهاتف مسجل بالفعل، يمكنك تسجيل الدخول', 'Phone number already registered. Sign in instead.'));
+                return;
+              }
+              if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                showRegErr(bi('⚠️ لا يوجد اتصال بالإنترنت. يرجى الاتصال بالإنترنت لإتمام التسجيل ومزامنة حسابك سحابياً.', '⚠️ Internet connection required to register and sync your account to the cloud.'));
                 return;
               }
               ui.otpSuccessMsg = '';
@@ -9292,6 +9426,7 @@
                 nationalId: nationalId,
                 password: password,
                 isPhoneVerified: false,
+                isVerified: false,
                 verifiedBy: '',
                 verifiedAtMillis: 0
               }, db, nowMs);
@@ -9304,6 +9439,24 @@
                 phone: phone,
                 nationalId: nationalId
               });
+
+              const origBtnText = submitRegBtn.textContent;
+              submitRegBtn.disabled = true;
+              submitRegBtn.textContent = bi('⏳ جاري حفظ الحساب سحابياً...', '⏳ Saving to Cloud...');
+              let cloudSavedOk = false;
+              try {
+                cloudSavedOk = await syncAccountToCloudNow(newAcc);
+              } catch (e) {
+                cloudSavedOk = false;
+              }
+              submitRegBtn.disabled = false;
+              submitRegBtn.textContent = origBtnText;
+
+              if (!cloudSavedOk) {
+                showRegErr(bi('⚠️ تعذر الاتصال بقاعدة البيانات السحابية. يرجى التأكد من الإنترنت وإعادة المحاولة لإتمام التسجيل.', '⚠️ Failed to sync account to Cloud Firestore. Check your internet and try again.'));
+                return;
+              }
+
               db.accounts = (db.accounts || []).concat([newAcc]);
               db.account = newAcc;
               db.familyMembers.push(newSelfMem);
@@ -9322,7 +9475,6 @@
               db.notifications.unshift(regNotif);
 
               saveState(db);
-              syncAccountToCloudNow(newAcc);
               syncDocToFirestoreNamespace('family_members', newSelfMem.id, newSelfMem);
               syncDocToFirestoreNamespace('notifications', String(regNotif.id), regNotif);
               syncFcmTokenToFirestore();
@@ -12224,6 +12376,7 @@
             const currentlyVerified = target.isPhoneVerified !== false;
             if (currentlyVerified) {
               target.isPhoneVerified = false;
+              target.isVerified = false;
               target.verifiedBy = '';
               target.verifiedAtMillis = 0;
               assignFreshUserOtp(target, db);

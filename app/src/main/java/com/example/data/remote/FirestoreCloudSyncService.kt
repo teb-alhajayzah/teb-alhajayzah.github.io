@@ -76,18 +76,43 @@ object FirestoreCloudSyncService {
         URLEncoder.encode(value, "UTF-8")
 
     private fun baseDocumentsUrl(projectId: String): String =
-        "https://firestore.googleapis.com/v1/projects/${enc(projectId.trim())}/databases/(default)/documents"
+        "https://firestore.googleapis.com/v1/projects/${enc(projectId.trim())}/databases/${enc(CloudNamespacePaths.FIRESTORE_DATABASE_ID)}/documents"
+
+    fun resolveCollectionName(subCollection: String): String = when (subCollection.trim().lowercase()) {
+        "accounts", "users", CloudNamespacePaths.USERS -> CloudNamespacePaths.USERS
+        "doctors", "clinics", CloudNamespacePaths.CLINICS -> CloudNamespacePaths.CLINICS
+        "slots", "appointments", CloudNamespacePaths.APPOINTMENTS -> CloudNamespacePaths.APPOINTMENTS
+        "messages", CloudNamespacePaths.MESSAGES -> CloudNamespacePaths.MESSAGES
+        "records", CloudNamespacePaths.RECORDS -> CloudNamespacePaths.RECORDS
+        "fcm_tokens", CloudNamespacePaths.FCM_TOKENS -> CloudNamespacePaths.FCM_TOKENS
+        "settings", "config", CloudNamespacePaths.SETTINGS -> CloudNamespacePaths.SETTINGS
+        "family_members", CloudNamespacePaths.FAMILY_MEMBERS -> CloudNamespacePaths.FAMILY_MEMBERS
+        "labs", CloudNamespacePaths.LABS -> CloudNamespacePaths.LABS
+        "permanent_logs", CloudNamespacePaths.PERMANENT_LOGS -> CloudNamespacePaths.PERMANENT_LOGS
+        "notifications", CloudNamespacePaths.NOTIFICATIONS -> CloudNamespacePaths.NOTIFICATIONS
+        "blocked_phones", CloudNamespacePaths.BLOCKED_PHONES -> CloudNamespacePaths.BLOCKED_PHONES
+        "activation_codes", CloudNamespacePaths.ACTIVATION_CODES -> CloudNamespacePaths.ACTIVATION_CODES
+        "family_link_requests", CloudNamespacePaths.FAMILY_LINK_REQUESTS -> CloudNamespacePaths.FAMILY_LINK_REQUESTS
+        "visitor_hits", CloudNamespacePaths.VISITOR_HITS -> CloudNamespacePaths.VISITOR_HITS
+        else -> {
+            val trimmed = subCollection.trim()
+            if (trimmed.startsWith("${CloudNamespacePaths.ROOT}_")) trimmed else "${CloudNamespacePaths.ROOT}_$trimmed"
+        }
+    }
 
     fun settingsUrl(projectId: String, apiKey: String): String =
-        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.SETTINGS}?key=${enc(apiKey.trim())}"
+        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.SETTINGS}/${CloudNamespacePaths.SETTINGS_DOC}?key=${enc(apiKey.trim())}"
 
     fun collectionUrl(projectId: String, apiKey: String, subCollection: String, pageToken: String? = null): String {
-        val base = "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.DATA_ROOT}/${enc(subCollection)}?pageSize=500&key=${enc(apiKey.trim())}"
+        val resolvedCol = resolveCollectionName(subCollection)
+        val base = "${baseDocumentsUrl(projectId)}/${enc(resolvedCol)}?pageSize=500&key=${enc(apiKey.trim())}"
         return if (!pageToken.isNullOrBlank()) "$base&pageToken=${enc(pageToken)}" else base
     }
 
-    fun documentUrl(projectId: String, apiKey: String, subCollection: String, docId: String): String =
-        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.DATA_ROOT}/${enc(subCollection)}/${enc(safeCloudDocId(docId))}?key=${enc(apiKey.trim())}"
+    fun documentUrl(projectId: String, apiKey: String, subCollection: String, docId: String): String {
+        val resolvedCol = resolveCollectionName(subCollection)
+        return "${baseDocumentsUrl(projectId)}/${enc(resolvedCol)}/${enc(safeCloudDocId(docId))}?key=${enc(apiKey.trim())}"
+    }
 
     fun toFirestoreFields(obj: JSONObject): JSONObject {
         val fields = JSONObject()
@@ -289,8 +314,8 @@ object FirestoreCloudSyncService {
         }.getOrDefault(false)
     }
 
-    fun fcmTokensDocUrl(projectId: String, apiKey: String): String =
-        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.FCM_TOKENS}?key=${enc(apiKey.trim())}"
+    fun fcmTokensDocUrl(projectId: String, apiKey: String, docId: String = "registry"): String =
+        "${baseDocumentsUrl(projectId)}/${CloudNamespacePaths.FCM_TOKENS}/${enc(safeCloudDocId(docId))}?key=${enc(apiKey.trim())}"
 
     suspend fun upsertFcmToken(
         brand: PlatformBrandConfig,
@@ -299,25 +324,7 @@ object FirestoreCloudSyncService {
     ): Boolean = withContext(Dispatchers.IO) {
         if (!isCloudNetworkAllowed() || !brand.isCloudConfigured || userId.isBlank()) return@withContext false
         val safeKey = safeCloudDocId(userId)
-        val okData = upsertDocument(brand, "fcm_tokens", safeKey, tokenPayload)
-        val okRootDoc = runCatching {
-            val maskParam = "&updateMask.fieldPaths=${enc(safeKey)}&updateMask.fieldPaths=_cloudNamespace"
-            val url = "${fcmTokensDocUrl(brand.firebaseProjectId, brand.firebaseApiKey)}$maskParam"
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "PATCH"
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-            }
-            val rootWrapper = JSONObject().put(safeKey, tokenPayload)
-            val body = JSONObject().put("fields", toFirestoreFields(rootWrapper))
-            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            val code = conn.responseCode
-            conn.disconnect()
-            code in 200..299
-        }.getOrDefault(false)
-        okData || okRootDoc
+        upsertDocument(brand, "fcm_tokens", safeKey, tokenPayload)
     }
 
     suspend fun deleteDocument(
@@ -518,6 +525,7 @@ object FirestoreCloudSyncService {
         put("nationalId", a.nationalId)
         put("password", a.password)
         put("isPhoneVerified", a.isPhoneVerified)
+        put("isVerified", a.isPhoneVerified)
         put("verifiedBy", a.verifiedBy)
         put("verifiedAtMillis", a.verifiedAtMillis)
         put("otpCode", a.otpCode)
@@ -534,13 +542,18 @@ object FirestoreCloudSyncService {
         val id = j.optString("id", j.optString("_docId", "")).trim()
         val phone = j.optString("phone", "").trim()
         if (id.isEmpty() || phone.isEmpty()) return null
+        val resolvedVerified = when {
+            j.has("isPhoneVerified") -> j.optBoolean("isPhoneVerified", false)
+            j.has("isVerified") -> j.optBoolean("isVerified", false)
+            else -> false
+        }
         return PatientAccountEntity(
             id = id,
             fullName = j.optString("fullName", "مريض"),
             phone = phone,
             nationalId = j.optString("nationalId", ""),
             password = j.optString("password", "1234"),
-            isPhoneVerified = if (j.has("isPhoneVerified")) j.optBoolean("isPhoneVerified", false) else false,
+            isPhoneVerified = resolvedVerified,
             verifiedBy = j.optString("verifiedBy", ""),
             verifiedAtMillis = j.optLong("verifiedAtMillis", 0L),
             otpCode = j.optString("otpCode", ""),
