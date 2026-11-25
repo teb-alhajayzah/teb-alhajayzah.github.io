@@ -924,12 +924,12 @@ class ExampleRobolectricTest {
         val initialBrand = repository.brandConfigFlow.first()
         assertTrue(initialBrand.isCloudConfigured)
         assertEquals("https://masarik-otp.masarik-tourism.workers.dev", initialBrand.workerUrl)
-        assertEquals("AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs", initialBrand.firebaseApiKey)
-        assertEquals("gen-lang-client-0015800098.firebaseapp.com", initialBrand.firebaseAuthDomain)
-        assertEquals("gen-lang-client-0015800098", initialBrand.firebaseProjectId)
-        assertEquals("gen-lang-client-0015800098.firebasestorage.app", initialBrand.firebaseStorageBucket)
-        assertEquals("588431549120", initialBrand.firebaseMessagingSenderId)
-        assertEquals("1:588431549120:web:c10278b3df39d11a668325", initialBrand.firebaseAppId)
+        assertEquals("AIzaSyC08cH9E9le52NU-B56N894yt_k8hQMQ1M", initialBrand.firebaseApiKey)
+        assertEquals("gen-lang-client-0514993881.firebaseapp.com", initialBrand.firebaseAuthDomain)
+        assertEquals("gen-lang-client-0514993881", initialBrand.firebaseProjectId)
+        assertEquals("gen-lang-client-0514993881.firebasestorage.app", initialBrand.firebaseStorageBucket)
+        assertEquals("197836130786", initialBrand.firebaseMessagingSenderId)
+        assertEquals("1:197836130786:web:3a85d5a30dd81184c411bb", initialBrand.firebaseAppId)
         assertEquals(
             "BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw",
             initialBrand.firebaseVapidKey,
@@ -943,7 +943,7 @@ class ExampleRobolectricTest {
             ),
         )
         val decodedSettings = com.example.data.remote.FirestoreCloudSyncService.fromFirestoreDocument(settingsDoc)
-        assertEquals("gen-lang-client-0015800098", decodedSettings.getString("firebaseProjectId"))
+        assertEquals("gen-lang-client-0514993881", decodedSettings.getString("firebaseProjectId"))
         assertEquals("https://masarik-otp.masarik-tourism.workers.dev", decodedSettings.getString("workerUrl"))
 
         // 2. Verify Firebase Web Config & Cloudflare Worker URL override & reset back to embedded defaults
@@ -1569,7 +1569,7 @@ class ExampleRobolectricTest {
             com.example.data.remote.FirestoreCloudSyncService.accountCloudDocId("+201141271027", "acc_fallback"),
         )
         val url = com.example.data.remote.FirestoreCloudSyncService.documentUrl(
-            projectId = "gen-lang-client-0015800098",
+            projectId = "gen-lang-client-0514993881",
             apiKey = "test-key",
             subCollection = "accounts",
             docId = com.example.data.remote.FirestoreCloudSyncService.accountCloudDocId("01099887766", "acc_x"),
@@ -1679,7 +1679,7 @@ class ExampleRobolectricTest {
         assertEquals("teb_alhajayzah_fcm_tokens", com.example.config.CloudNamespacePaths.FCM_TOKENS)
         assertEquals("teb_alhajayzah_fcm_tokens", com.example.config.CloudNamespacePaths.DATA_FCM_TOKENS)
         val fcmDocUrl = com.example.data.remote.FirestoreCloudSyncService.fcmTokensDocUrl(
-            projectId = "gen-lang-client-0015800098",
+            projectId = "gen-lang-client-0514993881",
             apiKey = "test-key",
             docId = "user_010",
         )

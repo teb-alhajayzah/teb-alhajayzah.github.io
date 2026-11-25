@@ -36,12 +36,12 @@ data class PlatformBrandConfig(
     val adminPin: String = "132027",
     val globalChatEnabled: Boolean = true,
     // إعدادات الربط السحابي الافتراضية (Firebase Web Config + Cloudflare Worker URL) معزولة تحت مسار teb_alhajayzah
-    val firebaseApiKey: String = "AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs",
-    val firebaseAuthDomain: String = "gen-lang-client-0015800098.firebaseapp.com",
-    val firebaseProjectId: String = "gen-lang-client-0015800098",
-    val firebaseStorageBucket: String = "gen-lang-client-0015800098.firebasestorage.app",
-    val firebaseMessagingSenderId: String = "588431549120",
-    val firebaseAppId: String = "1:588431549120:web:c10278b3df39d11a668325",
+    val firebaseApiKey: String = "AIzaSyC08cH9E9le52NU-B56N894yt_k8hQMQ1M",
+    val firebaseAuthDomain: String = "gen-lang-client-0514993881.firebaseapp.com",
+    val firebaseProjectId: String = "gen-lang-client-0514993881",
+    val firebaseStorageBucket: String = "gen-lang-client-0514993881.firebasestorage.app",
+    val firebaseMessagingSenderId: String = "197836130786",
+    val firebaseAppId: String = "1:197836130786:web:3a85d5a30dd81184c411bb",
     val firebaseVapidKey: String = "BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw",
     val workerUrl: String = "https://masarik-otp.masarik-tourism.workers.dev",
     // إعدادات التخزين السحابي الاحتياطي على Google Drive وسياسة الاحتفاظ بالملفات الثقيلة (أيام: 90 / 180 / 360)
@@ -60,7 +60,7 @@ data class PlatformBrandConfig(
  * تضمن عدم تداخل أي بيانات مع مشاريع أخرى مستضافة على نفس الحساب السحابي.
  */
 object CloudNamespacePaths {
-    const val FIRESTORE_DATABASE_ID = "ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864"
+    const val FIRESTORE_DATABASE_ID = "(default)"
     const val ROOT = "teb_alhajayzah"
     const val SETTINGS_DOC = "settings"
     const val SETTINGS = "teb_alhajayzah_settings"

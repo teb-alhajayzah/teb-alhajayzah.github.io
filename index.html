@@ -1642,19 +1642,19 @@
         adminOwnerName: 'المدير العام',
         adminPin: '132027',
         globalChatEnabled: true,
-        firebaseApiKey: 'AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs',
-        firebaseAuthDomain: 'gen-lang-client-0015800098.firebaseapp.com',
-        firebaseProjectId: 'gen-lang-client-0015800098',
-        firebaseStorageBucket: 'gen-lang-client-0015800098.firebasestorage.app',
-        firebaseMessagingSenderId: '588431549120',
-        firebaseAppId: '1:588431549120:web:c10278b3df39d11a668325',
+        firebaseApiKey: 'AIzaSyC08cH9E9le52NU-B56N894yt_k8hQMQ1M',
+        firebaseAuthDomain: 'gen-lang-client-0514993881.firebaseapp.com',
+        firebaseProjectId: 'gen-lang-client-0514993881',
+        firebaseStorageBucket: 'gen-lang-client-0514993881.firebasestorage.app',
+        firebaseMessagingSenderId: '197836130786',
+        firebaseAppId: '1:197836130786:web:3a85d5a30dd81184c411bb',
         firebaseVapidKey: 'BNjwnHCGNHMZt2rSbDbkIsa2NCI96ivhJSGYNA9MgbMehoQNnyP2MyUmqrDav2MUfg4YPMeeiOyIqQTE7MfA6kiw',
         workerUrl: 'https://masarik-otp.masarik-tourism.workers.dev',
         defaultDriveWebAppUrl: '',
         fileRetentionDays: 360
       };
 
-      const CLOUD_DATABASE_ID = 'ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864';
+      const CLOUD_DATABASE_ID = '(default)';
       const CLOUD_NAMESPACE = 'teb_alhajayzah';
       const CLOUD_PATHS = {
         settingsDoc: 'settings',
@@ -3281,7 +3281,7 @@
         if (!projectId || !apiKey) return null;
         try {
           const url = firestoreRestDocsBase(projectId) + '/' + CLOUD_PATHS.settings + '/' + CLOUD_PATHS.settingsDoc +
-            '?key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
+            '?key=' + encodeURIComponent(apiKey);
           const resp = await fetchWithTimeout(url, { cache: 'no-store' }, 3000);
           if (!resp) {
             updateCloudStatusWeb(false, 'No Response');
@@ -3319,7 +3319,7 @@
           do {
             guard++;
             let url = firestoreRestDocsBase(projectId) + '/' + encodeURIComponent(resolvedCol) +
-              '?pageSize=500&key=' + encodeURIComponent(apiKey) + '&_t=' + Date.now();
+              '?pageSize=500&key=' + encodeURIComponent(apiKey);
             if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
             const resp = await fetchWithTimeout(url, { cache: 'no-store' }, 3000);
             if (!resp) {
