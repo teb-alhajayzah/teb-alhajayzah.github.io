@@ -43,6 +43,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +58,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
@@ -94,7 +98,9 @@ import com.example.ui.patient.MedicalFileScreen
 import com.example.ui.patient.PatientHomeScreen
 import com.example.ui.theme.TebAlHajayzahTheme
 import com.example.util.FirebaseAppCheckHelper
+import com.example.util.TebFcmService
 import com.example.util.TebNotificationHelper
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -109,9 +115,32 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         FirebaseAppCheckHelper.configureAppCheck(this, intent)
         TebNotificationHelper.ensureNotificationChannel(this)
+        TebNotificationHelper.scheduleBackgroundSyncAlarm(this)
+        runCatching {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                if (!token.isNullOrBlank()) {
+                    TebFcmService.updateCachedToken(this@MainActivity, token)
+                    viewModel.syncDeviceFcmToken(token)
+                }
+            }
+        }
         enableEdgeToEdge()
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    when (event) {
+                        Lifecycle.Event.ON_RESUME -> viewModel.setAppForeground(true)
+                        Lifecycle.Event.ON_PAUSE -> viewModel.setAppForeground(false)
+                        else -> Unit
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
             val notifPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission(),
             ) {}

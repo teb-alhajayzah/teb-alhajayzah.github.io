@@ -33,6 +33,10 @@
             android:name=".util.TebAppointmentReminderReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".util.TebBackgroundSyncReceiver"
+            android:exported="false" />
+
         <service
             android:name=".util.TebFcmService"
             android:exported="false">

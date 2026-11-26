@@ -24,7 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FamilyLinkRequestEntity::class,
         PlatformVisitorHitEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -259,6 +259,14 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `appointment_slots` ADD COLUMN `appointmentTimestamp` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `appointment_slots` ADD COLUMN `reminded2h` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `appointment_slots` ADD COLUMN `reminded30m` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -283,6 +291,7 @@ abstract class TebDatabase : RoomDatabase() {
                             MIGRATION_10_11,
                             MIGRATION_11_12,
                             MIGRATION_12_13,
+                            MIGRATION_13_14,
                         )
                         .fallbackToDestructiveMigrationOnDowngrade()
                         .build()

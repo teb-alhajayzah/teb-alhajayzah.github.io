@@ -269,6 +269,28 @@ object TebNotificationHelper {
         }
     }
 
+    fun scheduleBackgroundSyncAlarm(context: Context) {
+        runCatching {
+            ensureNotificationChannel(context)
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val intent = Intent(context, TebBackgroundSyncReceiver::class.java)
+            val pi = PendingIntent.getBroadcast(
+                context,
+                910_045,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val intervalMs = AlarmManager.INTERVAL_FIFTEEN_MINUTES
+            val firstTriggerAt = System.currentTimeMillis() + 120_000L
+            alarmManager.setInexactRepeating(
+                AlarmManager.RTC_WAKEUP,
+                firstTriggerAt,
+                intervalMs,
+                pi,
+            )
+        }
+    }
+
     private fun scheduleAlarmInternal(
         context: Context,
         requestCode: Int,

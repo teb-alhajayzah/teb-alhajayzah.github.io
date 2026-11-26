@@ -65,6 +65,7 @@ import java.net.URL
 import java.security.SecureRandom
 import java.util.Calendar
 import java.util.UUID
+import org.json.JSONArray
 import org.json.JSONObject
 
 private val Context.tebDataStore by preferencesDataStore(name = "teb_prefs")
@@ -111,6 +112,10 @@ class TebRepository(
     private var lastSyncedRemoteAccountKeys: Set<String> = emptySet()
     @Volatile
     private var hasSyncedMessagesBaseline: Boolean = false
+    @Volatile
+    private var lastFcmFetchAtMillis: Long = 0L
+    @Volatile
+    private var cachedFcmTokenDocs: List<JSONObject> = emptyList()
     private val locallyDeletedMessageIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     private val activeAccountKey = stringPreferencesKey("active_account_id")
@@ -427,6 +432,9 @@ class TebRepository(
                 familyMemberId = "",
                 bookingSource = BookingSource.NONE,
                 bookedAtMillis = 0L,
+                appointmentTimestamp = 0L,
+                reminded2h = false,
+                reminded30m = false,
             )
             dao.updateSlot(clearedSlot)
             pushDocAsync("slots", clearedSlot.id) { FirestoreCloudSyncService.slotToJson(clearedSlot) }
@@ -465,6 +473,7 @@ class TebRepository(
         accountId: String,
         nowMillis: Long = System.currentTimeMillis(),
         notifyAdmin: Boolean = false,
+        notifyPatient: Boolean = false,
     ): Result<PatientAccountEntity> {
         val acc = dao.getAccountById(accountId)
             ?: return Result.failure(IllegalStateException("الحساب غير موجود"))
@@ -509,6 +518,17 @@ class TebRepository(
                 title = "🔑 طلب كود تفعيل OTP جديد",
                 body = otpMsg,
                 targetAudience = NotificationAudience.ADMIN,
+                targetId = updated.id,
+                namespacePath = CloudNamespacePaths.USERS,
+            )
+        }
+        if (notifyPatient) {
+            val patientOtpMsg = "🔑 كود تفعيل حسابك في منصة طب الحجايزة هو: $freshCode (صالح لمدة 24 ساعة)"
+            dispatchWorkerPushAsync(
+                eventType = "OTP_CODE_ISSUED",
+                title = "🔑 كود تفعيل حسابك — طب الحجايزة",
+                body = patientOtpMsg,
+                targetAudience = NotificationAudience.PATIENT,
                 targetId = updated.id,
                 namespacePath = CloudNamespacePaths.USERS,
             )
@@ -700,6 +720,16 @@ class TebRepository(
         dao.getAccountById(accountId)?.let { acc ->
             pushDocAsync("accounts", FirestoreCloudSyncService.accountCloudDocId(acc.phone, acc.id)) {
                 FirestoreCloudSyncService.accountToJson(acc)
+            }
+            if (verified) {
+                dispatchWorkerPushAsync(
+                    eventType = "ACCOUNT_VERIFIED",
+                    title = "✅ تم توثيق وتفعيل حسابك — طب الحجايزة",
+                    body = "تم تفعيل حسابك (${acc.fullName}) بنجاح من قبل الإدارة العامة، يمكنك الآن حجز العيادات والاطلاع على ملفك الطبي.",
+                    targetAudience = NotificationAudience.PATIENT,
+                    targetId = acc.id,
+                    namespacePath = CloudNamespacePaths.USERS,
+                )
             }
         }
     }
@@ -1359,6 +1389,24 @@ class TebRepository(
         return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
     }
 
+    fun computeSlotAppointmentTimestamp(
+        slot: AppointmentSlotEntity,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Long {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = nowMillis
+            if (slot.dateLabel.contains("غد") || slot.dateLabel.contains("tomorrow", ignoreCase = true)) {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
+            val eff = slot.effectiveMinutes.coerceAtLeast(0)
+            set(Calendar.HOUR_OF_DAY, (eff / 60).coerceIn(0, 23))
+            set(Calendar.MINUTE, (eff % 60).coerceIn(0, 59))
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
     suspend fun bookSlot(
         slotId: String,
         patientName: String,
@@ -1375,13 +1423,18 @@ class TebRepository(
         if (slot.status != SlotStatus.AVAILABLE) {
             return Result.failure(IllegalStateException("عذراً، تم حجز هذا الموعد للتو"))
         }
+        val now = System.currentTimeMillis()
+        val apptTs = computeSlotAppointmentTimestamp(slot, now)
         val bookedSlot = slot.copy(
             status = SlotStatus.BOOKED,
             patientName = patientName.trim(),
             patientPhone = cleanPhone,
             familyMemberId = familyMemberId,
             bookingSource = source,
-            bookedAtMillis = System.currentTimeMillis(),
+            bookedAtMillis = now,
+            appointmentTimestamp = apptTs,
+            reminded2h = false,
+            reminded30m = false,
         )
         dao.updateSlot(bookedSlot)
         pushDocAsync("slots", bookedSlot.id) { FirestoreCloudSyncService.slotToJson(bookedSlot) }
@@ -1442,6 +1495,9 @@ class TebRepository(
             familyMemberId = "",
             bookingSource = BookingSource.NONE,
             bookedAtMillis = 0L,
+            appointmentTimestamp = 0L,
+            reminded2h = false,
+            reminded30m = false,
         )
         dao.updateSlot(freedSlot)
         TebNotificationHelper.cancelAppointmentReminders(appContext, freedSlot.id)
@@ -1506,13 +1562,17 @@ class TebRepository(
         val newTime = TimeUtils.formatMinutesAr(toSlot.effectiveMinutes, false)
         val patientName = fromSlot.patientName
 
+        val now = System.currentTimeMillis()
         val newBooked = toSlot.copy(
             status = SlotStatus.BOOKED,
             patientName = fromSlot.patientName,
             patientPhone = fromSlot.patientPhone,
             familyMemberId = fromSlot.familyMemberId,
             bookingSource = fromSlot.bookingSource,
-            bookedAtMillis = System.currentTimeMillis(),
+            bookedAtMillis = now,
+            appointmentTimestamp = computeSlotAppointmentTimestamp(toSlot, now),
+            reminded2h = false,
+            reminded30m = false,
         )
         val freedFrom = fromSlot.copy(
             status = SlotStatus.AVAILABLE,
@@ -1521,6 +1581,9 @@ class TebRepository(
             familyMemberId = "",
             bookingSource = BookingSource.NONE,
             bookedAtMillis = 0L,
+            appointmentTimestamp = 0L,
+            reminded2h = false,
+            reminded30m = false,
         )
         dao.updateSlot(newBooked)
         dao.updateSlot(freedFrom)
@@ -1578,6 +1641,9 @@ class TebRepository(
             familyMemberId = "",
             bookingSource = BookingSource.NONE,
             bookedAtMillis = 0L,
+            appointmentTimestamp = 0L,
+            reminded2h = false,
+            reminded30m = false,
         )
         dao.updateSlot(freedSlot)
         TebNotificationHelper.cancelAppointmentReminders(appContext, freedSlot.id)
@@ -1636,13 +1702,17 @@ class TebRepository(
         val newTime = TimeUtils.formatMinutesAr(toSlot.effectiveMinutes, false)
         val targetPatientId = fromSlot.familyMemberId.ifBlank { fromSlot.patientPhone }
 
+        val now = System.currentTimeMillis()
         val newBooked = toSlot.copy(
             status = SlotStatus.BOOKED,
             patientName = fromSlot.patientName,
             patientPhone = fromSlot.patientPhone,
             familyMemberId = fromSlot.familyMemberId,
             bookingSource = fromSlot.bookingSource,
-            bookedAtMillis = System.currentTimeMillis(),
+            bookedAtMillis = now,
+            appointmentTimestamp = computeSlotAppointmentTimestamp(toSlot, now),
+            reminded2h = false,
+            reminded30m = false,
         )
         val freedFrom = fromSlot.copy(
             status = SlotStatus.AVAILABLE,
@@ -1651,6 +1721,9 @@ class TebRepository(
             familyMemberId = "",
             bookingSource = BookingSource.NONE,
             bookedAtMillis = 0L,
+            appointmentTimestamp = 0L,
+            reminded2h = false,
+            reminded30m = false,
         )
         dao.updateSlot(newBooked)
         dao.updateSlot(freedFrom)
@@ -1727,8 +1800,13 @@ class TebRepository(
 
     val cloudConnectionStatusFlow = FirestoreCloudSyncService.cloudStatusFlow
 
-    suspend fun syncWithCloudFirestoreOnce(): Boolean {
+    suspend fun syncWithCloudFirestoreOnce(force: Boolean = false): Boolean {
         if (!FirestoreCloudSyncService.isCloudNetworkAllowed()) return false
+        if (force) {
+            FirestoreCloudSyncService.resetQuotaBackoff()
+        } else if (!FirestoreCloudSyncService.canAutoSyncNow()) {
+            return false
+        }
         return cloudSyncMutex.withLock {
             runCatching {
                 var brand = brandConfigFlow.first()
@@ -2059,6 +2137,42 @@ class TebRepository(
         }
     }
 
+    private suspend fun resolveTargetFcmTokens(
+        brand: PlatformBrandConfig,
+        targetAudience: String,
+        targetId: String,
+    ): List<String> {
+        val now = System.currentTimeMillis()
+        if (cachedFcmTokenDocs.isEmpty() || (now - lastFcmFetchAtMillis) >= 60_000L) {
+            if (FirestoreCloudSyncService.canAutoSyncNow(now)) {
+                val fetched = FirestoreCloudSyncService.listCollection(brand, "fcm_tokens")
+                if (fetched != null) {
+                    cachedFcmTokenDocs = fetched
+                    lastFcmFetchAtMillis = now
+                }
+            }
+        }
+        val cleanTargetId = targetId.trim()
+        val resolved = linkedSetOf<String>()
+        for (doc in cachedFcmTokenDocs) {
+            val token = doc.optString("fcmToken", doc.optString("token", "")).trim()
+            if (token.isEmpty()) continue
+            val role = doc.optString("role", "").trim().uppercase()
+            val uid = doc.optString("userId", doc.optString("_docId", "")).trim()
+            val matches = when (targetAudience.uppercase()) {
+                NotificationAudience.ADMIN -> role == "ADMIN" || uid == "admin"
+                NotificationAudience.CLINIC -> (role == "DOCTOR" || role == "CLINIC" || uid.startsWith("doc")) &&
+                    (cleanTargetId.isEmpty() || uid == cleanTargetId || uid == "doctor_$cleanTargetId")
+                NotificationAudience.PATIENT -> (role == "PATIENT" || (role != "ADMIN" && role != "DOCTOR")) &&
+                    (cleanTargetId.isEmpty() || uid == cleanTargetId || uid.contains(cleanTargetId))
+                NotificationAudience.ALL -> true
+                else -> true
+            }
+            if (matches) resolved += token
+        }
+        return resolved.toList()
+    }
+
     private suspend fun dispatchWorkerPushAsync(
         eventType: String,
         title: String,
@@ -2073,6 +2187,9 @@ class TebRepository(
         if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://")) return
         withContext(Dispatchers.IO) {
             runCatching {
+                val targetTokens = resolveTargetFcmTokens(brand, targetAudience, targetId)
+                val tokensJson = JSONArray()
+                targetTokens.forEach { tokensJson.put(it) }
                 val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = 4000
@@ -2080,12 +2197,25 @@ class TebRepository(
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 }
+                val dataObj = JSONObject().apply {
+                    put("eventType", eventType)
+                    put("title", title)
+                    put("message", body)
+                    put("body", body)
+                    put("targetAudience", targetAudience)
+                    put("targetId", targetId)
+                    put("collectionPath", namespacePath)
+                    put("namespace", CloudNamespacePaths.ROOT)
+                }
                 val payload = JSONObject().apply {
+                    put("tokens", tokensJson)
+                    put("title", title)
+                    put("message", body)
+                    put("body", body)
+                    put("data", dataObj)
                     put("namespace", CloudNamespacePaths.ROOT)
                     put("collectionPath", namespacePath)
                     put("eventType", eventType)
-                    put("title", title)
-                    put("body", body)
                     put("targetAudience", targetAudience)
                     put("targetId", targetId)
                     put("projectId", brand.firebaseProjectId)
@@ -2119,6 +2249,21 @@ class TebRepository(
                 FirestoreCloudSyncService.upsertFcmToken(brand, cleanUser, payload)
             }.getOrDefault(false)
         }
+    }
+
+    suspend fun saveDeviceFcmTokenForCurrentRole(token: String) {
+        val cleanToken = token.trim()
+        if (cleanToken.isBlank()) return
+        val isAdmin = runCatching { isAdminLoggedInFlow.first() }.getOrDefault(false)
+        val docId = runCatching { loggedInDoctorIdFlow.first() }.getOrNull()
+        val accountId = runCatching { activeAccountIdFlow.first() }.getOrDefault("")
+        val (uid, role) = when {
+            isAdmin -> "admin" to "ADMIN"
+            !docId.isNullOrBlank() -> docId to "DOCTOR"
+            accountId.isNotBlank() -> accountId to "PATIENT"
+            else -> "android_device_${cleanToken.take(12)}" to "PATIENT"
+        }
+        saveFcmDeviceToken(uid, cleanToken, role)
     }
 
     suspend fun generateDoctorSchedule(
@@ -2182,14 +2327,23 @@ class TebRepository(
             pushDocAsync("doctors", d.id) { FirestoreCloudSyncService.doctorToJson(d) }
         }
         dao.observeSlotsForDoctor(doctorId).first().forEach { s ->
-            pushDocAsync("slots", s.id) { FirestoreCloudSyncService.slotToJson(s) }
-            if (s.status == SlotStatus.BOOKED) {
+            val updatedSlot = if (s.status == SlotStatus.BOOKED) {
+                s.copy(
+                    appointmentTimestamp = computeSlotAppointmentTimestamp(s),
+                    reminded2h = false,
+                    reminded30m = false,
+                ).also { dao.updateSlot(it) }
+            } else {
+                s
+            }
+            pushDocAsync("slots", updatedSlot.id) { FirestoreCloudSyncService.slotToJson(updatedSlot) }
+            if (updatedSlot.status == SlotStatus.BOOKED) {
                 TebNotificationHelper.scheduleAppointmentReminders(
                     context = appContext,
-                    slotId = s.id,
+                    slotId = updatedSlot.id,
                     doctorName = doctor.doctorName,
                     clinicName = doctor.clinicName,
-                    effectiveMinutes = s.effectiveMinutes,
+                    effectiveMinutes = updatedSlot.effectiveMinutes,
                 )
             }
         }

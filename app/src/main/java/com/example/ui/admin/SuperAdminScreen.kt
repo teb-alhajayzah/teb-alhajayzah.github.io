@@ -550,7 +550,7 @@ fun SuperAdminDashboardScreen(
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                                 ),
                                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
+                                                maxLines = 2,
                                                 textAlign = TextAlign.Center,
                                             )
                                             if (badgeCount > 0) {
@@ -1194,6 +1194,44 @@ fun SuperAdminDashboardScreen(
                                         }
                                     }
                                 }
+                                Button(
+                                    onClick = {
+                                        onSavePlatformSettings(
+                                            cfgPlatformName,
+                                            cfgVillageName,
+                                            cfgHospitalName,
+                                            cfgSupportPhone,
+                                            cfgAnnouncement,
+                                            cfgApkUrl,
+                                            cfgMedsApi,
+                                            cfgAdminPin,
+                                            cfgFbApiKey,
+                                            cfgFbAuthDomain,
+                                            cfgFbProjectId,
+                                            cfgFbStorageBucket,
+                                            cfgFbMessagingSenderId,
+                                            cfgFbAppId,
+                                            cfgFbVapidKey,
+                                            cfgWorkerUrl,
+                                            cfgDefaultDriveUrl,
+                                            cfgRetentionDays,
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF16A34A),
+                                        contentColor = Color.White,
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("admin_save_drive_settings_btn"),
+                                ) {
+                                    Text(
+                                        text = bi(isEn, "💾 حفظ وتطبيق الإعدادات", "💾 Save & Apply Settings"),
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
                             }
                         }
                     }
@@ -1268,6 +1306,44 @@ fun SuperAdminDashboardScreen(
                                         .fillMaxWidth()
                                         .testTag("admin_change_pin_input"),
                                 )
+                                Button(
+                                    onClick = {
+                                        onSavePlatformSettings(
+                                            cfgPlatformName,
+                                            cfgVillageName,
+                                            cfgHospitalName,
+                                            cfgSupportPhone,
+                                            cfgAnnouncement,
+                                            cfgApkUrl,
+                                            cfgMedsApi,
+                                            cfgAdminPin,
+                                            cfgFbApiKey,
+                                            cfgFbAuthDomain,
+                                            cfgFbProjectId,
+                                            cfgFbStorageBucket,
+                                            cfgFbMessagingSenderId,
+                                            cfgFbAppId,
+                                            cfgFbVapidKey,
+                                            cfgWorkerUrl,
+                                            cfgDefaultDriveUrl,
+                                            cfgRetentionDays,
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF16A34A),
+                                        contentColor = Color.White,
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("admin_save_general_settings_btn"),
+                                ) {
+                                    Text(
+                                        text = bi(isEn, "💾 حفظ وتطبيق الإعدادات", "💾 Save & Apply Settings"),
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
                             }
                         }
                     }
@@ -1335,8 +1411,8 @@ fun SuperAdminDashboardScreen(
                                                 Text(
                                                     text = bi(
                                                         isEn,
-                                                        "🟢 Auto-Synced Cloud Collections (Named DB: ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864):",
-                                                        "🟢 متصل تلقائياً بقاعدة Firestore المسماة والمجموعات المعزولة:",
+                                                        "🟢 Auto-Synced Cloud Collections (Database: (default) • gen-lang-client-0514993881):",
+                                                        "🟢 متصل تلقائياً بقاعدة Firestore المستقلة ((default) • gen-lang-client-0514993881):",
                                                     ),
                                                     style = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.Bold,
@@ -1405,6 +1481,44 @@ fun SuperAdminDashboardScreen(
                                             singleLine = true,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
+                                        Button(
+                                            onClick = {
+                                                onSavePlatformSettings(
+                                                    cfgPlatformName,
+                                                    cfgVillageName,
+                                                    cfgHospitalName,
+                                                    cfgSupportPhone,
+                                                    cfgAnnouncement,
+                                                    cfgApkUrl,
+                                                    cfgMedsApi,
+                                                    cfgAdminPin,
+                                                    cfgFbApiKey,
+                                                    cfgFbAuthDomain,
+                                                    cfgFbProjectId,
+                                                    cfgFbStorageBucket,
+                                                    cfgFbMessagingSenderId,
+                                                    cfgFbAppId,
+                                                    cfgFbVapidKey,
+                                                    cfgWorkerUrl,
+                                                    cfgDefaultDriveUrl,
+                                                    cfgRetentionDays,
+                                                )
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF16A34A),
+                                                contentColor = Color.White,
+                                            ),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp)
+                                                .testTag("admin_save_cloud_settings_btn"),
+                                        ) {
+                                            Text(
+                                                text = bi(isEn, "💾 حفظ وتطبيق الإعدادات", "💾 Save & Apply Settings"),
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1445,12 +1559,16 @@ fun SuperAdminDashboardScreen(
                                         cfgRetentionDays,
                                     )
                                 },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF16A34A),
+                                    contentColor = Color.White,
+                                ),
                                 modifier = Modifier
                                     .weight(1.4f)
                                     .height(50.dp)
                                     .testTag("admin_save_platform_settings"),
                             ) {
-                                Text(bi(isEn, "حفظ وتطبيق فوراً", "Save & Apply"))
+                                Text(bi(isEn, "💾 حفظ وتطبيق الإعدادات", "💾 Save & Apply Settings"), fontWeight = FontWeight.Bold)
                             }
                         }
                     }

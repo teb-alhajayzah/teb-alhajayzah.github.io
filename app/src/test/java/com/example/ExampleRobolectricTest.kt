@@ -908,7 +908,7 @@ class ExampleRobolectricTest {
         assertEquals("1.0.0", BuildConfig.VERSION_NAME)
         assertEquals(1, BuildConfig.VERSION_CODE)
         assertEquals(
-            "ai-studio-masariktourism-bc99256d-aa39-4656-8a59-94fe2aefe864",
+            "(default)",
             com.example.config.CloudNamespacePaths.FIRESTORE_DATABASE_ID,
         )
         assertEquals("teb_alhajayzah", com.example.config.CloudNamespacePaths.ROOT)
@@ -944,7 +944,7 @@ class ExampleRobolectricTest {
         )
         val decodedSettings = com.example.data.remote.FirestoreCloudSyncService.fromFirestoreDocument(settingsDoc)
         assertEquals("gen-lang-client-0514993881", decodedSettings.getString("firebaseProjectId"))
-        assertEquals("https://masarik-otp.masarik-tourism.workers.dev", decodedSettings.getString("workerUrl"))
+        assertEquals("https://teb-alhajayzah.masarik-tourism.workers.dev", decodedSettings.getString("workerUrl"))
 
         // 2. Verify Firebase Web Config & Cloudflare Worker URL override & reset back to embedded defaults
         repository.updateFullPlatformConfig(

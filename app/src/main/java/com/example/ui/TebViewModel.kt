@@ -298,7 +298,10 @@ class TebViewModel(
     private val _visitorStats = MutableStateFlow(VisitorStats())
     private val _isPrivacyModalOpen = MutableStateFlow(false)
     private val _isTermsModalOpen = MutableStateFlow(false)
+    private val _isAppForeground = MutableStateFlow(true)
     private var _lastLiveWebSignature: String? = null
+    @Volatile
+    private var lastForegroundSyncMillis: Long = 0L
 
     private val _snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarMessages = _snackbarMessages.asSharedFlow()
@@ -329,29 +332,45 @@ class TebViewModel(
             val (sig, _) = repository.checkLiveWebHasUpdate(AppConfig.defaultBrand.liveWebUrl, null)
             _lastLiveWebSignature = sig
             while (isActive) {
-                delay(20_000L)
-                val cfg = uiState.value.brandConfig
-                repository.syncWithCloudFirestoreOnce()
-                _visitorStats.value = repository.getVisitorStats()
-                if (cfg.medicationsApiUrl.isNotBlank()) {
-                    val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
-                    _medications.value = result.medications
-                    _isLiveMedicationsApi.value = result.isLiveRemote
-                }
-                val (newSig, changed) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
-                _lastLiveWebSignature = newSig
-                if (changed) {
-                    _hasNewDataBanner.value = true
+                delay(45_000L)
+                if (_isAppForeground.value) {
+                    val cfg = uiState.value.brandConfig
+                    repository.syncWithCloudFirestoreOnce()
+                    lastForegroundSyncMillis = System.currentTimeMillis()
+                    _visitorStats.value = repository.getVisitorStats()
+                    if (cfg.medicationsApiUrl.isNotBlank()) {
+                        val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
+                        _medications.value = result.medications
+                        _isLiveMedicationsApi.value = result.isLiveRemote
+                    }
+                    val (newSig, changed) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
+                    _lastLiveWebSignature = newSig
+                    if (changed) {
+                        _hasNewDataBanner.value = true
+                    }
                 }
             }
         }
-        viewModelScope.launch {
-            while (isActive) {
-                delay(4_000L)
-                if (_roleMode.value == AppRoleMode.SUPER_ADMIN && _isAdminLoggedIn.value) {
+    }
+
+    fun setAppForeground(inForeground: Boolean) {
+        val wasForeground = _isAppForeground.value
+        _isAppForeground.value = inForeground
+        if (inForeground && !wasForeground) {
+            val now = System.currentTimeMillis()
+            if (now - lastForegroundSyncMillis >= 15_000L) {
+                lastForegroundSyncMillis = now
+                viewModelScope.launch {
                     repository.syncWithCloudFirestoreOnce()
                 }
             }
+        }
+    }
+
+    fun syncDeviceFcmToken(token: String) {
+        if (token.isBlank()) return
+        viewModelScope.launch {
+            repository.saveDeviceFcmTokenForCurrentRole(token)
         }
     }
 
@@ -597,7 +616,7 @@ class TebViewModel(
 
     fun refreshCloudNow() {
         viewModelScope.launch {
-            repository.syncWithCloudFirestoreOnce()
+            repository.syncWithCloudFirestoreOnce(force = true)
         }
     }
 
@@ -614,7 +633,7 @@ class TebViewModel(
     fun checkLiveWebNow() {
         viewModelScope.launch {
             val cfg = uiState.value.brandConfig
-            repository.syncWithCloudFirestoreOnce()
+            repository.syncWithCloudFirestoreOnce(force = true)
             val (newSig, changed) = repository.checkLiveWebHasUpdate(cfg.liveWebUrl, _lastLiveWebSignature)
             _lastLiveWebSignature = newSig
             if (changed) {
@@ -629,7 +648,7 @@ class TebViewModel(
             _isRefreshing.value = true
             _hasNewDataBanner.value = false
             try {
-                repository.syncWithCloudFirestoreOnce()
+                repository.syncWithCloudFirestoreOnce(force = true)
                 val cfg = uiState.value.brandConfig
                 val result = repository.loadEgyptianMedications(cfg.medicationsApiUrl)
                 _medications.value = result.medications
@@ -895,7 +914,7 @@ class TebViewModel(
                 fileRetentionDays = fileRetentionDays,
             )
             refreshEgyptianMedications(medsApiUrl)
-            _snackbarMessages.tryEmit("تم تحديث إعدادات المنصة والربط السحابي بنجاح")
+            _snackbarMessages.tryEmit("✅ تم الحفظ والمزامنة بنجاح")
         }
     }
 
@@ -1222,7 +1241,7 @@ class TebViewModel(
 
     fun regenerateAccountOtpForAdmin(accountId: String) {
         viewModelScope.launch {
-            val res = repository.regenerateAccountOtp(accountId)
+            val res = repository.regenerateAccountOtp(accountId, notifyPatient = true)
             res.onSuccess { updated ->
                 _snackbarMessages.tryEmit(
                     bi(

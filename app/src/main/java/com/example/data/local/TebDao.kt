@@ -139,6 +139,9 @@ interface TebDao {
     @Query("SELECT * FROM appointment_slots WHERE id = :slotId LIMIT 1")
     suspend fun getSlotById(slotId: String): AppointmentSlotEntity?
 
+    @Query("SELECT * FROM appointment_slots WHERE status = :status ORDER BY startMinutes ASC")
+    suspend fun getSlotsByStatusOnce(status: String = SlotStatus.BOOKED): List<AppointmentSlotEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSlots(slots: List<AppointmentSlotEntity>)
 

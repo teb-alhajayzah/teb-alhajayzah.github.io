@@ -212,6 +212,16 @@ fun LiveWebPortalScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        runCatching {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                if (!token.isNullOrBlank()) {
+                    TebFcmService.updateCachedToken(context, token)
+                }
+            }
+        }
+    }
+
     // تحديث تلقائي فوري داخل التطبيق بمجرد رصد تعديل في version.json أو الموقع دون تدخل المستخدم
     LaunchedEffect(hasNewDataBanner) {
         if (hasNewDataBanner && webViewRef != null) {
@@ -508,6 +518,9 @@ fun LiveWebPortalScreen(
 
                                 @JavascriptInterface
                                 fun getAppVersionCode(): Int = BuildConfig.VERSION_CODE
+
+                                @JavascriptInterface
+                                fun getFcmToken(): String = TebFcmService.getCachedToken(ctx)
 
                                 @JavascriptInterface
                                 fun areNotificationsEnabled(): Boolean =

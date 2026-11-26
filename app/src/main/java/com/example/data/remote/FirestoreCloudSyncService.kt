@@ -53,6 +53,17 @@ object FirestoreCloudSyncService {
 
     private const val CONNECT_TIMEOUT_MS = 3000
     private const val READ_TIMEOUT_MS = 3000
+    private const val QUOTA_COOLDOWN_MS = 60_000L
+
+    @Volatile
+    private var quotaBackoffUntilMillis: Long = 0L
+
+    fun canAutoSyncNow(nowMillis: Long = System.currentTimeMillis()): Boolean =
+        nowMillis >= quotaBackoffUntilMillis
+
+    fun resetQuotaBackoff() {
+        quotaBackoffUntilMillis = 0L
+    }
 
     private val _cloudStatusFlow = MutableStateFlow(CloudConnectionStatus())
     val cloudStatusFlow: StateFlow<CloudConnectionStatus> = _cloudStatusFlow.asStateFlow()
@@ -273,6 +284,11 @@ object FirestoreCloudSyncService {
             val errDetail = if (code !in 200..299 && code != 404) readHttpErrorDetail(conn, code) else ""
             conn.disconnect()
             if (code == 404) return@runCatching null
+            if (code == 429) {
+                quotaBackoffUntilMillis = System.currentTimeMillis() + QUOTA_COOLDOWN_MS
+                markError("HTTP 429 (Quota cooldown 60s)")
+                return@runCatching null
+            }
             if (code !in 200..299 || body.isBlank()) {
                 if (errDetail.isNotBlank()) markError(errDetail)
                 return@runCatching null
@@ -335,6 +351,11 @@ object FirestoreCloudSyncService {
                     if (code == 404) {
                         markConnected()
                         return@runCatching emptyList<JSONObject>()
+                    }
+                    if (code == 429) {
+                        quotaBackoffUntilMillis = System.currentTimeMillis() + QUOTA_COOLDOWN_MS
+                        markError("HTTP 429 (Quota cooldown 60s)")
+                        return@runCatching null
                     }
                     if (code !in 200..299) {
                         markError(errDetail)
@@ -490,6 +511,18 @@ object FirestoreCloudSyncService {
             }
             else -> rawRemotePin
         }
+        val rawWorker = str("workerUrl", def.workerUrl)
+        val resolvedWorkerUrl = if (
+            rawWorker.contains("masarik-otp.masarik-tourism.workers.dev", ignoreCase = true) ||
+            rawWorker.contains("teb-worker.your-subdomain", ignoreCase = true)
+        ) def.workerUrl else rawWorker
+
+        val rawVapid = str("firebaseVapidKey", def.firebaseVapidKey)
+        val resolvedVapid = if (rawVapid.startsWith("BNjwnHCGNHMZt")) def.firebaseVapidKey else rawVapid
+
+        val rawProjectId = str("firebaseProjectId", def.firebaseProjectId)
+        val isLegacyProject = rawProjectId == "gen-lang-client-0015800098"
+
         return current.copy(
             platformNameAr = str("platformNameAr", current.platformNameAr),
             villageNameAr = str("villageNameAr", current.villageNameAr),
@@ -503,14 +536,14 @@ object FirestoreCloudSyncService {
             adminPassword = str("adminPassword", current.adminPassword),
             globalChatEnabled = if (remote.has("globalChatEnabled")) remote.optBoolean("globalChatEnabled", current.globalChatEnabled) else current.globalChatEnabled,
             appVersionLabel = "v1.0.0",
-            firebaseApiKey = str("firebaseApiKey", def.firebaseApiKey),
-            firebaseAuthDomain = str("firebaseAuthDomain", def.firebaseAuthDomain),
-            firebaseProjectId = str("firebaseProjectId", def.firebaseProjectId),
-            firebaseStorageBucket = str("firebaseStorageBucket", def.firebaseStorageBucket),
-            firebaseMessagingSenderId = str("firebaseMessagingSenderId", def.firebaseMessagingSenderId),
-            firebaseAppId = str("firebaseAppId", def.firebaseAppId),
-            firebaseVapidKey = str("firebaseVapidKey", def.firebaseVapidKey),
-            workerUrl = str("workerUrl", def.workerUrl),
+            firebaseApiKey = if (isLegacyProject) def.firebaseApiKey else str("firebaseApiKey", def.firebaseApiKey),
+            firebaseAuthDomain = if (isLegacyProject) def.firebaseAuthDomain else str("firebaseAuthDomain", def.firebaseAuthDomain),
+            firebaseProjectId = if (isLegacyProject) def.firebaseProjectId else rawProjectId,
+            firebaseStorageBucket = if (isLegacyProject) def.firebaseStorageBucket else str("firebaseStorageBucket", def.firebaseStorageBucket),
+            firebaseMessagingSenderId = if (isLegacyProject) def.firebaseMessagingSenderId else str("firebaseMessagingSenderId", def.firebaseMessagingSenderId),
+            firebaseAppId = if (isLegacyProject) def.firebaseAppId else str("firebaseAppId", def.firebaseAppId),
+            firebaseVapidKey = resolvedVapid,
+            workerUrl = resolvedWorkerUrl,
             defaultDriveWebAppUrl = if (remote.has("defaultDriveWebAppUrl")) remote.optString("defaultDriveWebAppUrl", "").trim() else current.defaultDriveWebAppUrl,
             fileRetentionDays = remoteRetention,
         )
@@ -720,6 +753,9 @@ object FirestoreCloudSyncService {
         put("familyMemberId", s.familyMemberId)
         put("bookingSource", s.bookingSource)
         put("bookedAtMillis", s.bookedAtMillis)
+        put("appointmentTimestamp", s.appointmentTimestamp)
+        put("reminded2h", s.reminded2h)
+        put("reminded30m", s.reminded30m)
     }
 
     fun slotFromJson(j: JSONObject): AppointmentSlotEntity? {
@@ -738,6 +774,9 @@ object FirestoreCloudSyncService {
             familyMemberId = j.optString("familyMemberId", ""),
             bookingSource = j.optString("bookingSource", BookingSource.NONE),
             bookedAtMillis = j.optLong("bookedAtMillis", 0L),
+            appointmentTimestamp = j.optLong("appointmentTimestamp", 0L),
+            reminded2h = j.optBoolean("reminded2h", false),
+            reminded30m = j.optBoolean("reminded30m", false),
         )
     }
 

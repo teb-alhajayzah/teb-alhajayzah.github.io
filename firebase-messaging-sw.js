@@ -9,12 +9,12 @@ const TEB_FCM_DB = 'teb_alhajayzah_fcm_db';
 const TEB_FCM_STORE = 'config_store';
 const TEB_FCM_KEY = 'teb_alhajayzah/settings/firebase';
 const DEFAULT_FIREBASE_CONFIG = {
-  apiKey: 'AIzaSyB0qr3K8jf1LgKog8b5knh1W4AClpw5iIs',
-  authDomain: 'gen-lang-client-0015800098.firebaseapp.com',
-  projectId: 'gen-lang-client-0015800098',
-  storageBucket: 'gen-lang-client-0015800098.firebasestorage.app',
-  messagingSenderId: '588431549120',
-  appId: '1:588431549120:web:c10278b3df39d11a668325'
+  apiKey: 'AIzaSyC08cH9E9le52NU-B56N894yt_k8hQMQ1M',
+  authDomain: 'gen-lang-client-0514993881.firebaseapp.com',
+  projectId: 'gen-lang-client-0514993881',
+  storageBucket: 'gen-lang-client-0514993881.firebasestorage.app',
+  messagingSenderId: '197836130786',
+  appId: '1:197836130786:web:3a85d5a30dd81184c411bb'
 };
 let initializedMessaging = null;
 let cachedFirebaseConfig = null;
@@ -94,7 +94,7 @@ function initFirebaseMessagingWithConfig(cfg) {
         apiKey: cfg.apiKey,
         authDomain: cfg.authDomain || (cfg.projectId + '.firebaseapp.com'),
         projectId: cfg.projectId,
-        storageBucket: cfg.storageBucket || (cfg.projectId + '.appspot.com'),
+        storageBucket: cfg.storageBucket || (cfg.projectId + '.firebasestorage.app'),
         messagingSenderId: cfg.messagingSenderId,
         appId: cfg.appId
       });
@@ -104,7 +104,7 @@ function initFirebaseMessagingWithConfig(cfg) {
       const notif = (payload && payload.notification) || {};
       const data = (payload && payload.data) || {};
       const title = notif.title || data.title || 'طب الحجايزة — إشعار جديد';
-      const body = notif.body || data.body || 'لديك تحديث جديد بشأن مواعيد العيادات أو ملفك الطبي.';
+      const body = notif.body || data.body || data.message || 'لديك تحديث جديد بشأن مواعيد العيادات أو ملفك الطبي.';
       self.registration.showNotification(title, {
         body: body,
         icon: './icon.svg',
@@ -158,10 +158,11 @@ self.addEventListener('push', (event) => {
   }
   const notif = (payload && payload.notification) || {};
   const data = (payload && payload.data) || {};
-  if (!notif.title && !notif.body && !data.title && !data.body) return;
+  const body = notif.body || data.body || data.message || '';
+  if (!notif.title && !body && !data.title) return;
   event.waitUntil(
     self.registration.showNotification(notif.title || data.title || 'طب الحجايزة', {
-      body: notif.body || data.body || '',
+      body: body,
       icon: './icon.svg',
       badge: './icon.svg',
       dir: 'rtl',

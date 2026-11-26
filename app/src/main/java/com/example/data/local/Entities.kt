@@ -166,6 +166,9 @@ data class AppointmentSlotEntity(
     val familyMemberId: String = "",
     val bookingSource: String = BookingSource.NONE,
     val bookedAtMillis: Long = 0L,
+    val appointmentTimestamp: Long = 0L,
+    val reminded2h: Boolean = false,
+    val reminded30m: Boolean = false,
 ) {
     val effectiveMinutes: Int
         get() = startMinutes + delayMinutes

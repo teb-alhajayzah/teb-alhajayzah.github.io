@@ -411,12 +411,19 @@
       font-weight: 700;
     }
 
-    /* Chips */
+    /* Chips & Admin 3-Col Fixed Tabs Grid */
     .chips-row {
       display: flex;
       gap: 8px;
       overflow-x: auto;
       padding-bottom: 4px;
+    }
+
+    .admin-tabs-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      width: 100%;
     }
 
     .chip {
@@ -430,6 +437,21 @@
       cursor: pointer;
       white-space: nowrap;
       min-height: 40px;
+    }
+
+    .admin-tabs-grid .chip {
+      width: 100%;
+      white-space: normal;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      min-height: 48px;
+      padding: 6px 6px;
+      font-size: 0.78rem;
+      line-height: 1.25;
     }
 
     .chip.active {
@@ -458,7 +480,7 @@
     .btn:active { transform: scale(0.98); }
     .btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .btn-primary { background: var(--teal); color: #fff; }
-    .btn-green { background: var(--avail-border); color: #fff; }
+    .btn-green { background: #16A34A; color: #fff; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.22); }
     .btn-blue { background: #1D4ED8; color: #fff; }
     .btn-warn { background: var(--warn-border); color: #fff; }
     .btn-outline {
@@ -1235,6 +1257,11 @@
       box-shadow: 0 8px 24px rgba(0,0,0,0.25);
       max-width: 90%;
       text-align: center;
+    }
+    .toast.toast-success {
+      background: #16A34A;
+      color: #fff;
+      border: 1.5px solid #BBF7D0;
     }
 
     .loading-overlay {
@@ -2695,7 +2722,27 @@
                     parsed.config[ck] = DEFAULT_CONFIG[ck];
                   }
                 });
-                let didMigrateAdminPin = false;
+                let didMigrateCloudKeys = false;
+                const curWorker = String(parsed.config.workerUrl || '').trim();
+                if (!curWorker || curWorker.indexOf('masarik-otp.masarik-tourism.workers.dev') >= 0 || curWorker.indexOf('teb-worker.your-subdomain') >= 0) {
+                  parsed.config.workerUrl = DEFAULT_CONFIG.workerUrl;
+                  didMigrateCloudKeys = true;
+                }
+                const curVapid = String(parsed.config.firebaseVapidKey || '').trim();
+                if (!curVapid || curVapid.indexOf('BNjwnHCGNHMZt') === 0) {
+                  parsed.config.firebaseVapidKey = DEFAULT_CONFIG.firebaseVapidKey;
+                  didMigrateCloudKeys = true;
+                }
+                if (String(parsed.config.firebaseProjectId || '').trim() === 'gen-lang-client-0015800098') {
+                  parsed.config.firebaseApiKey = DEFAULT_CONFIG.firebaseApiKey;
+                  parsed.config.firebaseAuthDomain = DEFAULT_CONFIG.firebaseAuthDomain;
+                  parsed.config.firebaseProjectId = DEFAULT_CONFIG.firebaseProjectId;
+                  parsed.config.firebaseStorageBucket = DEFAULT_CONFIG.firebaseStorageBucket;
+                  parsed.config.firebaseMessagingSenderId = DEFAULT_CONFIG.firebaseMessagingSenderId;
+                  parsed.config.firebaseAppId = DEFAULT_CONFIG.firebaseAppId;
+                  didMigrateCloudKeys = true;
+                }
+                let didMigrateAdminPin = didMigrateCloudKeys;
                 if (!pinMigrated) {
                   const curPin = String(parsed.config.adminPin || '').trim();
                   if (!curPin || curPin === '202600') {
@@ -2921,6 +2968,10 @@
         isConnected: false,
         sdkHealthyCount: 0,
         fcmToken: '',
+        fcmTokensList: [],
+        lastFcmFetchAt: 0,
+        quotaBackoffUntil: 0,
+        lastPullAt: 0,
         deletedMsgIds: {},
         cloudStatus: {
           state: 'CONNECTING', // CONNECTING | CONNECTED | ERROR
@@ -3288,6 +3339,11 @@
             return null;
           }
           if (resp.status === 404) return null;
+          if (resp.status === 429) {
+            tebCloudRuntime.quotaBackoffUntil = Date.now() + 60000;
+            updateCloudStatusWeb(false, 'HTTP 429 (Quota cooldown 60s — Cached data preserved)');
+            return null;
+          }
           if (!resp.ok) {
             updateCloudStatusWeb(false, await extractRestErrorReason(resp, 'HTTP ' + resp.status));
             return null;
@@ -3329,6 +3385,11 @@
             if (resp.status === 404) {
               updateCloudStatusWeb(true);
               return [];
+            }
+            if (resp.status === 429) {
+              tebCloudRuntime.quotaBackoffUntil = Date.now() + 60000;
+              updateCloudStatusWeb(false, 'HTTP 429 (Quota cooldown 60s — Cached data preserved)');
+              return null;
             }
             if (!resp.ok) {
               updateCloudStatusWeb(false, await extractRestErrorReason(resp, 'HTTP ' + resp.status));
@@ -3473,6 +3534,25 @@
           if (!String(merged[ck] || '').trim()) merged[ck] = DEFAULT_CONFIG[ck];
         });
         let didOverrideLegacyRemotePin = false;
+        const remWorker = String(merged.workerUrl || '').trim();
+        if (!remWorker || remWorker.indexOf('masarik-otp.masarik-tourism.workers.dev') >= 0 || remWorker.indexOf('teb-worker.your-subdomain') >= 0) {
+          merged.workerUrl = DEFAULT_CONFIG.workerUrl;
+          didOverrideLegacyRemotePin = true;
+        }
+        const remVapid = String(merged.firebaseVapidKey || '').trim();
+        if (!remVapid || remVapid.indexOf('BNjwnHCGNHMZt') === 0) {
+          merged.firebaseVapidKey = DEFAULT_CONFIG.firebaseVapidKey;
+          didOverrideLegacyRemotePin = true;
+        }
+        if (String(merged.firebaseProjectId || '').trim() === 'gen-lang-client-0015800098') {
+          merged.firebaseApiKey = DEFAULT_CONFIG.firebaseApiKey;
+          merged.firebaseAuthDomain = DEFAULT_CONFIG.firebaseAuthDomain;
+          merged.firebaseProjectId = DEFAULT_CONFIG.firebaseProjectId;
+          merged.firebaseStorageBucket = DEFAULT_CONFIG.firebaseStorageBucket;
+          merged.firebaseMessagingSenderId = DEFAULT_CONFIG.firebaseMessagingSenderId;
+          merged.firebaseAppId = DEFAULT_CONFIG.firebaseAppId;
+          didOverrideLegacyRemotePin = true;
+        }
         if (String(merged.adminPin || '').trim() === '202600' || !String(merged.adminPin || '').trim()) {
           merged.adminPin = String((db.config && db.config.adminPin !== '202600' ? db.config.adminPin : '') || '132027');
           didOverrideLegacyRemotePin = true;
@@ -3645,6 +3725,33 @@
             const msgTitle = '📩 رسالة دعم جديدة — ' + (lastNew.patientName || lastNew.senderName || 'عميل');
             triggerPlatformNotification(msgTitle, lastNew.body || '', 'remote_msg_' + lastNew.id);
             showToast(msgTitle, 4500);
+          } else if (db && db.account && ui && !ui.isAdminLoggedIn) {
+            const newPatientMsgs = remoteList.filter((rm) =>
+              rm && rm.id && !prevMsgIds[rm.id] && !prevMap[safeCloudDocId(rm.id)] &&
+              rm.patientAccountId === db.account.id &&
+              rm.senderRole !== 'PATIENT' &&
+              !isMessageReadForRole(rm, 'PATIENT')
+            );
+            if (newPatientMsgs.length > 0) {
+              const lastPatMsg = newPatientMsgs[newPatientMsgs.length - 1];
+              const msgTitle = '💬 ' + (lastPatMsg.senderName || 'رسالة جديدة من منصة طب الحجايزة');
+              triggerPlatformNotification(msgTitle, lastPatMsg.body || '', 'remote_pmsg_' + lastPatMsg.id);
+              showToast(msgTitle, 4500);
+            }
+          }
+        } else if (wasHydrated && colDef.stateKey === 'notifications') {
+          const prevNotifIds = {};
+          existingLocal.forEach((n) => { if (n && n.id) prevNotifIds[String(n.id)] = true; });
+          const accId = (db && db.account && db.account.id) || '';
+          const newUnreadNotifs = remoteList.filter((rn) => {
+            if (!rn || rn.isRead || prevNotifIds[String(rn.id)] || prevMap[safeCloudDocId(rn.id)]) return false;
+            if (ui && ui.isAdminLoggedIn) return rn.targetAudience === 'ADMIN' || rn.targetAudience === 'ALL';
+            if (ui && ui.loggedInDoctorId) return rn.targetAudience === 'CLINIC' && (!rn.targetId || rn.targetId === ui.loggedInDoctorId);
+            return accId && (rn.targetAudience === 'ALL' || (rn.targetAudience === 'PATIENT' && (!rn.targetId || rn.targetId === accId)));
+          });
+          if (newUnreadNotifs.length > 0) {
+            const latestN = newUnreadNotifs[0];
+            triggerPlatformNotification(latestN.senderLabel || '🔔 تنبيه جديد — طب الحجايزة', latestN.message || '', 'remote_n_' + latestN.id);
           }
         }
 
@@ -3687,11 +3794,18 @@
       }
 
       let __isRestPullInFlight = false;
-      async function pullCloudStateViaRestWeb(onlyFsCollections) {
+      async function pullCloudStateViaRestWeb(onlyFsCollections, opts) {
         if (__isRestPullInFlight) return false;
+        const force = Boolean(opts && opts.force);
+        if (force) {
+          tebCloudRuntime.quotaBackoffUntil = 0;
+        } else if (Date.now() < (tebCloudRuntime.quotaBackoffUntil || 0)) {
+          return false;
+        }
         const cfg = (db && db.config) || DEFAULT_CONFIG;
         if (!isFirebaseCloudConfigured(cfg)) return false;
         __isRestPullInFlight = true;
+        tebCloudRuntime.lastPullAt = Date.now();
         let anyChanged = false;
         try {
           if (!onlyFsCollections) {
@@ -3703,6 +3817,7 @@
             : CLOUD_SYNC_COLLECTIONS;
           const fsDb = getOrCreateFirestore(cfg);
           await Promise.all(cols.map(async function (colDef) {
+            if (!force && Date.now() < (tebCloudRuntime.quotaBackoffUntil || 0)) return;
             const remoteDocs = await fetchCollectionViaRestWeb(cfg, colDef.fsCollection);
             if (Array.isArray(remoteDocs)) {
               if (applyRemoteCollectionItems(colDef, remoteDocs, fsDb)) {
@@ -3741,7 +3856,8 @@
       function ensureRestFallbackPollingLoop() {
         if (tebCloudRuntime.restPollTimer) return;
         tebCloudRuntime.restPollTimer = setInterval(function () {
-          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+          if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+          if (Date.now() < (tebCloudRuntime.quotaBackoffUntil || 0)) return;
           pullCloudStateViaRestWeb([
             'accounts',
             'family_members',
@@ -3752,7 +3868,7 @@
             'labs',
             'family_link_requests'
           ]);
-        }, 4000);
+        }, 45000);
       }
 
       function stopRealtimeCloudSync() {
@@ -3776,7 +3892,7 @@
           return;
         }
 
-        const sig = getCloudConfigSig(cfg) + '|REST_4S';
+        const sig = getCloudConfigSig(cfg) + '|REST_45S';
         if (tebCloudRuntime.isConnected && tebCloudRuntime.activeConfigSig === sig) return;
 
         stopRealtimeCloudSync();
@@ -3784,7 +3900,7 @@
         tebCloudRuntime.isConnected = true;
         getOrCreateFirestore(cfg);
 
-        // Pure direct HTTPS REST API sync (immune to WebChannel hang inside Android WebView)
+        // Pure direct HTTPS REST API sync (45s foreground-only polling, immune to WebChannel hang)
         pullCloudStateViaRestWeb();
         ensureRestFallbackPollingLoop();
       }
@@ -3807,20 +3923,73 @@
         }
       }
 
+      async function resolveTargetFcmTokens(targetAudience, targetId) {
+        try {
+          const cfg = (db && db.config) || DEFAULT_CONFIG;
+          if (!Array.isArray(tebCloudRuntime.fcmTokensList) || Date.now() - (tebCloudRuntime.lastFcmFetchAt || 0) > 60000) {
+            if (Date.now() >= (tebCloudRuntime.quotaBackoffUntil || 0)) {
+              const rows = await fetchCollectionViaRestWeb(cfg, 'fcm_tokens');
+              if (Array.isArray(rows)) {
+                tebCloudRuntime.fcmTokensList = rows;
+                tebCloudRuntime.lastFcmFetchAt = Date.now();
+              }
+            }
+          }
+          const aud = String(targetAudience || 'ALL').toUpperCase();
+          const tid = String(targetId || '').trim();
+          const tokensSet = new Set();
+          (tebCloudRuntime.fcmTokensList || []).forEach((row) => {
+            const tok = String((row && row.fcmToken) || '').trim();
+            if (!tok) return;
+            const rRole = String((row && row.role) || '').toUpperCase();
+            const rUid = String((row && row.userId) || '');
+            const rAcc = String((row && row.accountId) || '');
+            if (aud === 'ALL') {
+              tokensSet.add(tok);
+            } else if (aud === 'ADMIN' && rRole === 'ADMIN') {
+              tokensSet.add(tok);
+            } else if (aud === 'CLINIC' && rRole === 'CLINIC' && (!tid || rUid === 'doctor_' + safeCloudDocId(tid) || rUid === tid)) {
+              tokensSet.add(tok);
+            } else if (aud === 'PATIENT' && (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid || rRole === 'PATIENT')) {
+              if (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid) {
+                tokensSet.add(tok);
+              }
+            }
+          });
+          return Array.from(tokensSet);
+        } catch (e) {
+          return [];
+        }
+      }
+
       async function dispatchWorkerPush(eventType, title, body, targetAudience, targetId, collectionPath) {
         try {
           const cfg = (db && db.config) || {};
           const wUrl = String(cfg.workerUrl || DEFAULT_CONFIG.workerUrl || '').trim();
           if (!wUrl || typeof fetch !== 'function') return;
+          const cleanTitle = String(title || 'طب الحجايزة');
+          const cleanBody = String(body || '');
+          const tokens = await resolveTargetFcmTokens(targetAudience, targetId);
           await fetch(wUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              tokens: tokens,
+              title: cleanTitle,
+              message: cleanBody,
+              body: cleanBody,
+              data: {
+                namespace: CLOUD_NAMESPACE,
+                collectionPath: collectionPath || CLOUD_PATHS.notifications,
+                eventType: String(eventType || 'PLATFORM_ALERT'),
+                targetAudience: String(targetAudience || 'ALL'),
+                targetId: String(targetId || ''),
+                title: cleanTitle,
+                body: cleanBody
+              },
               namespace: CLOUD_NAMESPACE,
               collectionPath: collectionPath || CLOUD_PATHS.notifications,
               eventType: eventType || 'PLATFORM_ALERT',
-              title: String(title || 'طب الحجايزة'),
-              body: String(body || ''),
               targetAudience: String(targetAudience || 'ALL'),
               targetId: String(targetId || ''),
               fcmToken: String(tebCloudRuntime.fcmToken || ''),
@@ -3851,7 +4020,11 @@
 
       async function syncFcmTokenToFirestore(tokenOverride) {
         try {
-          const token = String(tokenOverride || tebCloudRuntime.fcmToken || '').trim();
+          let token = String(tokenOverride || tebCloudRuntime.fcmToken || '').trim();
+          if (!token && window.AndroidBridge && typeof window.AndroidBridge.getFcmToken === 'function') {
+            token = String(window.AndroidBridge.getFcmToken() || '').trim();
+            if (token) tebCloudRuntime.fcmToken = token;
+          }
           if (!token) return false;
           const cfg = (db && db.config) || DEFAULT_CONFIG;
           if (!isFirebaseCloudConfigured(cfg)) return false;
@@ -3887,6 +4060,13 @@
             vapidKey: String(cfg.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey).trim()
           };
           getOrCreateFirestore(cfg);
+          if (window.AndroidBridge && typeof window.AndroidBridge.getFcmToken === 'function') {
+            const apkTok = String(window.AndroidBridge.getFcmToken() || '').trim();
+            if (apkTok) {
+              tebCloudRuntime.fcmToken = apkTok;
+              syncFcmTokenToFirestore(apkTok);
+            }
+          }
           function acquireAndSyncToken(msgSdk, reg) {
             if (!msgSdk || !webCfg.vapidKey || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
             msgSdk.getToken({ vapidKey: webCfg.vapidKey, serviceWorkerRegistration: reg })
@@ -4003,6 +4183,14 @@
         } catch (e) {}
       }
 
+      function computeSlotAppointmentTimestampMs(slot) {
+        if (!slot) return 0;
+        const effMin = (Number(slot.startMinutes) || 0) + (Number(slot.delayMinutes) || 0);
+        const d = new Date();
+        d.setHours(Math.floor(effMin / 60), effMin % 60, 0, 0);
+        return d.getTime();
+      }
+
       function checkUpcomingSlotRemindersWeb() {
         try {
           if (!db || !Array.isArray(db.slots) || !db.account) return;
@@ -4023,21 +4211,29 @@
             const clinicLabel = docObj ? getClinicDisplayName(docObj) : bi('العيادة', 'Clinic');
             let winTag = '';
             let bodyMsg = '';
-            if (remMin > 55 && remMin <= 125) {
+            let is2hWin = false;
+            let is30mWin = false;
+            if (remMin > 55 && remMin <= 125 && !s.reminded2h) {
               winTag = 'early_' + dayKey + '_' + s.id;
+              is2hWin = true;
               bodyMsg = bi('تذكير: موعدك في ' + clinicLabel + ' بعد ' + (remMin >= 90 ? 'ساعتين' : 'ساعة') + ' (' + formatMinutesAr(effMin) + ')', 'Reminder: Your appointment at ' + clinicLabel + ' is soon (' + formatMinutesAr(effMin) + ')');
-            } else if (remMin > 0 && remMin <= 35) {
+            } else if (remMin > 0 && remMin <= 35 && !s.reminded30m) {
               winTag = '30m_' + dayKey + '_' + s.id;
+              is30mWin = true;
               bodyMsg = bi('اقترب موعدك: متبقي نصف ساعة تقريباً على الكشف في ' + clinicLabel + ' (' + formatMinutesAr(effMin) + ')', 'Appointment in ~30 min at ' + clinicLabel + ' (' + formatMinutesAr(effMin) + ')');
             }
             if (winTag && !firedMap[winTag]) {
               firedMap[winTag] = Date.now();
               changed = true;
+              if (is2hWin) s.reminded2h = true;
+              if (is30mWin) s.reminded30m = true;
+              syncDocToFirestoreNamespace('slots', s.id, s);
               triggerPlatformNotification('⏰ ' + bi('تذكير بموعد الكشف — طب الحجايزة', 'Appointment Reminder'), bodyMsg, winTag);
               showToast('⏰ ' + bodyMsg);
             }
           });
           if (changed) {
+            saveState(db, { skipCloudSync: true });
             try { localStorage.setItem('teb_web_reminders_fired_v1', JSON.stringify(firedMap)); } catch (e) {}
           }
         } catch (e) {}
@@ -4099,6 +4295,9 @@
         slot.patientPhone = '';
         slot.familyMemberId = '';
         slot.bookingSource = '';
+        slot.appointmentTimestamp = 0;
+        slot.reminded2h = false;
+        slot.reminded30m = false;
 
         let alertMsg = '';
         if (isPatient) {
@@ -4168,12 +4367,18 @@
         fromSlot.patientPhone = '';
         fromSlot.familyMemberId = '';
         fromSlot.bookingSource = '';
+        fromSlot.appointmentTimestamp = 0;
+        fromSlot.reminded2h = false;
+        fromSlot.reminded30m = false;
 
         toSlot.status = 'BOOKED';
         toSlot.patientName = patientName;
         toSlot.patientPhone = patientPhone;
         toSlot.familyMemberId = familyMemberId;
         toSlot.bookingSource = bookingSource;
+        toSlot.appointmentTimestamp = computeSlotAppointmentTimestampMs(toSlot);
+        toSlot.reminded2h = false;
+        toSlot.reminded30m = false;
 
         let alertMsg = '';
         if (isPatient) {
@@ -6361,9 +6566,14 @@
       }
 
       let toastTimer = null;
-      function showToast(msg, durationMs) {
+      function showToast(msg, durationMs, opts) {
         const el = document.getElementById('toast');
         el.textContent = msg;
+        if (opts && opts.isSuccess) {
+          el.classList.add('toast-success');
+        } else {
+          el.classList.remove('toast-success');
+        }
         el.style.display = 'block';
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs || 3400);
@@ -8663,9 +8873,9 @@
             '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط تحميل التطبيق المباشر (APK)', 'Direct APK Download URL')) + '<input class="input" id="admSetApk" value="' + esc(cfg.apkDownloadUrl) + '" dir="ltr" /></label>' +
             '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط API الأدوية المصرية (اختياري)', 'Medications API URL (optional)')) + '<input class="input" id="admSetMedsApi" value="' + esc(cfg.medicationsApiUrl || '') + '" dir="ltr" /></label>' +
             '<label style="font-size:0.84rem;font-weight:700;color:var(--teal);">🔐 ' + esc(bi('الرقم السري للدخول السري (Admin PIN - الافتراضي 132027)', 'Secret Admin PIN (Default 132027)')) + renderPasswordFieldHtml('admSetPin', cfg.adminPin || '132027', 'Admin PIN', 'inputmode="numeric" data-pin-numeric="1"') + '</label>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
+            '<div style="display:grid;grid-template-columns:1fr 1.6fr;gap:8px;margin-top:8px;">' +
               '<button class="btn btn-outline" id="btnAdmResetCfg" type="button">' + esc(bi('استعادة الافتراضي', 'Reset Defaults')) + '</button>' +
-              '<button class="btn btn-primary" id="btnAdmSaveCfg" type="button">💾 ' + esc(bi('حفظ كافة الإعدادات', 'Save Settings')) + '</button>' +
+              '<button class="btn btn-green" id="btnAdmSaveCfg" type="button">💾 ' + esc(bi('حفظ وتطبيق الإعدادات', 'Save & Apply Settings')) + '</button>' +
             '</div>';
 
           function renderDriveMeterCardHtml(storageTargetId, accountTitle) {
@@ -8736,7 +8946,7 @@
                 '<option value="360"' + (normalizeRetentionDaysWeb(cfg.fileRetentionDays) === 360 ? ' selected' : '') + '>' + esc(bi('360 يوماً — سنة كاملة (موصى به)', '360 Days — Full Year (Default)')) + '</option>' +
               '</select>' +
             '</label>' +
-            '<button class="btn btn-outline btn-block" id="btnSaveDrivePolicyQuick" type="button">💾 ' + esc(bi('حفظ سياسة التخزين والاحتفاظ', 'Save Drive Policy & Retention')) + '</button>';
+            '<button class="btn btn-green btn-block" id="btnSaveDrivePolicyQuick" type="button" style="margin-top:6px;">💾 ' + esc(bi('حفظ وتطبيق الإعدادات', 'Save & Apply Settings')) + '</button>';
 
           const cloudSyncInner =
             '<div style="font-size:0.8rem;color:#047857;line-height:1.5;">' +
@@ -8745,14 +8955,15 @@
                 esc(CLOUD_PATHS.settings) + ' • ' + esc(CLOUD_PATHS.clinics) + ' • ' + esc(CLOUD_PATHS.users) + ' • ' + esc(CLOUD_PATHS.appointments) + ' • ' + esc(CLOUD_PATHS.records) + ' • ' + esc(CLOUD_PATHS.messages) +
               '</div>' +
             '</div>' +
-            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('رابط الخادم الوسيط (Cloudflare Worker URL)', 'Cloudflare Worker URL')) + '<input class="input" id="admSetWorkerUrl" value="' + esc(cfg.workerUrl || '') + '" placeholder="https://teb-worker.your-subdomain.workers.dev" dir="ltr" /></label>' +
+            '<label style="font-size:0.82rem;font-weight:700;">' + esc(bi('رابط الخادم الوسيط (Cloudflare Worker URL)', 'Cloudflare Worker URL')) + '<input class="input" id="admSetWorkerUrl" value="' + esc(cfg.workerUrl || DEFAULT_CONFIG.workerUrl) + '" placeholder="https://teb-alhajayzah.masarik-tourism.workers.dev" dir="ltr" /></label>' +
             '<label style="font-size:0.82rem;font-weight:700;">Firebase apiKey<input class="input" id="admSetFbApiKey" value="' + esc(cfg.firebaseApiKey || '') + '" dir="ltr" /></label>' +
             '<label style="font-size:0.82rem;font-weight:700;">Firebase authDomain<input class="input" id="admSetFbAuthDomain" value="' + esc(cfg.firebaseAuthDomain || '') + '" dir="ltr" /></label>' +
             '<label style="font-size:0.82rem;font-weight:700;">Firebase projectId<input class="input" id="admSetFbProjectId" value="' + esc(cfg.firebaseProjectId || '') + '" dir="ltr" /></label>' +
             '<label style="font-size:0.82rem;font-weight:700;">Firebase storageBucket<input class="input" id="admSetFbStorageBucket" value="' + esc(cfg.firebaseStorageBucket || '') + '" dir="ltr" /></label>' +
             '<label style="font-size:0.82rem;font-weight:700;">Firebase messagingSenderId<input class="input" id="admSetFbMessagingSenderId" value="' + esc(cfg.firebaseMessagingSenderId || '') + '" dir="ltr" /></label>' +
             '<label style="font-size:0.82rem;font-weight:700;">Firebase appId<input class="input" id="admSetFbAppId" value="' + esc(cfg.firebaseAppId || '') + '" dir="ltr" /></label>' +
-            '<label style="font-size:0.82rem;font-weight:700;">Firebase vapidKey (Web Push)<input class="input" id="admSetFbVapidKey" value="' + esc(cfg.firebaseVapidKey || '') + '" dir="ltr" /></label>';
+            '<label style="font-size:0.82rem;font-weight:700;">Firebase vapidKey (Web Push)<input class="input" id="admSetFbVapidKey" value="' + esc(cfg.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey) + '" dir="ltr" /></label>' +
+            '<button class="btn btn-green btn-block" id="btnAdmSaveCloudKeys" type="button" style="margin-top:8px;">💾 ' + esc(bi('حفظ وتطبيق الإعدادات', 'Save & Apply Settings')) + '</button>';
 
           tabBodyHtml =
             renderAdminAccordionHtml(
@@ -8801,12 +9012,12 @@
             '</div>' +
           '</section>' +
 
-          '<div class="chips-row">' +
+          '<div class="admin-tabs-grid">' +
             '<button class="chip ' + (ui.adminTab === 'CLINICS' ? 'active' : '') + '" type="button" data-admin-tab="CLINICS">🩺 ' + esc(bi('الأطباء والعيادات', 'Clinics & Doctors')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'HOSPITAL' ? 'active' : '') + '" type="button" data-admin-tab="HOSPITAL">🏥 ' + esc(bi('المستشفى والأقسام', 'Hospital Depts')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'LABS' ? 'active' : '') + '" type="button" data-admin-tab="LABS">🧪 ' + esc(bi('إدارة معامل التحاليل', 'Medical Labs')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'OTP_VERIFY' ? 'active' : '') + '" type="button" data-admin-tab="OTP_VERIFY">🔑 ' + esc(bi('التوثيق وأكواد OTP', 'Verification & OTP')) + (unverifiedUsersCount > 0 ? ' <span class="badge" style="background:#DC2626;color:#fff;padding:2px 7px;border-radius:999px;font-size:0.74rem;font-weight:800;">' + unverifiedUsersCount + '</span>' : '') + '</button>' +
-            '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين (Users)', 'Users List')) + (unverifiedUsersCount > 0 ? ' (' + unverifiedUsersCount + ')' : '') + '</button>' +
+            '<button class="chip ' + (ui.adminTab === 'USERS' ? 'active' : '') + '" type="button" data-admin-tab="USERS">👥 ' + esc(bi('قائمة العملاء والمشتركين', 'Users List')) + (unverifiedUsersCount > 0 ? ' (' + unverifiedUsersCount + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'FAMILY_LINKS' ? 'active' : '') + '" type="button" data-admin-tab="FAMILY_LINKS">👨‍👩‍👧‍👦 ' + esc(bi('طلبات ربط الأسرة', 'Family Links')) + (pendingFamLinkCount > 0 ? ' (' + pendingFamLinkCount + ')' : '') + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'BOOKINGS' ? 'active' : '') + '" type="button" data-admin-tab="BOOKINGS">📋 ' + esc(bi('الحجوزات والحظر', 'Bookings & Blocks')) + '</button>' +
             '<button class="chip ' + (ui.adminTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-admin-tab="MESSAGES">📩 ' + esc(bi('الرسائل والدعم الفني', 'Messages & Support')) + (unreadAdminInbox > 0 ? ' <span class="badge" style="background:#DC2626;color:#fff;padding:2px 7px;border-radius:999px;font-size:0.74rem;font-weight:800;">' + unreadAdminInbox + '</span>' : '') + '</button>' +
@@ -9065,6 +9276,9 @@
                   latestSlot.patientPhone = member.phone;
                   latestSlot.familyMemberId = member.id;
                   latestSlot.bookingSource = 'APP';
+                  latestSlot.appointmentTimestamp = computeSlotAppointmentTimestampMs(latestSlot);
+                  latestSlot.reminded2h = false;
+                  latestSlot.reminded30m = false;
                   const newBookTime = formatMinutesAr((latestSlot.startMinutes || 0) + (latestSlot.delayMinutes || 0));
                   const bookAlert = '🩺 حجز جديد في ' + getClinicDisplayName(doc) + ': ' + member.fullName + ' (' + newBookTime + ')';
                   db.notifications.unshift({
@@ -10557,7 +10771,12 @@
               slot.patientPhone = phone;
               slot.familyMemberId = '';
               slot.bookingSource = 'PHONE_WALKIN';
+              slot.appointmentTimestamp = computeSlotAppointmentTimestampMs(slot);
+              slot.reminded2h = false;
+              slot.reminded30m = false;
               saveState(db);
+              scheduleSlotRemindersWeb(slot, doc);
+              syncDocToFirestoreNamespace('slots', slot.id, slot);
               closeModal();
               showToast(bi('تم تسجيل الحجز الهاتفي وإغلاق الموعد باللون الأحمر', 'Walk-in booking confirmed'));
               renderApp();
@@ -12166,19 +12385,23 @@
           btn.onclick = function () {
             ui.adminTab = btn.getAttribute('data-admin-tab');
             renderApp();
-            if (ui.adminTab === 'USERS' || ui.adminTab === 'OTP_VERIFY' || ui.adminTab === 'MESSAGES' || ui.adminTab === 'FAMILY_LINKS' || ui.adminTab === 'OVERVIEW') {
-              pullCloudStateViaRestWeb(['accounts', 'family_members', 'messages', 'notifications', 'family_link_requests']);
+            if (Date.now() - (tebCloudRuntime.lastPullAt || 0) >= 2500) {
+              if (ui.adminTab === 'USERS' || ui.adminTab === 'OTP_VERIFY' || ui.adminTab === 'MESSAGES' || ui.adminTab === 'FAMILY_LINKS' || ui.adminTab === 'OVERVIEW') {
+                pullCloudStateViaRestWeb(['accounts', 'family_members', 'messages', 'notifications', 'family_link_requests']);
+              } else if (ui.adminTab === 'BOOKINGS' || ui.adminTab === 'CLINICS' || ui.adminTab === 'HOSPITAL' || ui.adminTab === 'LABS') {
+                pullCloudStateViaRestWeb(['doctors', 'labs', 'slots', 'blocked_phones']);
+              }
             }
           };
         });
 
         async function triggerManualCloudRefreshWeb() {
           showToast(bi('🔄 جاري تحديث البيانات من السحابة الحية...', '🔄 Syncing from Live Cloud...'), 1800);
-          await pullCloudStateViaRestWeb();
+          await pullCloudStateViaRestWeb(null, { force: true });
           renderApp();
           const st = (tebCloudRuntime && tebCloudRuntime.cloudStatus) || {};
           if (st.state === 'CONNECTED') {
-            showToast(bi('🟢 تم التحديث من السحابة الحية بنجاح', '🟢 Live Cloud sync completed'), 2200);
+            showToast(bi('🟢 تم التحديث من السحابة الحية بنجاح', '🟢 Live Cloud sync completed'), 2200, { isSuccess: true });
           } else {
             showToast(bi('🔴 تعذر الاتصال: ', '🔴 Connection error: ') + (st.error || ''), 3200);
           }
@@ -12382,49 +12605,68 @@
           };
         });
 
-        const saveAdmCfgBtn = document.getElementById('btnAdmSaveCfg');
-        if (saveAdmCfgBtn) {
-          saveAdmCfgBtn.onclick = async function () {
-            const newPin = document.getElementById('admSetPin').value.trim();
+        async function saveAllAdminSettingsFromDom() {
+          const pinEl = document.getElementById('admSetPin');
+          if (pinEl) {
+            const newPin = String(pinEl.value || '').trim();
             if (newPin && newPin.length < 4) {
               showToast(bi('الرقم السري (PIN) يجب أن يكون 4 أرقام على الأقل', 'PIN must be at least 4 digits'));
               return;
             }
-            db.config.platformNameAr = document.getElementById('admSetPlatform').value.trim() || DEFAULT_CONFIG.platformNameAr;
-            db.config.villageNameAr = document.getElementById('admSetVillage').value.trim() || DEFAULT_CONFIG.villageNameAr;
-            db.config.hospitalNameAr = document.getElementById('admSetHospital').value.trim() || DEFAULT_CONFIG.hospitalNameAr;
-            db.config.supportPhone = document.getElementById('admSetPhone').value.trim() || DEFAULT_CONFIG.supportPhone;
-            db.config.homeAnnouncementAr = document.getElementById('admSetAnnouncement').value.trim();
-            db.config.apkDownloadUrl = document.getElementById('admSetApk').value.trim() || DEFAULT_CONFIG.apkDownloadUrl;
-            db.config.medicationsApiUrl = document.getElementById('admSetMedsApi').value.trim();
-            const drvEl = document.getElementById('admSetDefaultDriveUrl');
-            if (drvEl) db.config.defaultDriveWebAppUrl = String(drvEl.value || '').trim();
-            const retEl = document.getElementById('admSetRetentionDays');
-            if (retEl) db.config.fileRetentionDays = normalizeRetentionDaysWeb(retEl.value);
-            const valOf = (id, fb) => {
-              const el = document.getElementById(id);
-              if (!el) return fb;
-              const v = String(el.value || '').trim();
-              return v || fb;
-            };
-            db.config.workerUrl = valOf('admSetWorkerUrl', db.config.workerUrl || DEFAULT_CONFIG.workerUrl);
-            db.config.firebaseApiKey = valOf('admSetFbApiKey', db.config.firebaseApiKey || DEFAULT_CONFIG.firebaseApiKey);
-            db.config.firebaseAuthDomain = valOf('admSetFbAuthDomain', db.config.firebaseAuthDomain || DEFAULT_CONFIG.firebaseAuthDomain);
-            db.config.firebaseProjectId = valOf('admSetFbProjectId', db.config.firebaseProjectId || DEFAULT_CONFIG.firebaseProjectId);
-            db.config.firebaseStorageBucket = valOf('admSetFbStorageBucket', db.config.firebaseStorageBucket || DEFAULT_CONFIG.firebaseStorageBucket);
-            db.config.firebaseMessagingSenderId = valOf('admSetFbMessagingSenderId', db.config.firebaseMessagingSenderId || DEFAULT_CONFIG.firebaseMessagingSenderId);
-            db.config.firebaseAppId = valOf('admSetFbAppId', db.config.firebaseAppId || DEFAULT_CONFIG.firebaseAppId);
-            db.config.firebaseVapidKey = valOf('admSetFbVapidKey', db.config.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey);
             if (newPin.length >= 4) db.config.adminPin = newPin;
-            pruneExpiredHeavyAttachmentsWeb(db);
-            saveState(db);
-            await pushSettingsToCloudNow(db.config);
-            initFirebaseCloudBridge();
-            await refreshMedicationsFromApi();
-            showToast(bi('تم حفظ ومزامنة الإعدادات وسياسة التخزين السحابي بنجاح', 'Settings, Drive fallback & retention policy synced'));
-            renderApp();
+          }
+          const valOr = (id, fb) => {
+            const el = document.getElementById(id);
+            if (!el) return fb;
+            const v = String(el.value || '').trim();
+            return v || fb;
           };
+          const optOr = (id, fb) => {
+            const el = document.getElementById(id);
+            return el ? String(el.value || '').trim() : fb;
+          };
+          db.config.platformNameAr = valOr('admSetPlatform', db.config.platformNameAr || DEFAULT_CONFIG.platformNameAr);
+          db.config.villageNameAr = valOr('admSetVillage', db.config.villageNameAr || DEFAULT_CONFIG.villageNameAr);
+          db.config.hospitalNameAr = valOr('admSetHospital', db.config.hospitalNameAr || DEFAULT_CONFIG.hospitalNameAr);
+          db.config.supportPhone = valOr('admSetPhone', db.config.supportPhone || DEFAULT_CONFIG.supportPhone);
+          db.config.homeAnnouncementAr = optOr('admSetAnnouncement', db.config.homeAnnouncementAr || '');
+          db.config.apkDownloadUrl = valOr('admSetApk', db.config.apkDownloadUrl || DEFAULT_CONFIG.apkDownloadUrl);
+          db.config.medicationsApiUrl = optOr('admSetMedsApi', db.config.medicationsApiUrl || '');
+          db.config.defaultDriveWebAppUrl = optOr('admSetDefaultDriveUrl', db.config.defaultDriveWebAppUrl || '');
+          const retEl = document.getElementById('admSetRetentionDays');
+          if (retEl) db.config.fileRetentionDays = normalizeRetentionDaysWeb(retEl.value);
+          db.config.workerUrl = valOr('admSetWorkerUrl', db.config.workerUrl || DEFAULT_CONFIG.workerUrl);
+          db.config.firebaseApiKey = valOr('admSetFbApiKey', db.config.firebaseApiKey || DEFAULT_CONFIG.firebaseApiKey);
+          db.config.firebaseAuthDomain = valOr('admSetFbAuthDomain', db.config.firebaseAuthDomain || DEFAULT_CONFIG.firebaseAuthDomain);
+          db.config.firebaseProjectId = valOr('admSetFbProjectId', db.config.firebaseProjectId || DEFAULT_CONFIG.firebaseProjectId);
+          db.config.firebaseStorageBucket = valOr('admSetFbStorageBucket', db.config.firebaseStorageBucket || DEFAULT_CONFIG.firebaseStorageBucket);
+          db.config.firebaseMessagingSenderId = valOr('admSetFbMessagingSenderId', db.config.firebaseMessagingSenderId || DEFAULT_CONFIG.firebaseMessagingSenderId);
+          db.config.firebaseAppId = valOr('admSetFbAppId', db.config.firebaseAppId || DEFAULT_CONFIG.firebaseAppId);
+          db.config.firebaseVapidKey = valOr('admSetFbVapidKey', db.config.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey);
+
+          const selId = (document.getElementById('admDriveClinicSelect') || {}).value || ui.adminDriveSelectedDocId;
+          const dObj = (db.doctors || []).find((d) => d.id === selId);
+          if (dObj) {
+            const pEl = document.getElementById('admDriveClinicPrimary');
+            const sEl = document.getElementById('admDriveClinicSecondary');
+            if (pEl) dObj.driveWebAppUrl = String(pEl.value || '').trim();
+            if (sEl) dObj.secondaryDriveWebAppUrl = String(sEl.value || '').trim();
+          }
+
+          pruneExpiredHeavyAttachmentsWeb(db);
+          saveState(db);
+          await pushSettingsToCloudNow(db.config);
+          initFirebaseCloudBridge();
+          await refreshMedicationsFromApi();
+          showToast(bi('✅ تم الحفظ والمزامنة بنجاح', '✅ Saved & synced to cloud'), 3600, { isSuccess: true });
+          renderApp();
         }
+
+        const saveAdmCfgBtn = document.getElementById('btnAdmSaveCfg');
+        if (saveAdmCfgBtn) saveAdmCfgBtn.onclick = saveAllAdminSettingsFromDom;
+
+        const saveAdmCloudKeysBtn = document.getElementById('btnAdmSaveCloudKeys');
+        if (saveAdmCloudKeysBtn) saveAdmCloudKeysBtn.onclick = saveAllAdminSettingsFromDom;
 
         const resetAdmCfgBtn = document.getElementById('btnAdmResetCfg');
         if (resetAdmCfgBtn) {
@@ -12434,7 +12676,7 @@
             await pushSettingsToCloudNow(db.config);
             initFirebaseCloudBridge();
             await refreshMedicationsFromApi();
-            showToast(bi('تمت استعادة الإعدادات الافتراضية ومزامنتها سحابياً', 'Restored default settings & synced to cloud'));
+            showToast(bi('تمت استعادة الإعدادات الافتراضية ومزامنتها سحابياً', 'Restored default settings & synced to cloud'), 3400, { isSuccess: true });
             renderApp();
           };
         }
@@ -12480,9 +12722,21 @@
               showToast(bi('تم إلغاء تفعيل حساب ' + target.fullName, 'Unverified ' + target.fullName));
             } else {
               markAccountVerified(target, db.config.adminOwnerName || 'المدير العام');
+              const verMsg = '✅ تم توثيق وتفعيل حسابك (' + target.fullName + ') بنجاح على منصة طب الحجايزة.';
+              db.notifications.unshift({
+                id: Date.now(),
+                message: verMsg,
+                isRead: false,
+                targetAudience: 'PATIENT',
+                targetId: target.id,
+                senderLabel: db.config.adminOwnerName || 'المدير العام',
+                createdAtMillis: Date.now()
+              });
               saveState(db);
               syncAccountToCloudNow(target);
-              showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' فوراً بواسطة المدير العام', 'Verified ' + target.fullName + ' immediately'));
+              syncDocToFirestoreNamespace('notifications', String(db.notifications[0].id), db.notifications[0]);
+              dispatchWorkerPush('ACCOUNT_VERIFIED', '✅ تم تفعيل حسابك — طب الحجايزة', verMsg, 'PATIENT', target.id, CLOUD_PATHS.users);
+              showToast(bi('تم توثيق وتفعيل حساب ' + target.fullName + ' فوراً بواسطة المدير العام', 'Verified ' + target.fullName + ' immediately'), 3400, { isSuccess: true });
             }
             renderApp();
           };
@@ -12501,6 +12755,7 @@
               renderApp();
             }
             const readyMsg = 'مرحباً ' + target.fullName + '، تم استلام طلب تسجيلك في منصة طب الحجايزة الطبية.\nكود التفعيل الخاص بك هو: ' + target.otpCode + '\n(صالح لمدة 24 ساعة لتفعيل الحجز والملف الطبي)';
+            dispatchWorkerPush('OTP_CODE_ISSUED', '🔑 كود التفعيل OTP — طب الحجايزة', 'كود تفعيل حسابك هو: ' + target.otpCode + ' (صالح 24 ساعة)', 'PATIENT', target.id, CLOUD_PATHS.users);
             copyTextToClipboard(readyMsg, function () {
               showToast(bi('تم نسخ الكود ورسالة التفعيل (' + target.otpCode + ') بنجاح ✓', 'Copied OTP code & activation message (' + target.otpCode + ')'));
             });
@@ -12516,6 +12771,7 @@
             if (db.account && db.account.id === target.id) db.account = target;
             saveState(db);
             syncAccountToCloudNow(target);
+            dispatchWorkerPush('OTP_CODE_ISSUED', '🔑 كود تفعيل OTP جديد — طب الحجايزة', 'تم إصدار كود تفعيل جديد لحسابك: ' + target.otpCode + ' (صالح 24 ساعة)', 'PATIENT', target.id, CLOUD_PATHS.users);
             showToast(bi('تم تجديد كود ' + target.fullName + ' (' + target.otpCode + ') لمدة 24 ساعة', 'Renewed 24h OTP (' + target.otpCode + ')'));
             renderApp();
           };
@@ -12846,17 +13102,7 @@
 
         const saveDrivePolicyQuickBtn = document.getElementById('btnSaveDrivePolicyQuick');
         if (saveDrivePolicyQuickBtn) {
-          saveDrivePolicyQuickBtn.onclick = async function () {
-            const drvEl = document.getElementById('admSetDefaultDriveUrl');
-            const retEl = document.getElementById('admSetRetentionDays');
-            db.config.defaultDriveWebAppUrl = drvEl ? String(drvEl.value || '').trim() : (db.config.defaultDriveWebAppUrl || '');
-            db.config.fileRetentionDays = normalizeRetentionDaysWeb(retEl ? retEl.value : (db.config.fileRetentionDays || 360));
-            pruneExpiredHeavyAttachmentsWeb(db);
-            saveState(db);
-            await pushSettingsToCloudNow(db.config);
-            showToast(bi('تم حفظ سياسة التخزين الاحتياطي ومدة الاحتفاظ سحابياً', 'Saved Drive fallback & retention policy'));
-            renderApp();
-          };
+          saveDrivePolicyQuickBtn.onclick = saveAllAdminSettingsFromDom;
         }
 
         document.querySelectorAll('[data-admin-clean-drive]').forEach((btn) => {
@@ -13114,8 +13360,12 @@
             if (s.doctorId === doc.id && s.status !== 'COMPLETED') {
               s.delayMinutes += mins;
               if (s.status === 'BOOKED') {
+                s.appointmentTimestamp = computeSlotAppointmentTimestampMs(s);
+                s.reminded2h = false;
+                s.reminded30m = false;
                 cancelSlotRemindersWeb(s.id);
                 scheduleSlotRemindersWeb(s, doc);
+                syncDocToFirestoreNamespace('slots', s.id, s);
               }
             }
           });
@@ -13353,10 +13603,16 @@
       if (/^https?:$/i.test(window.location.protocol)) {
         setTimeout(checkForLivePlatformUpdates, 2000);
       }
-      setInterval(checkForLivePlatformUpdates, 25000);
+      setInterval(function () {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        checkForLivePlatformUpdates();
+      }, 25000);
       document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'visible') {
           checkForLivePlatformUpdates();
+          if (Date.now() - (tebCloudRuntime.lastPullAt || 0) >= 8000) {
+            pullCloudStateViaRestWeb();
+          }
         }
       });
 
