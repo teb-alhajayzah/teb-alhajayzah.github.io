@@ -1710,12 +1710,14 @@
       const ADMIN_SESSION_KEY = 'teb_admin_session_v1';
       const ADMIN_ROLE_ACTIVE_KEY = 'teb_admin_role_active_v1';
       const VISITOR_HIT_SESSION_KEY = 'teb_visitor_hit_logged_v1';
+      const NATIVE_FCM_TOKEN_KEY = 'teb_alhajayzah_native_fcm_token_v1';
       const PRESERVED_LOCAL_KEYS = new Set([
         STORAGE_KEY,
         LANG_KEY,
         ADMIN_PIN_MIGRATED_KEY,
         ADMIN_SESSION_KEY,
-        ADMIN_ROLE_ACTIVE_KEY
+        ADMIN_ROLE_ACTIVE_KEY,
+        NATIVE_FCM_TOKEN_KEY
       ]);
 
       // مسح أي بيانات وهمية أو مفاتيح قديمة من التخزين المحلي (localStorage) تلقائياً
@@ -3934,21 +3936,30 @@
           const tidDigits = normalizePhoneDigits(tid);
           const tokensSet = new Set();
           (tebCloudRuntime.fcmTokensList || []).forEach((row) => {
-            const tok = String((row && (row.fcmToken || row.token)) || '').trim();
-            if (!tok) return;
+            if (!row) return;
+            const rowTokens = [];
+            const singleTok = String(row.fcmToken || row.token || '').trim();
+            if (singleTok) rowTokens.push(singleTok);
+            if (Array.isArray(row.tokens)) {
+              row.tokens.forEach((t) => {
+                const cleanT = String(t || '').trim();
+                if (cleanT) rowTokens.push(cleanT);
+              });
+            }
+            if (rowTokens.length === 0) return;
             const rRole = String((row && row.role) || '').toUpperCase();
             const rUid = String((row && (row.userId || row._docId || row.id)) || '').trim();
             const rAcc = String((row && row.accountId) || '').trim();
             const rPhoneDigits = normalizePhoneDigits((row && row.phone) || rUid);
             if (aud === 'ALL') {
-              tokensSet.add(tok);
+              rowTokens.forEach((t) => tokensSet.add(t));
             } else if (aud === 'ADMIN' && (rRole === 'ADMIN' || rUid === 'admin')) {
-              tokensSet.add(tok);
+              rowTokens.forEach((t) => tokensSet.add(t));
             } else if (aud === 'CLINIC' && (rRole === 'CLINIC' || rRole === 'DOCTOR' || rUid.indexOf('doc') === 0) && (!tid || rUid === tid || rUid === 'doctor_' + safeCloudDocId(tid))) {
-              tokensSet.add(tok);
+              rowTokens.forEach((t) => tokensSet.add(t));
             } else if (aud === 'PATIENT' && (rRole === 'PATIENT' || (rRole !== 'ADMIN' && rRole !== 'CLINIC' && rRole !== 'DOCTOR'))) {
               if (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid || (tidDigits && rPhoneDigits === tidDigits)) {
-                tokensSet.add(tok);
+                rowTokens.forEach((t) => tokensSet.add(t));
               }
             }
           });
@@ -4035,6 +4046,15 @@
         return 'GUEST';
       }
 
+      function getNativeFcmErrorText() {
+        try {
+          if (window.AndroidBridge && typeof window.AndroidBridge.getFcmError === 'function') {
+            return String(window.AndroidBridge.getFcmError() || '').trim();
+          }
+        } catch (e) {}
+        return '';
+      }
+
       function getBestAvailableFcmToken(tokenOverride) {
         let token = String(tokenOverride || '').trim();
         if (!token && typeof window !== 'undefined' && window.NATIVE_FCM_TOKEN) {
@@ -4043,10 +4063,19 @@
         if (!token && tebCloudRuntime.fcmToken) {
           token = String(tebCloudRuntime.fcmToken || '').trim();
         }
+        if (!token) {
+          try {
+            token = String(localStorage.getItem(NATIVE_FCM_TOKEN_KEY) || '').trim();
+          } catch (e) {}
+        }
         if (!token && window.AndroidBridge && typeof window.AndroidBridge.getFcmToken === 'function') {
           token = String(window.AndroidBridge.getFcmToken() || '').trim();
         }
-        if (token) tebCloudRuntime.fcmToken = token;
+        if (token) {
+          tebCloudRuntime.fcmToken = token;
+          if (typeof window !== 'undefined') window.NATIVE_FCM_TOKEN = token;
+          try { localStorage.setItem(NATIVE_FCM_TOKEN_KEY, token); } catch (e) {}
+        }
         return token;
       }
 
@@ -4058,6 +4087,23 @@
           if (!isFirebaseCloudConfigured(cfg)) return false;
           const ownerKey = getFcmTokenOwnerKey();
           const role = getFcmTokenOwnerRole();
+          const existingRow = (tebCloudRuntime.fcmTokensList || []).find((r) => {
+            if (!r) return false;
+            const rId = String(r.userId || r._docId || r.id || '').trim();
+            return rId === ownerKey;
+          });
+          const mergedSet = new Set([token]);
+          if (existingRow) {
+            if (Array.isArray(existingRow.tokens)) {
+              existingRow.tokens.forEach((t) => {
+                const c = String(t || '').trim();
+                if (c) mergedSet.add(c);
+              });
+            }
+            const oldSingle = String(existingRow.fcmToken || existingRow.token || '').trim();
+            if (oldSingle) mergedSet.add(oldSingle);
+          }
+          const tokensArr = Array.from(mergedSet).slice(0, 12);
           const payload = {
             id: ownerKey,
             userId: ownerKey,
@@ -4065,23 +4111,36 @@
             phone: (db && db.account && db.account.phone) || '',
             role: role,
             fcmToken: token,
+            tokens: tokensArr,
             platform: (window.AndroidBridge ? 'ANDROID_WEBVIEW' : 'WEB'),
             updatedAtMillis: Date.now()
           };
-          return await syncDocToFirestoreNamespace('fcm_tokens', ownerKey, payload);
+          const ok = await syncDocToFirestoreNamespace('fcm_tokens', ownerKey, payload);
+          if (ok) {
+            const list = Array.isArray(tebCloudRuntime.fcmTokensList) ? tebCloudRuntime.fcmTokensList.slice() : [];
+            const idx = list.findIndex((r) => r && String(r.userId || r._docId || r.id || '').trim() === ownerKey);
+            if (idx >= 0) list[idx] = payload;
+            else list.push(payload);
+            tebCloudRuntime.fcmTokensList = list;
+          }
+          return ok;
         } catch (e) {
           return false;
         }
       }
 
       if (typeof window !== 'undefined') {
-        window.__onNativeFcmTokenReady = function (tok) {
-          const clean = String(tok || '').trim();
-          if (!clean) return;
+        window.receiveNativeFcmToken = async function (token) {
+          const clean = String(token || '').trim();
+          if (!clean) return false;
           window.NATIVE_FCM_TOKEN = clean;
           tebCloudRuntime.fcmToken = clean;
-          syncFcmTokenToFirestore(clean);
+          try {
+            localStorage.setItem(NATIVE_FCM_TOKEN_KEY, clean);
+          } catch (e) {}
+          return await syncFcmTokenToFirestore(clean);
         };
+        window.__onNativeFcmTokenReady = window.receiveNativeFcmToken;
       }
 
       function initFirebaseCloudBridge() {
@@ -13207,9 +13266,14 @@
               resEl.textContent = bi('⏳ جاري ربط توكن المدير وإرسال إشعار تجريبي عبر الخادم...', '⏳ Syncing Admin token & sending test push via Worker...');
             }
             try {
-              const tok = getBestAvailableFcmToken('');
+              let tok = getBestAvailableFcmToken('');
+              if (!tok && window.AndroidBridge && typeof window.AndroidBridge.refreshFcmToken === 'function') {
+                try { window.AndroidBridge.refreshFcmToken(); } catch (e) {}
+                await new Promise((resolve) => setTimeout(resolve, 650));
+                tok = getBestAvailableFcmToken('');
+              }
               if (tok) {
-                await syncFcmTokenToFirestore(tok);
+                await window.receiveNativeFcmToken(tok);
               }
               const res = await dispatchWorkerPush(
                 'ADMIN_LIVE_TEST_PUSH',
@@ -13220,25 +13284,38 @@
                 CLOUD_PATHS.notifications,
                 { forceRefresh: true }
               );
+              const fcmErr = getNativeFcmErrorText();
+              const previewTok = tok ? (tok.slice(0, 15) + '...') : 'NONE';
+              const extraParts = [
+                'HTTP ' + (res ? res.status : 0),
+                'Tokens=' + (res ? res.tokensCount : 0),
+                'Token=' + previewTok
+              ];
+              if (!tok && fcmErr) {
+                extraParts.push('FCM Error=' + fcmErr);
+              }
+              if (res && res.responseText) {
+                extraParts.push(res.responseText);
+              }
               if (resEl) {
                 resEl.style.display = 'block';
                 if (res && res.ok) {
                   resEl.style.background = 'var(--avail-bg)';
                   resEl.style.border = '1px solid var(--avail-border)';
                   resEl.style.color = 'var(--avail-text)';
-                  resEl.textContent = '✅ HTTP ' + res.status + ' | Tokens=' + res.tokensCount + (res.responseText ? (' | ' + res.responseText) : '');
+                  resEl.textContent = '✅ ' + extraParts.join(' | ');
                 } else {
                   resEl.style.background = 'var(--booked-bg)';
                   resEl.style.border = '1px solid var(--booked-border)';
                   resEl.style.color = 'var(--booked-text)';
-                  resEl.textContent = '⚠️ HTTP ' + (res ? res.status : 0) + ' | Tokens=' + (res ? res.tokensCount : 0) + (res && res.responseText ? (' | ' + res.responseText) : '');
+                  resEl.textContent = '⚠️ ' + extraParts.join(' | ');
                 }
               }
               showToast(
                 (res && res.ok)
-                  ? bi('✅ تم إرسال إشعار الاختبار عبر السحابة (HTTP ' + res.status + ')', '✅ Live test push dispatched (HTTP ' + res.status + ')')
-                  : bi('⚠️ تعذر إرسال الإشعار التجريبي (' + ((res && res.responseText) || 'Error') + ')', '⚠️ Test push failed'),
-                3400,
+                  ? bi('✅ تم إرسال إشعار الاختبار عبر السحابة (HTTP ' + res.status + ' | Tokens=' + res.tokensCount + ')', '✅ Live test push dispatched (HTTP ' + res.status + ')')
+                  : bi('⚠️ تعذر إرسال الإشعار التجريبي (' + ((!tok && fcmErr) ? fcmErr : ((res && res.responseText) || 'Error')) + ')', '⚠️ Test push failed'),
+                3600,
                 { isSuccess: Boolean(res && res.ok) }
               );
             } finally {

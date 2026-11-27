@@ -10,20 +10,27 @@ class TebFcmService : FirebaseMessagingService() {
     companion object {
         private const val PREFS_NAME = "teb_fcm_prefs"
         private const val KEY_FCM_TOKEN = "fcm_token"
+        private const val KEY_FCM_ERROR = "fcm_error"
 
         @Volatile
         var currentFcmToken: String = ""
+            private set
+
+        @Volatile
+        var currentFcmError: String = ""
             private set
 
         fun updateCachedToken(context: Context, token: String) {
             val clean = token.trim()
             if (clean.isEmpty()) return
             currentFcmToken = clean
+            currentFcmError = ""
             runCatching {
                 context.applicationContext
                     .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
                     .putString(KEY_FCM_TOKEN, clean)
+                    .remove(KEY_FCM_ERROR)
                     .apply()
             }
         }
@@ -39,6 +46,33 @@ class TebFcmService : FirebaseMessagingService() {
             }.getOrDefault("")
             if (saved.isNotEmpty()) {
                 currentFcmToken = saved
+            }
+            return saved
+        }
+
+        fun updateFcmError(context: Context, errorMessage: String) {
+            val clean = errorMessage.trim()
+            currentFcmError = clean
+            runCatching {
+                context.applicationContext
+                    .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_FCM_ERROR, clean)
+                    .apply()
+            }
+        }
+
+        fun getCachedError(context: Context): String {
+            if (currentFcmError.isNotBlank()) return currentFcmError
+            val saved = runCatching {
+                context.applicationContext
+                    .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .getString(KEY_FCM_ERROR, "")
+                    .orEmpty()
+                    .trim()
+            }.getOrDefault("")
+            if (saved.isNotEmpty()) {
+                currentFcmError = saved
             }
             return saved
         }

@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.webkit.WebView
+import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -105,6 +107,8 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
+    private var liveWebView: WebView? = null
+
     private val viewModel: TebViewModel by viewModels {
         val db = TebDatabase.getInstance(applicationContext)
         val repo = TebRepository(db.tebDao(), applicationContext)
@@ -117,12 +121,38 @@ class MainActivity : ComponentActivity() {
         TebNotificationHelper.ensureNotificationChannel(this)
         TebNotificationHelper.scheduleBackgroundSyncAlarm(this)
         runCatching {
-            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                if (!token.isNullOrBlank()) {
-                    TebFcmService.updateCachedToken(this@MainActivity, token)
-                    viewModel.syncDeviceFcmToken(token)
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result?.trim().orEmpty()
+                    if (token.isNotEmpty()) {
+                        TebFcmService.updateCachedToken(this@MainActivity, token)
+                        viewModel.syncDeviceFcmToken(token)
+                        val safeToken = JSONObject.quote(token)
+                        liveWebView?.let { wv ->
+                            wv.post {
+                                wv.evaluateJavascript(
+                                    "window.NATIVE_FCM_TOKEN = $safeToken; " +
+                                        "window.receiveNativeFcmToken && window.receiveNativeFcmToken($safeToken); " +
+                                        "window.__onNativeFcmTokenReady && window.__onNativeFcmTokenReady($safeToken);",
+                                    null,
+                                )
+                            }
+                        }
+                    } else {
+                        TebFcmService.updateFcmError(this@MainActivity, "FCM returned empty token")
+                    }
+                } else {
+                    val errMsg = task.exception?.message
+                        ?: task.exception?.localizedMessage
+                        ?: "FCM token retrieval failed"
+                    TebFcmService.updateFcmError(this@MainActivity, errMsg)
                 }
             }
+        }.onFailure { err ->
+            TebFcmService.updateFcmError(
+                this@MainActivity,
+                err.message ?: err.localizedMessage ?: "FirebaseMessaging initialization error",
+            )
         }
         enableEdgeToEdge()
         setContent {
@@ -166,6 +196,7 @@ class MainActivity : ComponentActivity() {
                             hasNewDataBanner = state.hasNewDataBanner,
                             onDismissBannerAndSync = viewModel::dismissNewDataBanner,
                             onCheckLiveUpdates = viewModel::checkLiveWebNow,
+                            onWebViewReady = { wv -> liveWebView = wv },
                             onSwitchToNativeOffline = { useLiveWebMode = false },
                         )
                     } else {

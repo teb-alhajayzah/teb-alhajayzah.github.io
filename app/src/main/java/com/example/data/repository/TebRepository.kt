@@ -2174,8 +2174,17 @@ class TebRepository(
         val cleanTargetPhone = normalizePhoneDigits(cleanTargetId)
         val resolved = linkedSetOf<String>()
         for (doc in cachedFcmTokenDocs) {
-            val token = doc.optString("fcmToken", doc.optString("token", "")).trim()
-            if (token.isEmpty()) continue
+            val rowTokens = linkedSetOf<String>()
+            val singleTok = doc.optString("fcmToken", doc.optString("token", "")).trim()
+            if (singleTok.isNotEmpty()) rowTokens += singleTok
+            val tokArr = doc.optJSONArray("tokens")
+            if (tokArr != null) {
+                for (i in 0 until tokArr.length()) {
+                    val arrTok = tokArr.optString(i, "").trim()
+                    if (arrTok.isNotEmpty()) rowTokens += arrTok
+                }
+            }
+            if (rowTokens.isEmpty()) continue
             val role = doc.optString("role", "").trim().uppercase()
             val uid = doc.optString("userId", doc.optString("_docId", "")).trim()
             val accId = doc.optString("accountId", "").trim()
@@ -2193,7 +2202,7 @@ class TebRepository(
                 NotificationAudience.ALL -> true
                 else -> true
             }
-            if (matches) resolved += token
+            if (matches) resolved.addAll(rowTokens)
         }
         return resolved.toList()
     }
@@ -2272,9 +2281,11 @@ class TebRepository(
         val brand = runCatching { brandConfigFlow.first() }.getOrNull() ?: return false
         return withContext(Dispatchers.IO) {
             runCatching {
+                val tokensArr = JSONArray().apply { put(cleanToken) }
                 val payload = JSONObject().apply {
                     put("userId", cleanUser)
                     put("fcmToken", cleanToken)
+                    put("tokens", tokensArr)
                     put("role", role)
                     if (accountId.isNotBlank()) put("accountId", accountId)
                     if (phone.isNotBlank()) put("phone", phone)

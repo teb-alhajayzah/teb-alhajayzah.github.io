@@ -149,6 +149,7 @@ fun LiveWebPortalScreen(
     hasNewDataBanner: Boolean,
     onDismissBannerAndSync: () -> Unit,
     onCheckLiveUpdates: () -> Unit = {},
+    onWebViewReady: (WebView?) -> Unit = {},
     onSwitchToNativeOffline: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -213,19 +214,48 @@ fun LiveWebPortalScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    fun pushFcmTokenToWebView(targetView: WebView?, rawToken: String) {
+        val clean = rawToken.trim()
+        if (clean.isEmpty() || targetView == null) return
+        val safeTokenLiteral = JSONObject.quote(clean)
+        targetView.post {
+            targetView.evaluateJavascript(
+                "window.NATIVE_FCM_TOKEN = $safeTokenLiteral; " +
+                    "window.receiveNativeFcmToken && window.receiveNativeFcmToken($safeTokenLiteral); " +
+                    "window.__onNativeFcmTokenReady && window.__onNativeFcmTokenReady($safeTokenLiteral);",
+                null,
+            )
+        }
+    }
+
+    fun fetchAndPushFcmToken(targetView: WebView?) {
         runCatching {
-            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                if (!token.isNullOrBlank()) {
-                    TebFcmService.updateCachedToken(context, token)
-                    val safeTokenLiteral = JSONObject.quote(token)
-                    webViewRef?.evaluateJavascript(
-                        "window.NATIVE_FCM_TOKEN = $safeTokenLiteral; if (window.__onNativeFcmTokenReady) window.__onNativeFcmTokenReady($safeTokenLiteral);",
-                        null,
-                    )
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result?.trim().orEmpty()
+                    if (token.isNotEmpty()) {
+                        TebFcmService.updateCachedToken(context, token)
+                        pushFcmTokenToWebView(targetView ?: webViewRef, token)
+                    } else {
+                        TebFcmService.updateFcmError(context, "FCM returned empty token")
+                    }
+                } else {
+                    val errMsg = task.exception?.message
+                        ?: task.exception?.localizedMessage
+                        ?: "FCM token retrieval failed"
+                    TebFcmService.updateFcmError(context, errMsg)
                 }
             }
+        }.onFailure { err ->
+            TebFcmService.updateFcmError(
+                context,
+                err.message ?: err.localizedMessage ?: "FirebaseMessaging initialization error",
+            )
         }
+    }
+
+    LaunchedEffect(Unit) {
+        fetchAndPushFcmToken(webViewRef)
     }
 
     // تحديث تلقائي فوري داخل التطبيق بمجرد رصد تعديل في version.json أو الموقع دون تدخل المستخدم
@@ -257,6 +287,7 @@ fun LiveWebPortalScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            onWebViewReady(null)
             pendingFileCallback?.onReceiveValue(null)
             pendingFileCallback = null
         }
@@ -531,6 +562,14 @@ fun LiveWebPortalScreen(
                                 fun getFcmToken(): String = TebFcmService.getCachedToken(ctx)
 
                                 @JavascriptInterface
+                                fun getFcmError(): String = TebFcmService.getCachedError(ctx)
+
+                                @JavascriptInterface
+                                fun refreshFcmToken() {
+                                    fetchAndPushFcmToken(webViewRef)
+                                }
+
+                                @JavascriptInterface
                                 fun areNotificationsEnabled(): Boolean =
                                     TebNotificationHelper.hasNotificationPermission(ctx)
 
@@ -626,12 +665,18 @@ fun LiveWebPortalScreen(
                                 canGoBack = view?.canGoBack() == true
                                 val cachedToken = TebFcmService.getCachedToken(ctx)
                                 if (cachedToken.isNotBlank()) {
-                                    val safeTokenLiteral = JSONObject.quote(cachedToken)
-                                    view?.evaluateJavascript(
-                                        "window.NATIVE_FCM_TOKEN = $safeTokenLiteral; if (window.__onNativeFcmTokenReady) window.__onNativeFcmTokenReady($safeTokenLiteral);",
-                                        null,
-                                    )
+                                    pushFcmTokenToWebView(view, cachedToken)
+                                } else {
+                                    fetchAndPushFcmToken(view)
                                 }
+                                view?.postDelayed({
+                                    val latestToken = TebFcmService.getCachedToken(ctx)
+                                    if (latestToken.isNotBlank()) {
+                                        pushFcmTokenToWebView(view, latestToken)
+                                    } else {
+                                        fetchAndPushFcmToken(view)
+                                    }
+                                }, 1500L)
                             }
 
                             override fun onReceivedError(
@@ -647,6 +692,7 @@ fun LiveWebPortalScreen(
                             }
                         }
                         webViewRef = this
+                        onWebViewReady(this)
                         val initialLiveUrl = if (liveUrl.contains("?")) {
                             "$liveUrl&_v=${System.currentTimeMillis()}"
                         } else {
