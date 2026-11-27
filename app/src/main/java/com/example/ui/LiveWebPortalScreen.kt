@@ -8,6 +8,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -217,6 +218,11 @@ fun LiveWebPortalScreen(
             FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
                 if (!token.isNullOrBlank()) {
                     TebFcmService.updateCachedToken(context, token)
+                    val safeTokenLiteral = JSONObject.quote(token)
+                    webViewRef?.evaluateJavascript(
+                        "window.NATIVE_FCM_TOKEN = $safeTokenLiteral; if (window.__onNativeFcmTokenReady) window.__onNativeFcmTokenReady($safeTokenLiteral);",
+                        null,
+                    )
                 }
             }
         }
@@ -311,6 +317,8 @@ fun LiveWebPortalScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
+                        overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+                        isVerticalScrollBarEnabled = true
                         clearCache(true)
                         CookieManager.getInstance().setAcceptCookie(true)
                         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
@@ -616,6 +624,14 @@ fun LiveWebPortalScreen(
                                 super.onPageFinished(view, url)
                                 isLoading = false
                                 canGoBack = view?.canGoBack() == true
+                                val cachedToken = TebFcmService.getCachedToken(ctx)
+                                if (cachedToken.isNotBlank()) {
+                                    val safeTokenLiteral = JSONObject.quote(cachedToken)
+                                    view?.evaluateJavascript(
+                                        "window.NATIVE_FCM_TOKEN = $safeTokenLiteral; if (window.__onNativeFcmTokenReady) window.__onNativeFcmTokenReady($safeTokenLiteral);",
+                                        null,
+                                    )
+                                }
                             }
 
                             override fun onReceivedError(
@@ -640,28 +656,6 @@ fun LiveWebPortalScreen(
                     }
                 },
             )
-
-            if (isLoading && !loadError) {
-                Surface(
-                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        CircularProgressIndicator(color = TealPrimary)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = bi(isEn, "جاري الاتصال بالمنصة الحية وسحب أحدث العيادات...", "Connecting to live platform..."),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TealPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
 
             if (loadError) {
                 Surface(

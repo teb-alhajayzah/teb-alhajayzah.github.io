@@ -1447,19 +1447,20 @@ class TebRepository(
             clinicName = doc?.clinicName.orEmpty(),
             effectiveMinutes = bookedSlot.effectiveMinutes,
         )
-        if (source == BookingSource.APP) {
-            TebNotificationHelper.showHighPriorityNotification(
-                context = appContext,
-                title = "تم تأكيد حجزك — ${doc?.clinicName.orEmpty()}",
-                body = "الموعد: الساعة $formattedTime باسم ${patientName.trim()}. سيتم تذكيرك تلقائياً قبل الموعد.",
-            )
-        }
         dispatchWorkerPushAsync(
             eventType = "BOOKING_CONFIRMED",
             title = "تأكيد حجز جديد — ${doc?.clinicName.orEmpty()}",
             body = "تم حجز موعد الساعة $formattedTime للمريض ${patientName.trim()}.",
             targetAudience = NotificationAudience.CLINIC,
             targetId = slot.doctorId,
+            namespacePath = CloudNamespacePaths.APPOINTMENTS,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "BOOKING_CONFIRMED",
+            title = "🩺 حجز جديد — ${doc?.clinicName.orEmpty()}",
+            body = "حجز المريض ${patientName.trim()} موعد الساعة $formattedTime.",
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = bookedSlot.id,
             namespacePath = CloudNamespacePaths.APPOINTMENTS,
         )
         return Result.success(Unit)
@@ -1524,6 +1525,14 @@ class TebRepository(
             body = notifMsg,
             targetAudience = NotificationAudience.CLINIC,
             targetId = slot.doctorId,
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "PATIENT_CANCELLED",
+            title = "إلغاء موعد — ${doctor?.clinicName.orEmpty()}",
+            body = notifMsg,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = freedSlot.id,
             namespacePath = CloudNamespacePaths.NOTIFICATIONS,
         )
         return Result.success(Unit)
@@ -1619,6 +1628,14 @@ class TebRepository(
             body = notifMsg,
             targetAudience = NotificationAudience.CLINIC,
             targetId = fromSlot.doctorId,
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+        )
+        dispatchWorkerPushAsync(
+            eventType = "PATIENT_RESCHEDULED",
+            title = "تعديل موعد — ${doctor?.clinicName.orEmpty()}",
+            body = notifMsg,
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = newBooked.id,
             namespacePath = CloudNamespacePaths.NOTIFICATIONS,
         )
         return Result.success(Unit)
@@ -2141,10 +2158,11 @@ class TebRepository(
         brand: PlatformBrandConfig,
         targetAudience: String,
         targetId: String,
+        forceRefresh: Boolean = false,
     ): List<String> {
         val now = System.currentTimeMillis()
-        if (cachedFcmTokenDocs.isEmpty() || (now - lastFcmFetchAtMillis) >= 60_000L) {
-            if (FirestoreCloudSyncService.canAutoSyncNow(now)) {
+        if (forceRefresh || cachedFcmTokenDocs.isEmpty() || (now - lastFcmFetchAtMillis) >= 60_000L) {
+            if (forceRefresh || FirestoreCloudSyncService.canAutoSyncNow(now)) {
                 val fetched = FirestoreCloudSyncService.listCollection(brand, "fcm_tokens")
                 if (fetched != null) {
                     cachedFcmTokenDocs = fetched
@@ -2153,18 +2171,25 @@ class TebRepository(
             }
         }
         val cleanTargetId = targetId.trim()
+        val cleanTargetPhone = normalizePhoneDigits(cleanTargetId)
         val resolved = linkedSetOf<String>()
         for (doc in cachedFcmTokenDocs) {
             val token = doc.optString("fcmToken", doc.optString("token", "")).trim()
             if (token.isEmpty()) continue
             val role = doc.optString("role", "").trim().uppercase()
             val uid = doc.optString("userId", doc.optString("_docId", "")).trim()
+            val accId = doc.optString("accountId", "").trim()
+            val phoneDigits = normalizePhoneDigits(doc.optString("phone", uid))
             val matches = when (targetAudience.uppercase()) {
                 NotificationAudience.ADMIN -> role == "ADMIN" || uid == "admin"
                 NotificationAudience.CLINIC -> (role == "DOCTOR" || role == "CLINIC" || uid.startsWith("doc")) &&
                     (cleanTargetId.isEmpty() || uid == cleanTargetId || uid == "doctor_$cleanTargetId")
-                NotificationAudience.PATIENT -> (role == "PATIENT" || (role != "ADMIN" && role != "DOCTOR")) &&
-                    (cleanTargetId.isEmpty() || uid == cleanTargetId || uid.contains(cleanTargetId))
+                NotificationAudience.PATIENT -> (role == "PATIENT" || (role != "ADMIN" && role != "DOCTOR" && role != "CLINIC")) &&
+                    (cleanTargetId.isEmpty() ||
+                        uid == cleanTargetId ||
+                        accId == cleanTargetId ||
+                        (cleanTargetPhone.isNotEmpty() && phoneDigits == cleanTargetPhone) ||
+                        uid.contains(cleanTargetId))
                 NotificationAudience.ALL -> true
                 else -> true
             }
@@ -2180,20 +2205,21 @@ class TebRepository(
         targetAudience: String,
         targetId: String,
         namespacePath: String,
-    ) {
-        if (!FirestoreCloudSyncService.isCloudNetworkAllowed()) return
-        val brand = runCatching { brandConfigFlow.first() }.getOrNull() ?: return
+        forceTokenRefresh: Boolean = false,
+    ): Pair<Int, String> {
+        if (!FirestoreCloudSyncService.isCloudNetworkAllowed()) return 0 to "Offline"
+        val brand = runCatching { brandConfigFlow.first() }.getOrNull() ?: return 0 to "Missing brand config"
         val urlStr = brand.workerUrl.trim()
-        if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://")) return
-        withContext(Dispatchers.IO) {
+        if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://")) return 0 to "Invalid worker URL"
+        return withContext(Dispatchers.IO) {
             runCatching {
-                val targetTokens = resolveTargetFcmTokens(brand, targetAudience, targetId)
+                val targetTokens = resolveTargetFcmTokens(brand, targetAudience, targetId, forceRefresh = forceTokenRefresh)
                 val tokensJson = JSONArray()
                 targetTokens.forEach { tokensJson.put(it) }
                 val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 4000
-                    readTimeout = 4000
+                    connectTimeout = 5000
+                    readTimeout = 5000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 }
@@ -2221,8 +2247,13 @@ class TebRepository(
                     put("projectId", brand.firebaseProjectId)
                 }
                 conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                conn.responseCode
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val respText = stream?.bufferedReader()?.use { it.readText() }.orEmpty().take(180)
                 conn.disconnect()
+                code to "HTTP $code | Tokens=${targetTokens.size}${if (respText.isNotBlank()) " | $respText" else ""}"
+            }.getOrElse { err ->
+                -1 to (err.localizedMessage ?: "Worker request failed")
             }
         }
     }
@@ -2231,6 +2262,8 @@ class TebRepository(
         userId: String,
         token: String,
         role: String = "PATIENT",
+        accountId: String = "",
+        phone: String = "",
     ): Boolean {
         val cleanUser = userId.trim()
         val cleanToken = token.trim()
@@ -2243,6 +2276,8 @@ class TebRepository(
                     put("userId", cleanUser)
                     put("fcmToken", cleanToken)
                     put("role", role)
+                    if (accountId.isNotBlank()) put("accountId", accountId)
+                    if (phone.isNotBlank()) put("phone", phone)
                     put("platform", "ANDROID_APK")
                     put("updatedAtMillis", System.currentTimeMillis())
                 }
@@ -2257,13 +2292,37 @@ class TebRepository(
         val isAdmin = runCatching { isAdminLoggedInFlow.first() }.getOrDefault(false)
         val docId = runCatching { loggedInDoctorIdFlow.first() }.getOrNull()
         val accountId = runCatching { activeAccountIdFlow.first() }.getOrDefault("")
-        val (uid, role) = when {
-            isAdmin -> "admin" to "ADMIN"
-            !docId.isNullOrBlank() -> docId to "DOCTOR"
-            accountId.isNotBlank() -> accountId to "PATIENT"
-            else -> "android_device_${cleanToken.take(12)}" to "PATIENT"
+        when {
+            isAdmin -> saveFcmDeviceToken("admin", cleanToken, "ADMIN")
+            !docId.isNullOrBlank() -> saveFcmDeviceToken(docId, cleanToken, "CLINIC")
+            accountId.isNotBlank() -> {
+                val acc = dao.getAccountById(accountId)
+                val phoneKey = acc?.phone?.let { normalizePhoneDigits(it) }?.takeIf { it.isNotBlank() } ?: accountId
+                saveFcmDeviceToken(phoneKey, cleanToken, "PATIENT", accountId = accountId, phone = acc?.phone.orEmpty())
+            }
+            else -> saveFcmDeviceToken("android_device_${cleanToken.take(12)}", cleanToken, "PATIENT")
         }
-        saveFcmDeviceToken(uid, cleanToken, role)
+    }
+
+    suspend fun sendAdminLivePushTest(): Result<String> {
+        val cachedToken = com.example.util.TebFcmService.getCachedToken(appContext).trim()
+        if (cachedToken.isNotBlank()) {
+            saveFcmDeviceToken("admin", cachedToken, "ADMIN")
+        }
+        val (code, details) = dispatchWorkerPushAsync(
+            eventType = "ADMIN_LIVE_TEST_PUSH",
+            title = "🔔 اختبار إشعارات المدير — طب الحجايزة",
+            body = "تم استلام الإشعار التجريبي المباشر عبر Worker + FCM بنجاح ✓",
+            targetAudience = NotificationAudience.ADMIN,
+            targetId = "admin",
+            namespacePath = CloudNamespacePaths.NOTIFICATIONS,
+            forceTokenRefresh = true,
+        )
+        return if (code in 200..299) {
+            Result.success("✅ $details")
+        } else {
+            Result.failure(IllegalStateException("⚠️ $details"))
+        }
     }
 
     suspend fun generateDoctorSchedule(
@@ -2350,11 +2409,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "تنبيه تأخير — ${doctor.clinicName}",
-            body = notifMsg,
-        )
         dispatchWorkerPushAsync(
             eventType = "CLINIC_DELAY",
             title = "تنبيه تأخير — ${doctor.clinicName}",
@@ -2456,11 +2510,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "💊 روشتة جديدة من ${doctor.clinicName}",
-            body = rxMsg,
-        )
         dispatchWorkerPushAsync(
             eventType = "PRESCRIPTION_ADDED",
             title = "💊 روشتة جديدة — ${doctor.clinicName}",
@@ -2757,11 +2806,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "نتيجة تحليل طبية جديدة",
-            body = labMsg,
-        )
         dispatchWorkerPushAsync(
             eventType = "LAB_RESULT_UPLOADED",
             title = "نتيجة تحليل جديدة — ${lab.labName}",
@@ -2897,11 +2941,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "👤 عميل جديد سجل الآن — طب الحجايزة",
-            body = "${account.fullName} - ${account.phone}",
-        )
         dispatchWorkerPushAsync(
             eventType = "NEW_USER_REGISTERED",
             title = "👤 عميل جديد سجل الآن",
@@ -3030,11 +3069,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "💬 رسالة دعم جديدة من ${account.fullName}",
-            body = cleanBody,
-        )
         dispatchWorkerPushAsync(
             eventType = "PATIENT_SUPPORT_MESSAGE",
             title = "💬 رسالة دعم جديدة من ${account.fullName}",
@@ -3235,11 +3269,6 @@ class TebRepository(
             pushDocAsync("notifications", "notif_${savedWarn.id}_${savedWarn.createdAtMillis}") {
                 FirestoreCloudSyncService.notificationToJson(savedWarn)
             }
-            TebNotificationHelper.showHighPriorityNotification(
-                context = appContext,
-                title = "⚠️ تحذير إداري — طب الحجايزة",
-                body = cleanBody,
-            )
             dispatchWorkerPushAsync(
                 eventType = "ADMIN_WARNING",
                 title = "⚠️ تحذير إداري من المدير العام",
@@ -3361,11 +3390,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${saved.id}_${saved.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(saved)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "📢 إشعار عام — طب الحجايزة",
-            body = saved.message,
-        )
         dispatchWorkerPushAsync(
             eventType = "GLOBAL_BROADCAST",
             title = "📢 إشعار عام — طب الحجايزة",
@@ -3691,11 +3715,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "⚠️ تنبيه امتلاء تخزين Google Drive",
-            body = alertMsg,
-        )
         dispatchWorkerPushAsync(
             eventType = "STORAGE_WARNING_90",
             title = "⚠️ تنبيه امتلاء تخزين Google Drive",
@@ -3756,11 +3775,6 @@ class TebRepository(
         pushDocAsync("notifications", "notif_${savedNotif.id}_${savedNotif.createdAtMillis}") {
             FirestoreCloudSyncService.notificationToJson(savedNotif)
         }
-        TebNotificationHelper.showHighPriorityNotification(
-            context = appContext,
-            title = "👨‍👩‍👧 طلب ربط عائلي جديد — طب الحجايزة",
-            body = flrMsg,
-        )
         dispatchWorkerPushAsync(
             eventType = "FAMILY_LINK_REQUEST",
             title = "👨‍👩‍👧 طلب ربط عائلي جديد",

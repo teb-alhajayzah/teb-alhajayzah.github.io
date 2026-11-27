@@ -763,6 +763,9 @@ fun TebAlHajayzahAppRoot(
                                         onCleanClinicHeavyFiles = viewModel::cleanClinicHeavyFiles,
                                         onReportStorage90Alert = viewModel::reportStorage90Alert,
                                         onRefreshCloudNow = viewModel::refreshCloudNow,
+                                        onSendTestAdminPush = { onResult ->
+                                            viewModel.sendAdminLivePushTest(onResult)
+                                        },
                                         onShowMessage = showMessage,
                                         onLogoutAdmin = viewModel::logoutAdmin,
                                     )

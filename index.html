@@ -1264,30 +1264,24 @@
       border: 1.5px solid #BBF7D0;
     }
 
-    .loading-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.45);
-      backdrop-filter: blur(2px);
-      display: none;
+    .pull-refresh-pill {
+      height: 0;
+      opacity: 0;
+      overflow: hidden;
+      display: flex;
       align-items: center;
       justify-content: center;
-      padding: 20px;
-      z-index: 250;
+      gap: 8px;
+      background: var(--teal-soft);
+      color: var(--teal-text);
+      font-weight: 800;
+      font-size: 0.84rem;
+      border-bottom: 1px solid rgba(13, 115, 119, 0.18);
+      transition: height 0.18s ease, opacity 0.18s ease;
     }
 
-    .loading-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 20px 24px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      box-shadow: 0 18px 40px rgba(0,0,0,0.22);
-      max-width: 300px;
-      text-align: center;
+    .pull-refresh-pill.visible {
+      opacity: 1;
     }
 
     .spinner-ring {
@@ -1621,6 +1615,10 @@
     </div>
   </header>
 
+  <div id="pullRefreshPill" class="pull-refresh-pill" aria-live="polite">
+    <span id="pullRefreshText">🔄 اسحب للتحديث...</span>
+  </div>
+
   <main class="container" id="appRoot"></main>
 
   <footer class="site-footer" id="siteFooter"></footer>
@@ -1634,12 +1632,6 @@
   </nav>
 
   <div id="modalRoot"></div>
-  <div id="loadingOverlay" class="loading-overlay" role="status" aria-live="polite">
-    <div class="loading-card">
-      <div class="spinner-ring" aria-hidden="true"></div>
-      <div id="loadingOverlayText" style="font-weight:700;color:var(--teal-text);">جاري التحديث...</div>
-    </div>
-  </div>
   <div id="toast" class="toast" style="display:none" role="status" aria-live="polite"></div>
   <iframe id="apkDownloadFrame" title="تحميل تطبيق طب الحجايزة" aria-hidden="true" tabindex="-1" style="display:none;width:0;height:0;border:0;position:absolute;left:-9999px;"></iframe>
   <div id="printSheet"></div>
@@ -2973,6 +2965,8 @@
         quotaBackoffUntil: 0,
         lastPullAt: 0,
         deletedMsgIds: {},
+        pendingDeferredRender: false,
+        isPullRefreshing: false,
         cloudStatus: {
           state: 'CONNECTING', // CONNECTING | CONNECTED | ERROR
           error: '',
@@ -3784,7 +3778,7 @@
           saveState(db, { skipCloudSync: true });
           baselineDbSyncSig = computeDbSyncSignature(db);
           didUpdateUi = true;
-          renderApp();
+          renderApp({ deferIfBusy: true });
         }
 
         if (extraLocalToPush.length > 0) {
@@ -3923,11 +3917,11 @@
         }
       }
 
-      async function resolveTargetFcmTokens(targetAudience, targetId) {
+      async function resolveTargetFcmTokens(targetAudience, targetId, forceRefresh) {
         try {
           const cfg = (db && db.config) || DEFAULT_CONFIG;
-          if (!Array.isArray(tebCloudRuntime.fcmTokensList) || Date.now() - (tebCloudRuntime.lastFcmFetchAt || 0) > 60000) {
-            if (Date.now() >= (tebCloudRuntime.quotaBackoffUntil || 0)) {
+          if (forceRefresh || !Array.isArray(tebCloudRuntime.fcmTokensList) || Date.now() - (tebCloudRuntime.lastFcmFetchAt || 0) > 60000) {
+            if (forceRefresh || Date.now() >= (tebCloudRuntime.quotaBackoffUntil || 0)) {
               const rows = await fetchCollectionViaRestWeb(cfg, 'fcm_tokens');
               if (Array.isArray(rows)) {
                 tebCloudRuntime.fcmTokensList = rows;
@@ -3937,21 +3931,23 @@
           }
           const aud = String(targetAudience || 'ALL').toUpperCase();
           const tid = String(targetId || '').trim();
+          const tidDigits = normalizePhoneDigits(tid);
           const tokensSet = new Set();
           (tebCloudRuntime.fcmTokensList || []).forEach((row) => {
-            const tok = String((row && row.fcmToken) || '').trim();
+            const tok = String((row && (row.fcmToken || row.token)) || '').trim();
             if (!tok) return;
             const rRole = String((row && row.role) || '').toUpperCase();
-            const rUid = String((row && row.userId) || '');
-            const rAcc = String((row && row.accountId) || '');
+            const rUid = String((row && (row.userId || row._docId || row.id)) || '').trim();
+            const rAcc = String((row && row.accountId) || '').trim();
+            const rPhoneDigits = normalizePhoneDigits((row && row.phone) || rUid);
             if (aud === 'ALL') {
               tokensSet.add(tok);
-            } else if (aud === 'ADMIN' && rRole === 'ADMIN') {
+            } else if (aud === 'ADMIN' && (rRole === 'ADMIN' || rUid === 'admin')) {
               tokensSet.add(tok);
-            } else if (aud === 'CLINIC' && rRole === 'CLINIC' && (!tid || rUid === 'doctor_' + safeCloudDocId(tid) || rUid === tid)) {
+            } else if (aud === 'CLINIC' && (rRole === 'CLINIC' || rRole === 'DOCTOR' || rUid.indexOf('doc') === 0) && (!tid || rUid === tid || rUid === 'doctor_' + safeCloudDocId(tid))) {
               tokensSet.add(tok);
-            } else if (aud === 'PATIENT' && (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid || rRole === 'PATIENT')) {
-              if (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid) {
+            } else if (aud === 'PATIENT' && (rRole === 'PATIENT' || (rRole !== 'ADMIN' && rRole !== 'CLINIC' && rRole !== 'DOCTOR'))) {
+              if (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid || (tidDigits && rPhoneDigits === tidDigits)) {
                 tokensSet.add(tok);
               }
             }
@@ -3962,15 +3958,18 @@
         }
       }
 
-      async function dispatchWorkerPush(eventType, title, body, targetAudience, targetId, collectionPath) {
+      async function dispatchWorkerPush(eventType, title, body, targetAudience, targetId, collectionPath, opts) {
         try {
           const cfg = (db && db.config) || {};
           const wUrl = String(cfg.workerUrl || DEFAULT_CONFIG.workerUrl || '').trim();
-          if (!wUrl || typeof fetch !== 'function') return;
+          if (!wUrl || typeof fetch !== 'function') {
+            return { ok: false, status: 0, tokensCount: 0, responseText: 'Missing Worker URL' };
+          }
           const cleanTitle = String(title || 'طب الحجايزة');
           const cleanBody = String(body || '');
-          const tokens = await resolveTargetFcmTokens(targetAudience, targetId);
-          await fetch(wUrl, {
+          const forceRefresh = Boolean(opts && opts.forceRefresh);
+          const tokens = await resolveTargetFcmTokens(targetAudience, targetId, forceRefresh);
+          const resp = await fetchWithTimeout(wUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3996,16 +3995,34 @@
               projectId: String(cfg.firebaseProjectId || DEFAULT_CONFIG.firebaseProjectId || ''),
               createdAtMillis: Date.now()
             })
-          });
-        } catch (e) { /* offline-safe worker dispatch */ }
+          }, 5000);
+          let respText = '';
+          try { respText = String(await resp.text() || '').slice(0, 180); } catch (readErr) {}
+          return {
+            ok: Boolean(resp && resp.ok),
+            status: resp ? resp.status : 0,
+            tokensCount: tokens.length,
+            responseText: respText
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            status: 0,
+            tokensCount: 0,
+            responseText: (e && e.message) ? e.message : 'Network error'
+          };
+        }
       }
 
       function getFcmTokenOwnerKey() {
         try {
           if (ui && ui.isAdminLoggedIn) return 'admin';
-          if (ui && ui.loggedInDoctorId) return 'doctor_' + safeCloudDocId(ui.loggedInDoctorId);
+          if (ui && ui.loggedInDoctorId) return safeCloudDocId(ui.loggedInDoctorId);
           if (ui && ui.loggedInLabId) return 'lab_' + safeCloudDocId(ui.loggedInLabId);
-          if (db && db.account) return safeCloudDocId(getAccountCloudDocId(db.account) || db.account.id);
+          if (db && db.account) {
+            const pDigits = normalizePhoneDigits(db.account.phone);
+            return pDigits || safeCloudDocId(db.account.id);
+          }
         } catch (e) {}
         return 'guest_device';
       }
@@ -4018,13 +4035,24 @@
         return 'GUEST';
       }
 
+      function getBestAvailableFcmToken(tokenOverride) {
+        let token = String(tokenOverride || '').trim();
+        if (!token && typeof window !== 'undefined' && window.NATIVE_FCM_TOKEN) {
+          token = String(window.NATIVE_FCM_TOKEN || '').trim();
+        }
+        if (!token && tebCloudRuntime.fcmToken) {
+          token = String(tebCloudRuntime.fcmToken || '').trim();
+        }
+        if (!token && window.AndroidBridge && typeof window.AndroidBridge.getFcmToken === 'function') {
+          token = String(window.AndroidBridge.getFcmToken() || '').trim();
+        }
+        if (token) tebCloudRuntime.fcmToken = token;
+        return token;
+      }
+
       async function syncFcmTokenToFirestore(tokenOverride) {
         try {
-          let token = String(tokenOverride || tebCloudRuntime.fcmToken || '').trim();
-          if (!token && window.AndroidBridge && typeof window.AndroidBridge.getFcmToken === 'function') {
-            token = String(window.AndroidBridge.getFcmToken() || '').trim();
-            if (token) tebCloudRuntime.fcmToken = token;
-          }
+          const token = getBestAvailableFcmToken(tokenOverride);
           if (!token) return false;
           const cfg = (db && db.config) || DEFAULT_CONFIG;
           if (!isFirebaseCloudConfigured(cfg)) return false;
@@ -4046,6 +4074,16 @@
         }
       }
 
+      if (typeof window !== 'undefined') {
+        window.__onNativeFcmTokenReady = function (tok) {
+          const clean = String(tok || '').trim();
+          if (!clean) return;
+          window.NATIVE_FCM_TOKEN = clean;
+          tebCloudRuntime.fcmToken = clean;
+          syncFcmTokenToFirestore(clean);
+        };
+      }
+
       function initFirebaseCloudBridge() {
         try {
           const cfg = (db && db.config) || DEFAULT_CONFIG;
@@ -4060,12 +4098,9 @@
             vapidKey: String(cfg.firebaseVapidKey || DEFAULT_CONFIG.firebaseVapidKey).trim()
           };
           getOrCreateFirestore(cfg);
-          if (window.AndroidBridge && typeof window.AndroidBridge.getFcmToken === 'function') {
-            const apkTok = String(window.AndroidBridge.getFcmToken() || '').trim();
-            if (apkTok) {
-              tebCloudRuntime.fcmToken = apkTok;
-              syncFcmTokenToFirestore(apkTok);
-            }
+          const nativeTok = getBestAvailableFcmToken('');
+          if (nativeTok) {
+            syncFcmTokenToFirestore(nativeTok);
           }
           function acquireAndSyncToken(msgSdk, reg) {
             if (!msgSdk || !webCfg.vapidKey || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
@@ -4324,12 +4359,14 @@
             senderLabel: clinicLabel,
             createdAtMillis: Date.now()
           });
-          dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : '', CLOUD_PATHS.appointments);
+          dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : patientPhone, CLOUD_PATHS.appointments);
+        }
+        if (isPatient) {
+          dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_PATIENT', clinicLabel, alertMsg, 'ADMIN', slot.id, CLOUD_PATHS.appointments);
         }
         saveState(db);
         cancelSlotRemindersWeb(slot.id);
         syncDocToFirestoreNamespace('slots', slot.id, slot);
-        triggerPlatformNotification(clinicLabel, alertMsg, 'cancel_' + slot.id);
         showToast(bi('تم إلغاء الحجز وإعادة الموعد متاحاً باللون الأخضر', 'Booking cancelled; slot is open again'));
         renderApp();
         return true;
@@ -4405,14 +4442,16 @@
             senderLabel: clinicLabel,
             createdAtMillis: Date.now()
           });
-          dispatchWorkerPush('APPOINTMENT_RESCHEDULED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : '', CLOUD_PATHS.appointments);
+          dispatchWorkerPush('APPOINTMENT_RESCHEDULED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : patientPhone, CLOUD_PATHS.appointments);
+        }
+        if (isPatient) {
+          dispatchWorkerPush('APPOINTMENT_RESCHEDULED_BY_PATIENT', clinicLabel, alertMsg, 'ADMIN', toSlot.id, CLOUD_PATHS.appointments);
         }
         saveState(db);
         cancelSlotRemindersWeb(fromSlot.id);
         scheduleSlotRemindersWeb(toSlot, docObj);
         syncDocToFirestoreNamespace('slots', fromSlot.id, fromSlot);
         syncDocToFirestoreNamespace('slots', toSlot.id, toSlot);
-        triggerPlatformNotification(clinicLabel, alertMsg, 'resched_' + toSlot.id);
         showToast(bi('تم تعديل الموعد إلى الساعة ' + newTimeLabel + ' بنجاح', 'Appointment rescheduled to ' + newTimeLabel));
         renderApp();
         return true;
@@ -4510,7 +4549,7 @@
         adminUsersFilter: 'ALL', // ALL | VERIFIED | UNVERIFIED
         adminAlertDocId: '',
         cloudSettingsExpanded: false,
-        adminAccordions: { usersList: true, threadsList: true }, // Users & support threads open cleanly
+        adminAccordions: { usersList: true, threadsList: true, notifStatus: true }, // Users, support threads & notification test open cleanly
         adminDriveSelectedDocId: '',
         expandedAdminThreads: {},
         logoTapCount: 0,
@@ -4631,11 +4670,9 @@
             const dataUrl = reader.result;
             let extractedText = '';
             try {
-              setGlobalLoading(true, bi('جاري قراءة واستخراج نتائج ملف الـ PDF...', 'Reading & extracting PDF clinical content...'));
               const bytes = dataUrlToUint8Array(dataUrl);
               extractedText = await extractTextFromPdfBytes(bytes);
             } catch (e) { /* safe fallback */ }
-            setGlobalLoading(false);
             onDone({
               dataUrl: dataUrl,
               mimeType: 'application/pdf',
@@ -6058,7 +6095,6 @@
               saveState(db);
               syncDocToFirestoreNamespace('family_link_requests', req.id, req);
               syncDocToFirestoreNamespace('notifications', String(flrNotif.id), flrNotif);
-              triggerPlatformNotification('👨‍👩‍👧 طلب ربط عائلي جديد — طب الحجايزة', flrMsg, 'flr_' + req.id);
               dispatchWorkerPush('FAMILY_LINK_REQUEST', '👨‍👩‍👧 طلب ربط عائلي جديد', flrMsg, 'ADMIN', req.id, CLOUD_PATHS.familyLinkRequests);
               closeModal();
               showToast(bi('تم إرسال طلب ربط الأسرة للإدارة للمراجعة والاعتماد', 'Family link request sent to Super Admin'));
@@ -6158,7 +6194,9 @@
             createdAtMillis: Date.now()
           });
           saveState(db);
-          triggerPlatformNotification('⚠️ تنبيه امتلاء التخزين', msg, 'storage_90_' + accountLabel);
+          if (ui.role === 'ADMIN') {
+            triggerPlatformNotification('⚠️ تنبيه امتلاء التخزين', msg, 'storage_90_' + accountLabel);
+          }
           dispatchWorkerPush('STORAGE_WARNING_90', '⚠️ تنبيه امتلاء التخزين', msg, 'ADMIN', '', CLOUD_PATHS.notifications);
         }
       }
@@ -6314,8 +6352,12 @@
             (!granted
               ? '<button class="btn btn-primary" type="button" data-enable-notif="' + esc(tag) + '" style="flex:1;min-height:44px;">🔔 ' + esc(bi('تفعيل الإشعارات الآن', 'Enable Notifications Now')) + '</button>'
               : '') +
-            '<button class="btn btn-outline" type="button" data-test-notif="' + esc(tag) + '" style="flex:1;min-height:44px;">🚀 ' + esc(bi('إرسال إشعار تجريبي', 'Send Test Alert')) + '</button>' +
+            '<button class="btn btn-outline" type="button" data-test-notif="' + esc(tag) + '" style="flex:1;min-height:44px;">🚀 ' + esc(bi('إشعار محلي تجريبي', 'Local Alert Test')) + '</button>' +
           '</div>' +
+          (tag === 'admin_notif'
+            ? '<button class="btn btn-primary btn-block" id="btnAdminTestLivePush" type="button" style="margin-top:4px;">🔔 ' + esc(bi('إرسال إشعار تجريبي لهاتفي الآن', 'Send Live Push Test to My Phone Now')) + '</button>' +
+              '<div id="adminLivePushTestResult" style="display:none;margin-top:4px;padding:10px;border-radius:10px;font-size:0.83rem;font-weight:700;line-height:1.45;"></div>'
+            : '') +
         '</div>';
       }
 
@@ -6579,23 +6621,13 @@
         toastTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs || 3400);
       }
 
-      let __loadingSafetyTimer = null;
-      function setGlobalLoading(show, text) {
-        const overlay = document.getElementById('loadingOverlay');
-        const label = document.getElementById('loadingOverlayText');
-        if (__loadingSafetyTimer) {
-          clearTimeout(__loadingSafetyTimer);
-          __loadingSafetyTimer = null;
-        }
-        if (!overlay) return;
-        if (label && text) label.textContent = text;
-        overlay.style.display = show ? 'flex' : 'none';
+      function setGlobalLoading(show) {
+        const btn = document.getElementById('btnSmartRefresh');
+        if (!btn) return;
         if (show) {
-          __loadingSafetyTimer = setTimeout(function () {
-            overlay.style.display = 'none';
-            const btn = document.getElementById('btnSmartRefresh');
-            if (btn) btn.classList.remove('spinning');
-          }, 4500);
+          btn.classList.add('spinning');
+        } else {
+          btn.classList.remove('spinning');
         }
       }
 
@@ -6620,13 +6652,6 @@
       async function performSmartHardRefresh() {
         const btn = document.getElementById('btnSmartRefresh');
         if (btn) btn.classList.add('spinning');
-        setGlobalLoading(
-          true,
-          bi(
-            'جاري تنظيف الذاكرة المؤقتة وجلب أحدث المواعيد والبيانات...',
-            'Clearing cache & loading the latest slots...'
-          )
-        );
         try {
           if ('caches' in window && caches.keys) {
             const keys = await caches.keys();
@@ -6645,24 +6670,16 @@
             }));
           }
           await refreshMedicationsFromApi();
-          await pullCloudStateViaRestWeb();
+          await pullCloudStateViaRestWeb(null, { force: true });
           db = loadState();
           ui.hasNewDataBanner = false;
           baselineDbSyncSig = computeDbSyncSignature(db);
-          renderApp();
+          renderApp({ deferIfBusy: true });
         } catch (e) { /* safe fallback */ }
         finally {
-          setGlobalLoading(false);
           if (btn) btn.classList.remove('spinning');
         }
-        showToast(bi('تم تحديث البيانات ومسح الذاكرة المؤقتة بنجاح', 'Cache cleared & data refreshed'));
-        setTimeout(function () {
-          if (!window.__tebDisablePageReload && /^https?:$/i.test(window.location.protocol)) {
-            try {
-              window.location.reload();
-            } catch (e) { /* ignore reload error */ }
-          }
-        }, 280);
+        showToast(bi('تم تحديث البيانات ومسح الذاكرة المؤقتة بنجاح', 'Cache cleared & data refreshed'), 2400, { isSuccess: true });
       }
 
       function isInsideAndroidApk() {
@@ -7188,11 +7205,6 @@
           ? ('💬 رسالة دعم جديدة من ' + (msgObj.patientName || msgObj.doctorName || msgObj.senderName || 'طب الحجايزة'))
           : ('💬 ' + (msgObj.senderName || 'طب الحجايزة'));
 
-        triggerPlatformNotification(
-          '💬 ' + (msgObj.senderName || bi('رسالة جديدة', 'New Message')),
-          msgObj.body,
-          'msg_' + msgObj.threadType
-        );
         dispatchWorkerPush(
           pushEvent,
           pushTitle,
@@ -9110,7 +9122,30 @@
         });
       }
 
-      function renderApp() {
+      function isUiBusyForBackgroundRender() {
+        try {
+          const modalRoot = document.getElementById('modalRoot');
+          if (modalRoot && modalRoot.innerHTML && modalRoot.innerHTML.trim() !== '') {
+            return true;
+          }
+          const activeEl = document.activeElement;
+          if (activeEl && activeEl !== document.body) {
+            const tag = String(activeEl.tagName || '').toUpperCase();
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || activeEl.isContentEditable) {
+              return true;
+            }
+          }
+        } catch (e) {}
+        return false;
+      }
+
+      function renderApp(opts) {
+        if (opts && opts.deferIfBusy && isUiBusyForBackgroundRender()) {
+          tebCloudRuntime.pendingDeferredRender = true;
+          updateHeader();
+          return;
+        }
+        tebCloudRuntime.pendingDeferredRender = false;
         updateHeader();
         const root = document.getElementById('appRoot');
         if (ui.roleMode === 'ADMIN') {
@@ -9190,6 +9225,12 @@
           try { URL.revokeObjectURL(activeModalBlobUrls.pop()); } catch (e) {}
         }
         document.getElementById('modalRoot').innerHTML = '';
+        if (tebCloudRuntime.pendingDeferredRender) {
+          tebCloudRuntime.pendingDeferredRender = false;
+          setTimeout(function () {
+            if (!isUiBusyForBackgroundRender()) renderApp();
+          }, 40);
+        }
       }
 
       function openModal(title, bodyHtml, onMount) {
@@ -9295,7 +9336,7 @@
                   syncDocToFirestoreNamespace('slots', latestSlot.id, latestSlot);
                   syncDocToFirestoreNamespace('notifications', String(db.notifications[0].id), db.notifications[0]);
                   dispatchWorkerPush('NEW_BOOKING', getClinicDisplayName(doc), bookAlert, 'CLINIC', doc.id, CLOUD_PATHS.appointments);
-                  triggerPlatformNotification(getClinicDisplayName(doc), bookAlert, 'book_' + latestSlot.id);
+                  dispatchWorkerPush('NEW_BOOKING', '🩺 حجز جديد — ' + getClinicDisplayName(doc), bookAlert, 'ADMIN', latestSlot.id, CLOUD_PATHS.appointments);
                   closeModal();
                   showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
                   renderApp();
@@ -9753,8 +9794,6 @@
                 }).catch(function (bgErr) {
                   console.error('[TebFirestore] Background registration sync error:', bgErr);
                 });
-
-                triggerPlatformNotification('👤 عميل جديد — طب الحجايزة', regAlertMsg, 'new_user_' + newAccId);
 
                 await new Promise(function (resolve) { setTimeout(resolve, 120); });
                 authMode = 'NONE';
@@ -10525,7 +10564,6 @@
               db.notifications.unshift(warnNotif);
               saveState(db);
               syncDocToFirestoreNamespace('notifications', String(warnNotif.id), warnNotif);
-              triggerPlatformNotification('⚠️ تحذير إداري — طب الحجايزة', finalBody, 'warn_' + nowMs);
               dispatchWorkerPush('ADMIN_WARNING', '⚠️ تحذير إداري — طب الحجايزة', finalBody, aud, tid, CLOUD_PATHS.notifications);
             }
             rerenderModalChat();
@@ -11256,7 +11294,6 @@
               if (newRxRec.attachmentDataUrl) {
                 uploadFileToGoogleDriveWebApp(newRxRec, doc, doc.clinicName || doc.doctorName);
               }
-              triggerPlatformNotification('💊 ' + (doc.clinicName || doc.doctorName), rxMsg, 'rx_' + newRxRec.id);
               dispatchWorkerPush('PRESCRIPTION_ADDED', '💊 روشتة جديدة — ' + (doc.clinicName || doc.doctorName), rxMsg, 'PATIENT', rxTargetId, CLOUD_PATHS.records);
               closeModal();
               showToast(bi('تم حفظ الروشتة والتقرير الثنائي وتدوينها في السجل الدائم مدى الحياة', 'Bilingual Rx saved & permanently logged'));
@@ -12324,11 +12361,6 @@
             if (newLabRec.attachmentDataUrl) {
               uploadFileToGoogleDriveWebApp(newLabRec, '', lab.labName);
             }
-            triggerPlatformNotification(
-              lab.labName,
-              '🧪 ' + bi('نتيجة تحليل جديدة: ' + title + ' — ' + member.fullName, 'New lab report: ' + title + ' — ' + member.fullName),
-              'lab_' + newLabRecId
-            );
             dispatchWorkerPush(
               'LAB_RESULT_UPLOADED',
               lab.labName,
@@ -12930,11 +12962,6 @@
             db.notifications.unshift(bcNotif);
             saveState(db);
             syncDocToFirestoreNamespace('notifications', String(bcNotif.id), bcNotif);
-            triggerPlatformNotification(
-              bi('إعلان من الإدارة — طب الحجايزة', 'Admin Broadcast — Teb Al-Hajayzah'),
-              '📢 ' + msg,
-              'broadcast_' + Date.now()
-            );
             dispatchWorkerPush('ADMIN_BROADCAST', '📢 طب الحجايزة', msg, 'ALL', '', CLOUD_PATHS.notifications);
             showToast(bi('تم إرسال الإشعار العام لجميع مستخدمي المنصة', 'Global broadcast sent'));
             renderApp();
@@ -12966,7 +12993,6 @@
             db.notifications.unshift(caNotif);
             saveState(db);
             syncDocToFirestoreNamespace('notifications', String(caNotif.id), caNotif);
-            triggerPlatformNotification(bi('تنبيه إداري للعيادة', 'Clinic Alert'), '🔔 ' + msg, 'clinic_alert_' + Date.now());
             dispatchWorkerPush('ADMIN_CLINIC_ALERT', '🔔 إشعار إداري للعيادات', '🔔 ' + msg, 'CLINIC', targetId, CLOUD_PATHS.notifications);
             showToast(bi('تم إرسال التنبيه للعيادة بنجاح', 'Clinic alert sent'));
             renderApp();
@@ -13168,6 +13194,58 @@
         });
 
         bindNotificationStatusCard(document);
+        const adminLivePushBtn = document.getElementById('btnAdminTestLivePush');
+        if (adminLivePushBtn) {
+          adminLivePushBtn.onclick = async function () {
+            const resEl = document.getElementById('adminLivePushTestResult');
+            adminLivePushBtn.disabled = true;
+            if (resEl) {
+              resEl.style.display = 'block';
+              resEl.style.background = '#FEF3C7';
+              resEl.style.border = '1px solid #F59E0B';
+              resEl.style.color = '#92400E';
+              resEl.textContent = bi('⏳ جاري ربط توكن المدير وإرسال إشعار تجريبي عبر الخادم...', '⏳ Syncing Admin token & sending test push via Worker...');
+            }
+            try {
+              const tok = getBestAvailableFcmToken('');
+              if (tok) {
+                await syncFcmTokenToFirestore(tok);
+              }
+              const res = await dispatchWorkerPush(
+                'ADMIN_LIVE_TEST_PUSH',
+                '🔔 اختبار إشعارات المدير — طب الحجايزة',
+                'تم استلام الإشعار التجريبي المباشر عبر Cloudflare Worker + FCM بنجاح ✓',
+                'ADMIN',
+                'admin',
+                CLOUD_PATHS.notifications,
+                { forceRefresh: true }
+              );
+              if (resEl) {
+                resEl.style.display = 'block';
+                if (res && res.ok) {
+                  resEl.style.background = 'var(--avail-bg)';
+                  resEl.style.border = '1px solid var(--avail-border)';
+                  resEl.style.color = 'var(--avail-text)';
+                  resEl.textContent = '✅ HTTP ' + res.status + ' | Tokens=' + res.tokensCount + (res.responseText ? (' | ' + res.responseText) : '');
+                } else {
+                  resEl.style.background = 'var(--booked-bg)';
+                  resEl.style.border = '1px solid var(--booked-border)';
+                  resEl.style.color = 'var(--booked-text)';
+                  resEl.textContent = '⚠️ HTTP ' + (res ? res.status : 0) + ' | Tokens=' + (res ? res.tokensCount : 0) + (res && res.responseText ? (' | ' + res.responseText) : '');
+                }
+              }
+              showToast(
+                (res && res.ok)
+                  ? bi('✅ تم إرسال إشعار الاختبار عبر السحابة (HTTP ' + res.status + ')', '✅ Live test push dispatched (HTTP ' + res.status + ')')
+                  : bi('⚠️ تعذر إرسال الإشعار التجريبي (' + ((res && res.responseText) || 'Error') + ')', '⚠️ Test push failed'),
+                3400,
+                { isSuccess: Boolean(res && res.ok) }
+              );
+            } finally {
+              adminLivePushBtn.disabled = false;
+            }
+          };
+        }
         bindPasswordToggleButtons(document);
       }
 
@@ -13382,7 +13460,6 @@
           db.notifications.unshift(delayNotif);
           saveState(db);
           syncDocToFirestoreNamespace('notifications', String(delayNotif.id), delayNotif);
-          triggerPlatformNotification(getClinicDisplayName(doc), delayMsg, 'delay_' + doc.id);
           dispatchWorkerPush('CLINIC_DELAY', getClinicDisplayName(doc), delayMsg, 'PATIENT', '', CLOUD_PATHS.appointments);
           showToast(bi('تم تأخير المواعيد ' + mins + ' دقيقة وإرسال تنبيه فوري للمرضى', 'Delayed slots by ' + mins + ' min'));
           renderApp();
@@ -13637,8 +13714,94 @@
         });
       }
 
-      // Initialize App, Record Real Web Hit & Real-Time Multi-Device Cloud Sync immediately on startup
-      setGlobalLoading(true, bi('جاري تجهيز منصة طب الحجايزة...', 'Loading Teb Al-Hajayzah...'));
+      document.addEventListener('focusout', function () {
+        if (tebCloudRuntime.pendingDeferredRender) {
+          setTimeout(function () {
+            if (tebCloudRuntime.pendingDeferredRender && !isUiBusyForBackgroundRender()) {
+              renderApp();
+            }
+          }, 180);
+        }
+      });
+
+      // Smooth Pull-to-Refresh Gesture (Patient, Clinic & Super Admin views without blocking overlay)
+      (function initPullToRefreshGesture() {
+        const pill = document.getElementById('pullRefreshPill');
+        const label = document.getElementById('pullRefreshText');
+        if (!pill || !label) return;
+        let startY = 0;
+        let activePull = false;
+        let pullDistance = 0;
+
+        window.addEventListener('touchstart', function (e) {
+          if (tebCloudRuntime.isPullRefreshing) return;
+          if ((window.scrollY || window.pageYOffset || 0) > 2) return;
+          if (isUiBusyForBackgroundRender()) return;
+          if (e.touches && e.touches.length === 1) {
+            startY = e.touches[0].clientY;
+            activePull = true;
+            pullDistance = 0;
+          }
+        }, { passive: true });
+
+        window.addEventListener('touchmove', function (e) {
+          if (!activePull || tebCloudRuntime.isPullRefreshing) return;
+          if ((window.scrollY || window.pageYOffset || 0) > 2) {
+            activePull = false;
+            pill.style.height = '0px';
+            pill.classList.remove('visible');
+            return;
+          }
+          if (!e.touches || e.touches.length !== 1) return;
+          const dy = e.touches[0].clientY - startY;
+          if (dy > 14) {
+            pullDistance = Math.min(88, dy * 0.55);
+            pill.style.height = Math.round(pullDistance) + 'px';
+            pill.classList.add('visible');
+            label.textContent = dy > 68
+              ? bi('🔄 أفلِت للتحديث...', '🔄 Release to refresh...')
+              : bi('🔄 اسحب للتحديث...', '🔄 Pull to refresh...');
+          } else {
+            pullDistance = 0;
+            pill.style.height = '0px';
+            pill.classList.remove('visible');
+          }
+        }, { passive: true });
+
+        async function finishPullGesture() {
+          if (!activePull) return;
+          activePull = false;
+          if (pullDistance >= 36 && !tebCloudRuntime.isPullRefreshing) {
+            tebCloudRuntime.isPullRefreshing = true;
+            pill.style.height = '40px';
+            pill.classList.add('visible');
+            label.textContent = bi('🔄 جاري التحديث...', '🔄 Refreshing...');
+            const refreshBtn = document.getElementById('btnSmartRefresh');
+            if (refreshBtn) refreshBtn.classList.add('spinning');
+            try {
+              await pullCloudStateViaRestWeb(null, { force: true });
+              db = loadState();
+              renderApp({ deferIfBusy: true });
+              showToast(bi('✅ تم تحديث البيانات بنجاح', '✅ Data refreshed'), 2000, { isSuccess: true });
+            } catch (err) {}
+            finally {
+              tebCloudRuntime.isPullRefreshing = false;
+              if (refreshBtn) refreshBtn.classList.remove('spinning');
+              pill.style.height = '0px';
+              pill.classList.remove('visible');
+            }
+          } else {
+            pill.style.height = '0px';
+            pill.classList.remove('visible');
+          }
+          pullDistance = 0;
+        }
+
+        window.addEventListener('touchend', finishPullGesture, { passive: true });
+        window.addEventListener('touchcancel', finishPullGesture, { passive: true });
+      })();
+
+      // Initialize App silently in background without any blocking screen overlay
       pruneExpiredHeavyAttachmentsWeb(db);
       recordWebVisitorHitOnce();
       renderApp();
@@ -13646,8 +13809,7 @@
       setTimeout(checkUpcomingSlotRemindersWeb, 3000);
       setInterval(checkUpcomingSlotRemindersWeb, 30000);
       refreshMedicationsFromApi().finally(function () {
-        setGlobalLoading(false);
-        renderApp();
+        renderApp({ deferIfBusy: true });
       });
     })();
   </script>

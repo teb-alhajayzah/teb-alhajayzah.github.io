@@ -1943,6 +1943,21 @@ class TebViewModel(
         }
     }
 
+    fun sendAdminLivePushTest(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            repository.sendAdminLivePushTest()
+                .onSuccess { details ->
+                    _snackbarMessages.tryEmit(details)
+                    onResult(true, details)
+                }
+                .onFailure { err ->
+                    val msg = err.message ?: "تعذر إرسال الإشعار التجريبي"
+                    _snackbarMessages.tryEmit(msg)
+                    onResult(false, msg)
+                }
+        }
+    }
+
     fun markDirectThreadRead(
         threadType: String,
         viewerRole: String,

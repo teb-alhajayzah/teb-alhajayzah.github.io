@@ -219,6 +219,7 @@ fun SuperAdminDashboardScreen(
     onCleanClinicHeavyFiles: (doctorId: String) -> Unit = {},
     onReportStorage90Alert: (accountLabel: String, usedPercent: Int) -> Unit = { _, _ -> },
     onRefreshCloudNow: () -> Unit = {},
+    onSendTestAdminPush: ((Boolean, String) -> Unit) -> Unit = { _ -> },
     onShowMessage: (String) -> Unit,
     onLogoutAdmin: () -> Unit,
 ) {
@@ -917,6 +918,9 @@ fun SuperAdminDashboardScreen(
 
                 3 -> {
                     item {
+                        var isTestingPush by remember { mutableStateOf(false) }
+                        var testPushStatus by remember { mutableStateOf("") }
+                        var testPushOk by remember { mutableStateOf<Boolean?>(null) }
                         AdminAccordionCard(
                             title = bi(isEn, "🔔 حالة إشعارات المدير العام", "🔔 Admin Notification Status"),
                             subtitle = bi(isEn, "اضغط لعرض / إخفاء", "Tap to expand/collapse"),
@@ -924,11 +928,76 @@ fun SuperAdminDashboardScreen(
                             onToggle = { notifCardExpanded = !notifCardExpanded },
                             testTagName = "admin_accordion_notif",
                         ) {
-                            NotificationStatusCard(
-                                isEn = isEn,
-                                tagPrefix = "admin_notif",
-                                onShowMessage = onShowMessage,
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                NotificationStatusCard(
+                                    isEn = isEn,
+                                    tagPrefix = "admin_notif",
+                                    onShowMessage = onShowMessage,
+                                )
+                                Button(
+                                    onClick = {
+                                        if (!isTestingPush) {
+                                            isTestingPush = true
+                                            testPushStatus = bi(isEn, "⏳ جاري إرسال إشعار تجريبي عبر الخادم السحابي...", "⏳ Sending live push via Cloudflare Worker...")
+                                            testPushOk = null
+                                            onSendTestAdminPush { ok, details ->
+                                                isTestingPush = false
+                                                testPushOk = ok
+                                                testPushStatus = details
+                                            }
+                                        }
+                                    },
+                                    enabled = !isTestingPush,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TealPrimary,
+                                        contentColor = Color.White,
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("admin_test_fcm_push_btn"),
+                                ) {
+                                    Text(
+                                        text = if (isTestingPush) {
+                                            bi(isEn, "⏳ جاري الاختبار...", "⏳ Testing Push...")
+                                        } else {
+                                            bi(isEn, "🔔 إرسال إشعار تجريبي لهاتفي الآن", "🔔 Send Live Test Push to My Phone")
+                                        },
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                if (testPushStatus.isNotBlank()) {
+                                    Surface(
+                                        color = when (testPushOk) {
+                                            true -> SlotAvailableBg
+                                            false -> SlotBookedBg
+                                            null -> MaterialTheme.colorScheme.surfaceVariant
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            when (testPushOk) {
+                                                true -> SlotAvailableBorder
+                                                false -> SlotBookedBorder
+                                                null -> TealPrimary.copy(alpha = 0.4f)
+                                            },
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Text(
+                                            text = testPushStatus,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = when (testPushOk) {
+                                                true -> SlotAvailableText
+                                                false -> SlotBookedText
+                                                null -> MaterialTheme.colorScheme.onSurface
+                                            },
+                                            modifier = Modifier.padding(10.dp),
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 

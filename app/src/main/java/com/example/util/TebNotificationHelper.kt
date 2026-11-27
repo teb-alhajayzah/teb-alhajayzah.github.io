@@ -31,7 +31,7 @@ data class AppointmentReminderTrigger(
 
 object TebNotificationHelper {
 
-    const val CHANNEL_ID = "teb_alhajayzah_alerts_v1"
+    const val CHANNEL_ID = "teb_alhajayzah_high_priority"
     const val CHANNEL_NAME_AR = "تنبيهات وإشعارات طب الحجايزة"
     const val EXTRA_TITLE = "extra_notif_title"
     const val EXTRA_BODY = "extra_notif_body"
