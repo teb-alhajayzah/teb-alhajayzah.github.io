@@ -102,6 +102,8 @@ import com.example.ui.theme.TebAlHajayzahTheme
 import com.example.util.FirebaseAppCheckHelper
 import com.example.util.TebFcmService
 import com.example.util.TebNotificationHelper
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
@@ -117,6 +119,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        runCatching {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                val options = runCatching { FirebaseOptions.fromResource(this) }.getOrNull()
+                    ?: FirebaseOptions.Builder()
+                        .setProjectId("gen-lang-client-0514993881")
+                        .setApplicationId("1:197836130786:android:97750c01e53b0977c411bb")
+                        .setApiKey("AIzaSyCyZQYJ6-iV02yazYHRNJQyavNNymqrdhU")
+                        .setGcmSenderId("197836130786")
+                        .setStorageBucket("gen-lang-client-0514993881.firebasestorage.app")
+                        .build()
+                FirebaseApp.initializeApp(this, options)
+            }
+        }
         FirebaseAppCheckHelper.configureAppCheck(this, intent)
         TebNotificationHelper.ensureNotificationChannel(this)
         TebNotificationHelper.scheduleBackgroundSyncAlarm(this)

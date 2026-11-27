@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import com.example.BuildConfig
 import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
@@ -17,11 +18,25 @@ object FirebaseAppCheckHelper {
     private const val DEBUG_SECRET_KEY = "com.google.firebase.appcheck.debug.DEBUG_SECRET"
     private const val RECAPTCHA_SITE_KEY_RES = "recaptcha_site_key"
 
+    fun ensureFirebaseAppInitialized(context: Context) {
+        runCatching {
+            if (FirebaseApp.getApps(context).isEmpty()) {
+                val options = runCatching { FirebaseOptions.fromResource(context) }.getOrNull()
+                    ?: FirebaseOptions.Builder()
+                        .setProjectId("gen-lang-client-0514993881")
+                        .setApplicationId("1:197836130786:android:97750c01e53b0977c411bb")
+                        .setApiKey("AIzaSyCyZQYJ6-iV02yazYHRNJQyavNNymqrdhU")
+                        .setGcmSenderId("197836130786")
+                        .setStorageBucket("gen-lang-client-0514993881.firebasestorage.app")
+                        .build()
+                FirebaseApp.initializeApp(context, options)
+            }
+        }
+    }
+
     fun configureAppCheck(context: Context, intent: Intent?) {
         try {
-            if (FirebaseApp.getApps(context).isEmpty()) {
-                FirebaseApp.initializeApp(context)
-            }
+            ensureFirebaseAppInitialized(context)
 
             if (BuildConfig.DEBUG) {
                 val debugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)

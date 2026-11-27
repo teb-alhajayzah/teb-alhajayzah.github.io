@@ -22,6 +22,7 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import com.example.BuildConfig
 import com.example.ai.GeminiMedicalAnalyzer
+import com.example.util.FirebaseAppCheckHelper
 import com.example.util.ImageStorageHelper
 import com.example.util.TebNotificationHelper
 import com.example.util.TebFcmService
@@ -230,6 +231,7 @@ fun LiveWebPortalScreen(
 
     fun fetchAndPushFcmToken(targetView: WebView?) {
         runCatching {
+            FirebaseAppCheckHelper.ensureFirebaseAppInitialized(context)
             FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val token = task.result?.trim().orEmpty()

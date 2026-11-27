@@ -80,12 +80,14 @@ class TebFcmService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+        FirebaseAppCheckHelper.ensureFirebaseAppInitialized(applicationContext)
         updateCachedToken(applicationContext, token)
         Log.d("TebFcmService", "New FCM Token received for independent project: $token")
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
+        FirebaseAppCheckHelper.ensureFirebaseAppInitialized(applicationContext)
         val title = remoteMessage.notification?.title
             ?: remoteMessage.data["title"]
             ?: "طب الحجايزة"
