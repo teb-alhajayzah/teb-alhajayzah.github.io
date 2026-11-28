@@ -2079,9 +2079,9 @@
     }
 
     .status-pill-btn.active-completed {
-      background: var(--avail-bg);
-      border-color: var(--avail-border);
-      color: var(--avail-text);
+      background: var(--done-bg);
+      border-color: var(--done-border);
+      color: var(--done-text);
     }
 
     .status-pill-btn.active-noshow {
@@ -2209,11 +2209,100 @@
       .pc-slots-table tr:last-child td {
         border-bottom: none;
       }
+      .pc-slots-table tr.pc-row-status-booked td:first-child {
+        border-inline-start: 5px solid var(--booked-border);
+      }
+      .pc-slots-table tr.pc-row-status-completed td:first-child {
+        border-inline-start: 5px solid var(--done-border);
+      }
+      .pc-slots-table tr.pc-row-status-noshow td:first-child {
+        border-inline-start: 5px solid var(--warn-border);
+      }
+      .pc-slots-table tr.pc-row-status-available td:first-child {
+        border-inline-start: 5px solid var(--avail-border);
+      }
       .pc-slots-table tr.pc-row-selected {
-        background: rgba(13, 115, 119, 0.06);
+        background: rgba(13, 115, 119, 0.11) !important;
+        box-shadow: inset 0 0 0 2px var(--teal);
       }
       .pc-slots-table tr:hover {
         background: rgba(234, 240, 242, 0.55);
+      }
+      .pc-selected-pill {
+        display: none;
+        align-items: center;
+        gap: 3px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: var(--teal);
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .pc-slots-table tr.pc-row-selected .pc-selected-pill {
+        display: inline-flex;
+      }
+      .pc-status-badge-lg {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 11px;
+        border-radius: 10px;
+        font-size: 0.86rem;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .pc-pill-kbd-hint {
+        display: inline-block;
+        padding: 1px 5px;
+        border-radius: 5px;
+        background: rgba(19, 34, 38, 0.08);
+        font-size: 0.68rem;
+        font-weight: 800;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+      .pc-kbd-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 9px 12px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #F0FAFA 0%, #F8FBFC 100%);
+        border: 1.5px solid rgba(13, 115, 119, 0.25);
+      }
+      .pc-kbd-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 9px;
+        border-radius: 9px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.14s ease;
+      }
+      .pc-kbd-chip:hover {
+        border-color: var(--teal);
+        background: var(--teal-soft);
+        color: var(--teal-text);
+      }
+      .pc-kbd-key {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1px 6px;
+        border-radius: 6px;
+        background: var(--teal);
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 800;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       }
       .pc-row-actions {
         display: flex;
@@ -9455,23 +9544,23 @@
 
       function getSlotStatusMetaWeb(status) {
         if (status === 'AVAILABLE') {
-          return { icon: '🟢', ar: 'متاح', en: 'Available', badgeCls: 'badge-avail' };
+          return { icon: '🟢', ar: 'متاح', en: 'Available', badgeCls: 'badge-avail', rowCls: 'pc-row-status-available' };
         }
         if (status === 'BOOKED') {
-          return { icon: '⏳', ar: 'قادم', en: 'Upcoming', badgeCls: 'badge-booked' };
+          return { icon: '⏳', ar: 'قادم', en: 'Upcoming', badgeCls: 'badge-booked', rowCls: 'pc-row-status-booked' };
         }
         if (status === 'NO_SHOW') {
-          return { icon: '⚠️', ar: 'تغيب', en: 'No-Show', badgeCls: 'badge-noshow' };
+          return { icon: '⚠️', ar: 'تغيب', en: 'No-Show', badgeCls: 'badge-noshow', rowCls: 'pc-row-status-noshow' };
         }
-        return { icon: '✅', ar: 'تم الكشف', en: 'Completed', badgeCls: 'badge-done' };
+        return { icon: '✅', ar: 'تم الكشف', en: 'Completed', badgeCls: 'badge-done', rowCls: 'pc-row-status-completed' };
       }
 
-      function renderSlotStatusToggleBarHtml(slot) {
+      function renderSlotStatusToggleBarHtml(slot, showKbdHints) {
         if (!slot || slot.status === 'AVAILABLE') return '';
         return '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">' +
-          '<button class="status-pill-btn ' + (slot.status === 'BOOKED' ? 'active-upcoming' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':BOOKED">⏳ ' + esc(bi('قادم', 'Upcoming')) + '</button>' +
-          '<button class="status-pill-btn ' + (slot.status === 'COMPLETED' ? 'active-completed' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':COMPLETED">✅ ' + esc(bi('تم الكشف', 'Completed')) + '</button>' +
-          '<button class="status-pill-btn ' + (slot.status === 'NO_SHOW' ? 'active-noshow' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':NO_SHOW">⚠️ ' + esc(bi('تغيب', 'No-Show')) + '</button>' +
+          '<button class="status-pill-btn ' + (slot.status === 'BOOKED' ? 'active-upcoming' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':BOOKED">⏳ ' + esc(bi('قادم', 'Upcoming')) + (showKbdHints ? ' <span class="pc-pill-kbd-hint">F1</span>' : '') + '</button>' +
+          '<button class="status-pill-btn ' + (slot.status === 'COMPLETED' ? 'active-completed' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':COMPLETED">✅ ' + esc(bi('تم الكشف', 'Completed')) + (showKbdHints ? ' <span class="pc-pill-kbd-hint">F2</span>' : '') + '</button>' +
+          '<button class="status-pill-btn ' + (slot.status === 'NO_SHOW' ? 'active-noshow' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':NO_SHOW">⚠️ ' + esc(bi('تغيب', 'No-Show')) + (showKbdHints ? ' <span class="pc-pill-kbd-hint">F3</span>' : '') + '</button>' +
         '</div>';
       }
 
@@ -9637,6 +9726,12 @@
             formatMinutesAr((s.startMinutes || 0) + (s.delayMinutes || 0)).toLowerCase().includes(q);
         });
         const nextBooked = slots.find((s) => s.status === 'BOOKED');
+        if (!ui.selectedDesktopSlotId || !slots.some((s) => s.id === ui.selectedDesktopSlotId)) {
+          const defaultSel = nextBooked || slots.find((s) => s.status !== 'AVAILABLE') || null;
+          ui.selectedDesktopSlotId = defaultSel ? defaultSel.id : '';
+        }
+        const selectedSlotObj = ui.selectedDesktopSlotId ? slots.find((s) => s.id === ui.selectedDesktopSlotId) : null;
+        const selectedMeta = selectedSlotObj ? getSlotStatusMetaWeb(selectedSlotObj.status) : null;
         return '<section class="pc-kpi-grid">' +
             '<div class="pc-kpi-card" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);"><div><div style="font-size:0.8rem;font-weight:700;">⏳ ' + esc(bi('قادم / محجوز', 'Upcoming')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + bookedCount + '</div></div><span style="font-size:1.5rem;">🗓️</span></div>' +
             '<div class="pc-kpi-card" style="background:var(--avail-bg);border-color:var(--avail-border);color:var(--avail-text);"><div><div style="font-size:0.8rem;font-weight:700;">🟢 ' + esc(bi('متاح للحجز', 'Available')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + availCount + '</div></div><span style="font-size:1.5rem;">🕒</span></div>' +
@@ -9667,13 +9762,28 @@
                 '<button class="chip ' + (filterVal === 'AVAILABLE' ? 'active' : '') + '" type="button" data-pc-slot-filter="AVAILABLE">🟢 ' + esc(bi('متاح (' + availCount + ')', 'Open (' + availCount + ')')) + '</button>' +
               '</div>' +
             '</div>' +
+            '<div class="pc-kbd-bar" id="pcSelectedPatientBar">' +
+              '<div id="pcSelectedPatientSummary" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.84rem;">' +
+                (selectedSlotObj && selectedSlotObj.status !== 'AVAILABLE'
+                  ? '<span style="font-weight:800;color:var(--teal-text);">⌨️ ' + esc(bi('المريض المحدد:', 'Selected:')) + ' ' + esc(selectedSlotObj.patientName) + ' (' + formatMinutesAr((selectedSlotObj.startMinutes || 0) + (selectedSlotObj.delayMinutes || 0)) + ')</span>' +
+                    '<span class="badge ' + selectedMeta.badgeCls + '">' + selectedMeta.icon + ' ' + esc(bi(selectedMeta.ar, selectedMeta.en)) + '</span>'
+                  : '<span style="color:var(--text-muted);font-weight:700;">⌨️ ' + esc(bi('انقر على صف مريض أو استخدم ↑ / ↓ للتحديد وتغيير الحالة بضغطة مفتاح', 'Click a patient row or press ↑ / ↓ to select and update status')) + '</span>') +
+              '</div>' +
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
+                '<button class="pc-kbd-chip" type="button" data-pc-kbd-action="F1"><span class="pc-kbd-key">F1</span><span>⏳ ' + esc(bi('قادم', 'Upcoming')) + '</span></button>' +
+                '<button class="pc-kbd-chip" type="button" data-pc-kbd-action="F2"><span class="pc-kbd-key">F2</span><span>✅ ' + esc(bi('تم الكشف', 'Done')) + '</span></button>' +
+                '<button class="pc-kbd-chip" type="button" data-pc-kbd-action="F3"><span class="pc-kbd-key">F3</span><span>⚠️ ' + esc(bi('تغيب', 'No-Show')) + '</span></button>' +
+                '<button class="pc-kbd-chip" type="button" data-pc-kbd-action="F4"><span class="pc-kbd-key">F4</span><span>⏭️ ' + esc(bi('تم الكشف + التالي', 'Done + Next')) + '</span></button>' +
+                '<span class="pc-shortcut-pill" style="background:#fff;">↑ / ↓ ' + esc(bi('تحديد صف', 'Move Row')) + '</span>' +
+              '</div>' +
+            '</div>' +
             '<div class="pc-table-scroll">' +
               '<table class="pc-slots-table">' +
                 '<thead><tr>' +
                   '<th>#</th>' +
                   '<th>' + esc(bi('الموعد', 'Time')) + '</th>' +
                   '<th>' + esc(bi('بيانات المريض', 'Patient Details')) + '</th>' +
-                  '<th>' + esc(bi('الحالة (تغيير بضغطة واحدة)', 'Status (1-Tap Update)')) + '</th>' +
+                  '<th>' + esc(bi('حالة الحجز (تغيير سريع)', 'Booking Status (Quick Toggle)')) + '</th>' +
                   '<th>' + esc(bi('الإجراءات السريعة', 'Quick Actions')) + '</th>' +
                 '</tr></thead>' +
                 '<tbody>' +
@@ -9691,21 +9801,24 @@
                               (slot.patientPhone && normalizePhoneDigits(a.phone) === normalizePhoneDigits(slot.patientPhone))
                             )
                           : null;
-                        return '<tr class="' + (isSelectedRow ? 'pc-row-selected' : '') + '" data-select-desktop-slot="' + esc(slot.id) + '">' +
-                          '<td><strong>#' + turnNum + '</strong></td>' +
-                          '<td style="white-space:nowrap;"><span class="badge ' + meta.badgeCls + '" style="font-size:0.92rem;padding:5px 10px;">' + formatMinutesAr(eff) + '</span></td>' +
+                        return '<tr class="' + meta.rowCls + (isSelectedRow ? ' pc-row-selected' : '') + '" data-select-desktop-slot="' + esc(slot.id) + '">' +
+                          '<td><div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;"><strong>#' + turnNum + '</strong><span class="pc-selected-pill">⌨️ ' + esc(bi('محدد', 'Active')) + '</span></div></td>' +
+                          '<td style="white-space:nowrap;"><span class="badge ' + meta.badgeCls + '" style="font-size:0.9rem;padding:5px 10px;">' + meta.icon + ' ' + formatMinutesAr(eff) + '</span></td>' +
                           '<td>' +
                             (slot.status === 'AVAILABLE'
-                              ? '<span style="color:var(--avail-text);font-weight:700;">' + esc(bi('موعد متاح للحجز', 'Available Slot')) + '</span>'
-                              : '<div style="font-weight:800;font-size:0.95rem;">' + esc(slot.patientName) + '</div>' +
+                              ? '<span style="color:var(--avail-text);font-weight:700;">🟢 ' + esc(bi('موعد متاح للحجز', 'Available Slot')) + '</span>'
+                              : '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+                                  '<span style="font-weight:800;font-size:0.95rem;">' + esc(slot.patientName) + '</span>' +
+                                  '<span class="badge ' + meta.badgeCls + '" style="font-size:0.74rem;padding:2px 8px;">' + meta.icon + ' ' + esc(bi(meta.ar, meta.en)) + '</span>' +
+                                '</div>' +
                                 '<div style="font-size:0.8rem;color:var(--text-muted);" dir="ltr">' + esc(slot.patientPhone || '-') + ' <span style="direction:rtl;">• ' + esc(sourceText) + '</span></div>') +
                           '</td>' +
                           '<td>' +
                             (slot.status === 'AVAILABLE'
-                              ? '<span class="badge badge-avail">🟢 ' + esc(bi('متاح', 'Open')) + '</span>'
+                              ? '<span class="badge pc-status-badge-lg badge-avail">🟢 ' + esc(bi('متاح للحجز', 'Available')) + '</span>'
                               : '<div style="display:flex;flex-direction:column;gap:6px;">' +
-                                  '<div><span class="badge ' + meta.badgeCls + '">' + meta.icon + ' ' + esc(bi(meta.ar, meta.en)) + '</span></div>' +
-                                  renderSlotStatusToggleBarHtml(slot) +
+                                  '<div><span class="badge pc-status-badge-lg ' + meta.badgeCls + '">' + meta.icon + ' ' + esc(bi(meta.ar, meta.en)) + '</span></div>' +
+                                  renderSlotStatusToggleBarHtml(slot, true) +
                                 '</div>') +
                           '</td>' +
                           '<td>' +
@@ -9869,6 +9982,11 @@
                   '<button class="btn btn-danger-outline btn-block" data-doctor-logout="1" type="button" style="min-height:40px;font-size:0.85rem;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
                 '</div>' +
                 '<div style="display:flex;gap:4px;flex-wrap:wrap;padding-top:4px;">' +
+                  '<span class="pc-shortcut-pill">F1 ⏳ ' + esc(bi('قادم', 'Upcoming')) + '</span>' +
+                  '<span class="pc-shortcut-pill">F2 ✅ ' + esc(bi('تم الكشف', 'Done')) + '</span>' +
+                  '<span class="pc-shortcut-pill">F3 ⚠️ ' + esc(bi('تغيب', 'No-Show')) + '</span>' +
+                  '<span class="pc-shortcut-pill">F4 ⏭️ ' + esc(bi('تم+التالي', 'Done+Next')) + '</span>' +
+                  '<span class="pc-shortcut-pill">↑↓ ' + esc(bi('تحديد', 'Select')) + '</span>' +
                   '<span class="pc-shortcut-pill">Ctrl+P ' + esc(bi('طباعة', 'Print')) + '</span>' +
                   '<span class="pc-shortcut-pill">/ ' + esc(bi('بحث', 'Search')) + '</span>' +
                   '<span class="pc-shortcut-pill">Esc ' + esc(bi('إغلاق', 'Close')) + '</span>' +
@@ -15356,13 +15474,81 @@
           };
         });
 
+        function syncDesktopSlotSelectionDom() {
+          document.querySelectorAll('[data-select-desktop-slot]').forEach((r) => {
+            r.classList.toggle('pc-row-selected', r.getAttribute('data-select-desktop-slot') === ui.selectedDesktopSlotId);
+          });
+          const summaryEl = document.getElementById('pcSelectedPatientSummary');
+          if (summaryEl) {
+            const selSlot = ui.selectedDesktopSlotId ? db.slots.find((s) => s.id === ui.selectedDesktopSlotId) : null;
+            if (selSlot && selSlot.status !== 'AVAILABLE') {
+              const sMeta = getSlotStatusMetaWeb(selSlot.status);
+              summaryEl.innerHTML =
+                '<span style="font-weight:800;color:var(--teal-text);">⌨️ ' + esc(bi('المريض المحدد:', 'Selected:')) + ' ' + esc(selSlot.patientName) + ' (' + formatMinutesAr((selSlot.startMinutes || 0) + (selSlot.delayMinutes || 0)) + ')</span>' +
+                '<span class="badge ' + sMeta.badgeCls + '">' + sMeta.icon + ' ' + esc(bi(sMeta.ar, sMeta.en)) + '</span>';
+            } else {
+              summaryEl.innerHTML = '<span style="color:var(--text-muted);font-weight:700;">⌨️ ' + esc(bi('انقر على صف مريض أو استخدم ↑ / ↓ للتحديد وتغيير الحالة بضغطة مفتاح', 'Click a patient row or press ↑ / ↓ to select and update status')) + '</span>';
+            }
+          }
+        }
+
+        function handleDesktopClinicShortcutKey(keyName) {
+          const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+          let targetSlot = ui.selectedDesktopSlotId
+            ? docSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE')
+            : null;
+          if (!targetSlot) {
+            targetSlot = docSlots.find((s) => s.status === 'BOOKED') || docSlots.find((s) => s.status !== 'AVAILABLE') || null;
+            if (targetSlot) ui.selectedDesktopSlotId = targetSlot.id;
+          }
+          if (!targetSlot) {
+            showToast(bi('لا يوجد مريض محجوز محدد حالياً لتغيير حالته', 'No booked patient is currently selected'));
+            return false;
+          }
+          if (keyName === 'F1') {
+            return updateSlotStatusByClinicWeb(targetSlot.id, 'BOOKED');
+          }
+          if (keyName === 'F2') {
+            return updateSlotStatusByClinicWeb(targetSlot.id, 'COMPLETED');
+          }
+          if (keyName === 'F3') {
+            return updateSlotStatusByClinicWeb(targetSlot.id, 'NO_SHOW');
+          }
+          if (keyName === 'F4') {
+            const nextUpcoming =
+              docSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED' && (s.startMinutes || 0) > (targetSlot.startMinutes || 0)) ||
+              docSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED') ||
+              null;
+            if (targetSlot.status !== 'COMPLETED') {
+              updateSlotStatusByClinicWeb(targetSlot.id, 'COMPLETED');
+            }
+            if (nextUpcoming) {
+              ui.selectedDesktopSlotId = nextUpcoming.id;
+              renderApp();
+              const nextRow = document.querySelector('[data-select-desktop-slot="' + nextUpcoming.id + '"]');
+              if (nextRow && nextRow.scrollIntoView) {
+                try { nextRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) {}
+              }
+              showToast(bi('⏭️ تم الكشف والانتقال للمريض التالي: ' + nextUpcoming.patientName, '⏭️ Completed & selected next: ' + nextUpcoming.patientName), 2400, { isSuccess: true });
+            } else {
+              showToast(bi('✅ تم إنهاء حالة المريض — لا يوجد مرضى قادمون آخرون اليوم', '✅ Marked Completed — no more upcoming patients today'), 2400, { isSuccess: true });
+            }
+            return true;
+          }
+          return false;
+        }
+
+        document.querySelectorAll('[data-pc-kbd-action]').forEach((btn) => {
+          btn.onclick = function () {
+            handleDesktopClinicShortcutKey(btn.getAttribute('data-pc-kbd-action') || '');
+          };
+        });
+
         document.querySelectorAll('[data-select-desktop-slot]').forEach((row) => {
           row.onclick = function (e) {
             if (e.target && e.target.closest && e.target.closest('button')) return;
             ui.selectedDesktopSlotId = row.getAttribute('data-select-desktop-slot') || '';
-            document.querySelectorAll('[data-select-desktop-slot]').forEach((r) => {
-              r.classList.toggle('pc-row-selected', r.getAttribute('data-select-desktop-slot') === ui.selectedDesktopSlotId);
-            });
+            syncDesktopSlotSelectionDom();
           };
         });
 
@@ -15372,6 +15558,7 @@
             const raw = btn.getAttribute('data-set-slot-status') || '';
             const parts = raw.split(':');
             if (parts.length === 2) {
+              ui.selectedDesktopSlotId = parts[0];
               updateSlotStatusByClinicWeb(parts[0], parts[1]);
             }
           };
@@ -15766,7 +15953,7 @@
         }).catch(function () {});
       }
 
-      // Unlock Web Audio on first gesture & handle PC Keyboard Shortcuts (Ctrl+P, /, Esc)
+      // Unlock Web Audio on first gesture & handle PC Keyboard Shortcuts (F1-F4, Arrows, Ctrl+P, /, Esc)
       document.addEventListener('pointerdown', unlockClinicAudioContext, { passive: true });
       document.addEventListener('keydown', function (e) {
         unlockClinicAudioContext();
@@ -15809,6 +15996,99 @@
           }
           return;
         }
+
+        const mrOpen = document.getElementById('modalRoot');
+        const hasModalOpen = !!(document.getElementById('rxPrintPreviewBackdrop') || (mrOpen && mrOpen.innerHTML && mrOpen.innerHTML.trim() !== ''));
+        if (ui.roleMode === 'DOCTOR' && ui.loggedInDoctorId && !hasModalOpen) {
+          const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
+          if (doc) {
+            const k = String(e.key || '');
+            if (k === 'F1' || k === 'F2' || k === 'F3' || k === 'F4') {
+              e.preventDefault();
+              e.stopPropagation();
+              if (ui.doctorTab !== 'SLOTS' && ui.doctorTab !== 'QUICK_RX') {
+                ui.doctorTab = 'SLOTS';
+              }
+              const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+              let targetSlot = ui.selectedDesktopSlotId
+                ? docSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE')
+                : null;
+              if (!targetSlot) {
+                targetSlot = docSlots.find((s) => s.status === 'BOOKED') || docSlots.find((s) => s.status !== 'AVAILABLE') || null;
+                if (targetSlot) ui.selectedDesktopSlotId = targetSlot.id;
+              }
+              if (!targetSlot) {
+                showToast(bi('لا يوجد مريض محجوز محدد حالياً لتغيير حالته', 'No booked patient is currently selected'));
+                return;
+              }
+              if (k === 'F1') {
+                updateSlotStatusByClinicWeb(targetSlot.id, 'BOOKED');
+              } else if (k === 'F2') {
+                updateSlotStatusByClinicWeb(targetSlot.id, 'COMPLETED');
+              } else if (k === 'F3') {
+                updateSlotStatusByClinicWeb(targetSlot.id, 'NO_SHOW');
+              } else if (k === 'F4') {
+                const nextUpcoming =
+                  docSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED' && (s.startMinutes || 0) > (targetSlot.startMinutes || 0)) ||
+                  docSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED') ||
+                  null;
+                if (targetSlot.status !== 'COMPLETED') {
+                  updateSlotStatusByClinicWeb(targetSlot.id, 'COMPLETED');
+                }
+                if (nextUpcoming) {
+                  ui.selectedDesktopSlotId = nextUpcoming.id;
+                  renderApp();
+                  const nextRow = document.querySelector('[data-select-desktop-slot="' + nextUpcoming.id + '"]');
+                  if (nextRow && nextRow.scrollIntoView) {
+                    try { nextRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) {}
+                  }
+                  showToast(bi('⏭️ تم الكشف والانتقال للمريض التالي: ' + nextUpcoming.patientName, '⏭️ Completed & selected next: ' + nextUpcoming.patientName), 2400, { isSuccess: true });
+                } else {
+                  showToast(bi('✅ تم إنهاء حالة المريض — لا يوجد مرضى قادمون آخرون اليوم', '✅ Marked Completed — no more upcoming patients today'), 2400, { isSuccess: true });
+                }
+              }
+              return;
+            }
+
+            const activeEl = document.activeElement;
+            const activeTag = activeEl && activeEl.tagName ? activeEl.tagName.toUpperCase() : '';
+            const isTypingField = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT' || (activeEl && activeEl.isContentEditable);
+
+            if ((k === 'ArrowDown' || k === 'ArrowUp') && !isTypingField && (ui.doctorTab === 'SLOTS' || !ui.doctorTab)) {
+              const rows = Array.from(document.querySelectorAll('.pc-slots-table tbody tr[data-select-desktop-slot]'));
+              if (rows.length > 0) {
+                e.preventDefault();
+                const curIdx = rows.findIndex((r) => r.getAttribute('data-select-desktop-slot') === ui.selectedDesktopSlotId);
+                let nextIdx = 0;
+                if (k === 'ArrowDown') {
+                  nextIdx = curIdx >= 0 ? (curIdx + 1) % rows.length : 0;
+                } else {
+                  nextIdx = curIdx >= 0 ? (curIdx - 1 + rows.length) % rows.length : rows.length - 1;
+                }
+                const nextRow = rows[nextIdx];
+                ui.selectedDesktopSlotId = nextRow.getAttribute('data-select-desktop-slot') || '';
+                rows.forEach((r) => r.classList.toggle('pc-row-selected', r === nextRow));
+                const summaryEl = document.getElementById('pcSelectedPatientSummary');
+                if (summaryEl) {
+                  const selSlot = db.slots.find((s) => s.id === ui.selectedDesktopSlotId);
+                  if (selSlot && selSlot.status !== 'AVAILABLE') {
+                    const sMeta = getSlotStatusMetaWeb(selSlot.status);
+                    summaryEl.innerHTML =
+                      '<span style="font-weight:800;color:var(--teal-text);">⌨️ ' + esc(bi('المريض المحدد:', 'Selected:')) + ' ' + esc(selSlot.patientName) + ' (' + formatMinutesAr((selSlot.startMinutes || 0) + (selSlot.delayMinutes || 0)) + ')</span>' +
+                      '<span class="badge ' + sMeta.badgeCls + '">' + sMeta.icon + ' ' + esc(bi(sMeta.ar, sMeta.en)) + '</span>';
+                  } else {
+                    summaryEl.innerHTML = '<span style="color:var(--text-muted);font-weight:700;">⌨️ ' + esc(bi('انقر على صف مريض أو استخدم ↑ / ↓ للتحديد وتغيير الحالة بضغطة مفتاح', 'Click a patient row or press ↑ / ↓ to select and update status')) + '</span>';
+                  }
+                }
+                if (nextRow.scrollIntoView) {
+                  try { nextRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) {}
+                }
+                return;
+              }
+            }
+          }
+        }
+
         if (e.key === '/' && ui.roleMode === 'DOCTOR' && ui.loggedInDoctorId && !isUiBusyForBackgroundRender()) {
           const searchInp = document.getElementById('pcSlotsSearchInput');
           if (searchInp) {
