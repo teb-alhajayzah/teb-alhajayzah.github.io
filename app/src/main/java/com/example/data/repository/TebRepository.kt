@@ -1641,10 +1641,41 @@ class TebRepository(
         return Result.success(Unit)
     }
 
+    suspend fun updateSlotStatusByClinic(
+        slotId: String,
+        newStatus: String,
+    ): Result<AppointmentSlotEntity> {
+        val slot = dao.getSlotById(slotId)
+            ?: return Result.failure(IllegalStateException("الموعد غير موجود"))
+        val allowedTargets = setOf(SlotStatus.BOOKED, SlotStatus.COMPLETED, SlotStatus.NO_SHOW)
+        if (newStatus !in allowedTargets) {
+            return Result.failure(IllegalArgumentException("حالة غير صالحة للموعد"))
+        }
+        if (slot.status == SlotStatus.AVAILABLE && slot.patientName.isBlank()) {
+            return Result.failure(IllegalStateException("لا يمكن تغيير حالة موعد فارغ غير محجوز"))
+        }
+        val doctor = dao.getDoctorById(slot.doctorId)
+        val updated = slot.copy(status = newStatus)
+        dao.updateSlot(updated)
+        if (newStatus == SlotStatus.BOOKED) {
+            TebNotificationHelper.scheduleAppointmentReminders(
+                context = appContext,
+                slotId = updated.id,
+                doctorName = doctor?.doctorName.orEmpty(),
+                clinicName = doctor?.clinicName.orEmpty(),
+                effectiveMinutes = updated.effectiveMinutes,
+            )
+        } else {
+            TebNotificationHelper.cancelAppointmentReminders(appContext, updated.id)
+        }
+        pushDocAsync("slots", updated.id) { FirestoreCloudSyncService.slotToJson(updated) }
+        return Result.success(updated)
+    }
+
     suspend fun cancelSlotByClinic(slotId: String): Result<Unit> {
         val slot = dao.getSlotById(slotId)
             ?: return Result.failure(IllegalStateException("الموعد غير موجود"))
-        if (slot.status != SlotStatus.BOOKED) {
+        if (slot.status != SlotStatus.BOOKED && slot.status != SlotStatus.NO_SHOW) {
             return Result.success(Unit)
         }
         val doctor = dao.getDoctorById(slot.doctorId)

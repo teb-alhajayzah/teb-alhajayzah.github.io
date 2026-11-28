@@ -24,7 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FamilyLinkRequestEntity::class,
         PlatformVisitorHitEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = false,
 )
 abstract class TebDatabase : RoomDatabase() {
@@ -267,6 +267,19 @@ abstract class TebDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `rxClinicName` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `rxDoctorTitle` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `rxSpecialtyDegree` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `rxLogoDataUrl` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `rxAddress` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `rxPhones` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `clinic_doctors` ADD COLUMN `rxPaperSize` TEXT NOT NULL DEFAULT 'A5'")
+                db.execSQL("ALTER TABLE `medical_records` ADD COLUMN `followUpDate` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(context: Context): TebDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
@@ -292,6 +305,7 @@ abstract class TebDatabase : RoomDatabase() {
                             MIGRATION_11_12,
                             MIGRATION_12_13,
                             MIGRATION_13_14,
+                            MIGRATION_14_15,
                         )
                         .fallbackToDestructiveMigrationOnDowngrade()
                         .build()

@@ -1,21 +1,56 @@
 {
+  "id": "./",
   "name": "طب الحجايزة - حجز العيادات والملف الطبي",
   "short_name": "طب الحجايزة",
   "description": "منصة طب الحجايزة لحجز مواعيد العيادات ومستشفى الحجايزة التخصصي وإدارة الملف الطبي الموحد والروشتة الذكية.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
   "dir": "rtl",
   "lang": "ar",
   "background_color": "#F4F8F9",
   "theme_color": "#0D7377",
+  "categories": ["medical", "health"],
   "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
     {
       "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "بوابة العيادات والأطباء",
+      "short_name": "العيادات",
+      "url": "./?portal=clinic",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "واجهة المريض",
+      "short_name": "المرضى",
+      "url": "./",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

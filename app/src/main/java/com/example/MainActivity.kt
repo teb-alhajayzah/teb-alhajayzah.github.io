@@ -629,6 +629,7 @@ fun TebAlHajayzahAppRoot(
                                                         onBookManualPhoneSlot = viewModel::bookManualPhoneSlot,
                                                         onCancelSlot = viewModel::cancelBookingByClinic,
                                                         onRescheduleSlot = viewModel::rescheduleBookingByClinic,
+                                                        onUpdateSlotStatus = viewModel::updateSlotStatusByClinic,
                                                         onDelayDoctor = viewModel::delayDoctorAppointments,
                                                         onGenerateSchedule = viewModel::generateSchedule,
                                                         onCompleteVisit = { slotId, diag, meds, notes, path, diagEn, medsEn, notesEn, repAr, repEn ->

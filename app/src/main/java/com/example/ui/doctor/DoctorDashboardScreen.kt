@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
@@ -233,6 +234,7 @@ fun DoctorDashboardScreen(
     onBookManualPhoneSlot: (slotId: String, name: String, phone: String) -> Unit,
     onCancelSlot: (slotId: String) -> Unit,
     onRescheduleSlot: (fromSlotId: String, toSlotId: String) -> Unit = { _, _ -> },
+    onUpdateSlotStatus: (slotId: String, newStatus: String) -> Unit = { _, _ -> },
     onDelayDoctor: (doctorId: String, delayMinutes: Int) -> Unit,
     onGenerateSchedule: (doctorId: String, startMin: Int, endMin: Int, durationMin: Int) -> Unit,
     onCompleteVisit: (
@@ -274,6 +276,7 @@ fun DoctorDashboardScreen(
     val availableCount = slots.count { it.status == SlotStatus.AVAILABLE }
     val bookedCount = slots.count { it.status == SlotStatus.BOOKED }
     val completedCount = slots.count { it.status == SlotStatus.COMPLETED }
+    val noShowCount = slots.count { it.status == SlotStatus.NO_SHOW }
     val unreadClinicMsgs = state.unreadMessagesCountForDoctor(activeDoctor.id)
 
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -1038,9 +1041,10 @@ fun DoctorDashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                StatPill(bi(isEn, "محجوز", "Booked"), bookedCount.toString(), SlotBookedBg, SlotBookedText, Modifier.weight(1f))
+                                StatPill(bi(isEn, "قادم / محجوز", "Upcoming"), bookedCount.toString(), SlotBookedBg, SlotBookedText, Modifier.weight(1f))
                                 StatPill(bi(isEn, "متاح", "Open"), availableCount.toString(), SlotAvailableBg, SlotAvailableText, Modifier.weight(1f))
                                 StatPill(bi(isEn, "تم الكشف", "Done"), completedCount.toString(), SlotCompletedBg, SlotCompletedText, Modifier.weight(1f))
+                                StatPill(bi(isEn, "تغيب", "No-Show"), noShowCount.toString(), DelayWarningBg, DelayWarningText, Modifier.weight(1f))
                             }
 
                             Row(
@@ -1103,6 +1107,7 @@ fun DoctorDashboardScreen(
                         onViewEmr = { slotForEmrView = slot },
                         onWritePrescription = { slotForPrescription = slot },
                         onReschedule = { slotForReschedule = slot },
+                        onUpdateStatus = { newStatus -> onUpdateSlotStatus(slot.id, newStatus) },
                         onCancel = { onCancelSlot(slot.id) },
                     )
                 }
@@ -1392,16 +1397,19 @@ private fun DoctorSlotCard(
     onViewEmr: () -> Unit,
     onWritePrescription: () -> Unit,
     onReschedule: () -> Unit = {},
+    onUpdateStatus: (String) -> Unit = {},
     onCancel: () -> Unit,
 ) {
     val bgColor = when (slot.status) {
         SlotStatus.AVAILABLE -> SlotAvailableBg.copy(alpha = 0.65f)
         SlotStatus.BOOKED -> SlotBookedBg.copy(alpha = 0.55f)
+        SlotStatus.NO_SHOW -> DelayWarningBg.copy(alpha = 0.8f)
         else -> SlotCompletedBg.copy(alpha = 0.7f)
     }
     val borderColor = when (slot.status) {
         SlotStatus.AVAILABLE -> SlotAvailableBorder
         SlotStatus.BOOKED -> SlotBookedBorder
+        SlotStatus.NO_SHOW -> DelayWarningBorder
         else -> SlotCompletedBorder
     }
 
@@ -1422,7 +1430,11 @@ private fun DoctorSlotCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Surface(
                         color = bgColor,
                         shape = RoundedCornerShape(10.dp),
@@ -1436,12 +1448,13 @@ private fun DoctorSlotCard(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         )
                     }
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = when (slot.status) {
                                 SlotStatus.AVAILABLE -> bi(isEn, "موعد متاح للحجز", "Open Slot")
                                 SlotStatus.BOOKED -> slot.patientName
-                                else -> bi(isEn, "${slot.patientName} (تم الكشف ✓)", "${slot.patientName} (Completed ✓)")
+                                SlotStatus.NO_SHOW -> slot.patientName
+                                else -> slot.patientName
                             },
                             style = MaterialTheme.typography.titleMedium,
                         )
@@ -1458,6 +1471,107 @@ private fun DoctorSlotCard(
                             )
                         }
                     }
+                }
+                if (slot.status != SlotStatus.AVAILABLE) {
+                    val statusLabel = when (slot.status) {
+                        SlotStatus.BOOKED -> bi(isEn, "قادم", "Upcoming")
+                        SlotStatus.NO_SHOW -> bi(isEn, "تغيب", "No-Show")
+                        else -> bi(isEn, "تم الكشف", "Completed")
+                    }
+                    val statusIcon = when (slot.status) {
+                        SlotStatus.BOOKED -> Icons.Filled.Schedule
+                        SlotStatus.NO_SHOW -> Icons.Filled.Warning
+                        else -> Icons.Filled.CheckCircle
+                    }
+                    val statusTextColor = when (slot.status) {
+                        SlotStatus.BOOKED -> SlotBookedText
+                        SlotStatus.NO_SHOW -> DelayWarningText
+                        else -> SlotCompletedText
+                    }
+                    Surface(
+                        color = bgColor,
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(1.dp, borderColor),
+                        modifier = Modifier.testTag("slot_status_badge_${slot.id}"),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = statusIcon,
+                                contentDescription = statusLabel,
+                                tint = borderColor,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                text = statusLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = statusTextColor,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (slot.status != SlotStatus.AVAILABLE) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val isUpcoming = slot.status == SlotStatus.BOOKED
+                    val isCompleted = slot.status == SlotStatus.COMPLETED
+                    val isNoShow = slot.status == SlotStatus.NO_SHOW
+                    FilterChip(
+                        selected = isUpcoming,
+                        onClick = { if (!isUpcoming) onUpdateStatus(SlotStatus.BOOKED) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(15.dp))
+                        },
+                        label = { Text(bi(isEn, "قادم", "Upcoming"), maxLines = 1) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = SlotBookedBg,
+                            selectedLabelColor = SlotBookedText,
+                            selectedLeadingIconColor = SlotBookedBorder,
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("status_upcoming_${slot.id}"),
+                    )
+                    FilterChip(
+                        selected = isCompleted,
+                        onClick = { if (!isCompleted) onUpdateStatus(SlotStatus.COMPLETED) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(15.dp))
+                        },
+                        label = { Text(bi(isEn, "تم الكشف", "Done"), maxLines = 1) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = SlotAvailableBg,
+                            selectedLabelColor = SlotAvailableText,
+                            selectedLeadingIconColor = SlotAvailableBorder,
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("status_completed_${slot.id}"),
+                    )
+                    FilterChip(
+                        selected = isNoShow,
+                        onClick = { if (!isNoShow) onUpdateStatus(SlotStatus.NO_SHOW) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(15.dp))
+                        },
+                        label = { Text(bi(isEn, "تغيب", "No-Show"), maxLines = 1) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = DelayWarningBg,
+                            selectedLabelColor = DelayWarningText,
+                            selectedLeadingIconColor = DelayWarningBorder,
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("status_noshow_${slot.id}"),
+                    )
                 }
             }
 
@@ -1522,21 +1636,34 @@ private fun DoctorSlotCard(
                             onClick = onCancel,
                             modifier = Modifier.testTag("clinic_cancel_${slot.id}"),
                         ) {
-                            Text(bi(isEn, "إلغاء الحجز وإتاحته", "Cancel & Release"), color = SlotBookedBorder)
+                            Text(bi(isEn, "إلغاء الحجز وإتاحته", "Cancel & Free"), color = SlotBookedBorder)
                         }
                     }
                 }
 
-                SlotStatus.COMPLETED -> {
-                    OutlinedButton(
-                        onClick = onViewEmr,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
+                else -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Filled.FolderShared, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(bi(isEn, "عرض الملف الطبي والروشتة", "View Medical File & Rx"))
+                        OutlinedButton(
+                            onClick = onViewEmr,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                        ) {
+                            Icon(Icons.Filled.FolderShared, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(bi(isEn, "عرض الملف الطبي والروشتة", "View Medical File & Rx"))
+                        }
+                        if (slot.status == SlotStatus.NO_SHOW) {
+                            TextButton(
+                                onClick = onCancel,
+                                modifier = Modifier.height(48.dp),
+                            ) {
+                                Text(bi(isEn, "إتاحة الموعد", "Free Slot"), color = SlotBookedBorder)
+                            }
+                        }
                     }
                 }
             }

@@ -11,7 +11,8 @@
   <title>طب الحجايزة | حجز المواعيد والملف الطبي</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -1314,15 +1315,107 @@
 
     @media print {
       body > *:not(#printSheet) { display: none !important; }
+      html, body {
+        background: #FFFFFF !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
       #printSheet {
         display: block !important;
-        padding: 20px;
-        color: #132226;
+        padding: 0;
+        color: #0F172A;
         direction: rtl;
+        font-family: 'Cairo', 'Tajawal', Arial, sans-serif;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
       #printSheet.rx-print-ltr {
         direction: ltr;
         text-align: left;
+      }
+      .rx-sheet-frame {
+        border: 2px solid #0D7377;
+        border-radius: 12px;
+        background: #FFFFFF;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-sizing: border-box;
+      }
+      .rx-sheet-frame.rx-paper-a5 {
+        padding: 12px 14px;
+        min-height: 188mm;
+        font-size: 12px;
+      }
+      .rx-sheet-frame.rx-paper-a4 {
+        padding: 18px 22px;
+        min-height: 266mm;
+        font-size: 13.5px;
+      }
+      .rx-brand-header {
+        border-bottom: 2.5px solid #0D7377;
+        padding-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .rx-brand-identity {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        flex: 1;
+      }
+      .rx-brand-logo {
+        width: 58px;
+        height: 58px;
+        object-fit: contain;
+        border-radius: 10px;
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        padding: 2px;
+        flex-shrink: 0;
+      }
+      .rx-paper-a4 .rx-brand-logo {
+        width: 72px;
+        height: 72px;
+      }
+      .rx-brand-rx-badge {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        background: #E0F2F1;
+        border: 1.5px solid #0D7377;
+        color: #0D7377;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: 900;
+        font-family: Georgia, serif;
+        flex-shrink: 0;
+      }
+      .rx-patient-strip {
+        margin: 10px 0;
+        padding: 8px 12px;
+        background: #F4F8F9;
+        border: 1px solid #CBD5E1;
+        border-radius: 9px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 12px;
+        font-size: 0.94em;
+      }
+      .rx-followup-pill {
+        margin-top: 8px;
+        padding: 7px 11px;
+        background: #ECFDF5;
+        border: 1.5px solid #16A34A;
+        border-radius: 8px;
+        color: #14532D;
+        font-weight: 800;
+        display: inline-block;
       }
       .rx-print-header {
         border-bottom: 3px solid #0D7377;
@@ -1334,12 +1427,16 @@
       .rx-table {
         width: 100%;
         border-collapse: collapse;
-        margin-top: 14px;
+        margin-top: 8px;
       }
       .rx-table th, .rx-table td {
         border: 1px solid #CBD5E1;
-        padding: 10px;
+        padding: 7px 9px;
         text-align: right;
+        vertical-align: top;
+      }
+      .rx-paper-a4 .rx-table th, .rx-paper-a4 .rx-table td {
+        padding: 9px 11px;
       }
       #printSheet.rx-print-ltr .rx-table th,
       #printSheet.rx-print-ltr .rx-table td {
@@ -1347,6 +1444,42 @@
       }
       .rx-table th {
         background: #E0F2F1;
+        color: #0F4C50;
+      }
+      .rx-brand-footer {
+        margin-top: 14px;
+        border-top: 2px solid #0D7377;
+        padding-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 0.88em;
+        color: #334155;
+      }
+      .rx-brand-footer-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .pc-print-receipt {
+        border: 2px solid #0D7377;
+        border-radius: 14px;
+        padding: 18px;
+        max-width: 700px;
+        margin: 0 auto;
+        background: #fff;
+      }
+      .pc-print-meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin: 12px 0;
+        padding: 12px;
+        background: #F4F8F9;
+        border: 1px solid #CBD5E1;
+        border-radius: 10px;
       }
       .otp-print-grid {
         display: grid;
@@ -1362,6 +1495,16 @@
         background: #F8FCFC;
         page-break-inside: avoid;
       }
+    }
+
+    .rx-letterhead-preview {
+      border: 1.5px solid #0D7377;
+      border-radius: 14px;
+      background: #FFFFFF;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
     .rx-lang-pill {
@@ -1562,6 +1705,234 @@
     @media (min-width: 720px) {
       .sections-grid { grid-template-columns: repeat(4, 1fr); }
       .footer-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* 1-Tap Status Badge & Quick Toggle Pills (Mobile & Desktop) */
+    .badge-noshow {
+      background: var(--warn-bg);
+      color: var(--warn-text);
+      border: 1px solid var(--warn-border);
+    }
+
+    .status-pill-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 34px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.14s ease;
+      white-space: nowrap;
+    }
+
+    .status-pill-btn:hover {
+      border-color: var(--teal);
+      color: var(--teal);
+      background: var(--surface-soft);
+    }
+
+    .status-pill-btn.active-upcoming {
+      background: var(--booked-bg);
+      border-color: var(--booked-border);
+      color: var(--booked-text);
+    }
+
+    .status-pill-btn.active-completed {
+      background: var(--avail-bg);
+      border-color: var(--avail-border);
+      color: var(--avail-text);
+    }
+
+    .status-pill-btn.active-noshow {
+      background: var(--warn-bg);
+      border-color: var(--warn-border);
+      color: var(--warn-text);
+    }
+
+    .pc-only-sidebar, .pc-desktop-table-wrap { display: none; }
+    .mobile-clinic-only { display: block; }
+
+    /* Responsive PC & Laptop Clinic Dashboard (min-width: 1024px) */
+    @media (min-width: 1024px) {
+      body.pc-clinic-mode {
+        padding-bottom: 24px;
+      }
+      body.pc-clinic-mode .header-inner,
+      body.pc-clinic-mode .container,
+      body.pc-clinic-mode .site-footer {
+        max-width: 1480px;
+        width: 100%;
+        padding-left: 28px;
+        padding-right: 28px;
+      }
+      body.pc-clinic-mode .pc-only-sidebar {
+        display: flex;
+      }
+      body.pc-clinic-mode .pc-desktop-table-wrap {
+        display: block;
+      }
+      body.pc-clinic-mode .mobile-clinic-only {
+        display: none;
+      }
+      .pc-clinic-layout {
+        display: grid;
+        grid-template-columns: 272px minmax(0, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+      .pc-clinic-sidebar {
+        position: sticky;
+        top: 126px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-shadow: var(--shadow);
+      }
+      .pc-nav-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 11px 13px;
+        min-height: 46px;
+        border-radius: 13px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text);
+        font-size: 0.92rem;
+        font-weight: 700;
+        cursor: pointer;
+        text-align: start;
+        transition: all 0.14s ease;
+      }
+      .pc-nav-item:hover {
+        background: var(--surface-soft);
+        border-color: var(--border);
+      }
+      .pc-nav-item.active {
+        background: var(--teal);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(13, 115, 119, 0.22);
+      }
+      .pc-clinic-main {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .pc-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .pc-kpi-card {
+        border-radius: 16px;
+        padding: 14px 16px;
+        border: 1.5px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .pc-table-scroll {
+        width: 100%;
+        overflow-x: auto;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .pc-slots-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      .pc-slots-table th {
+        background: var(--teal-soft);
+        color: var(--teal-text);
+        font-weight: 800;
+        padding: 12px 12px;
+        text-align: start;
+        border-bottom: 1.5px solid var(--border);
+        white-space: nowrap;
+      }
+      .pc-slots-table td {
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+      .pc-slots-table tr:last-child td {
+        border-bottom: none;
+      }
+      .pc-slots-table tr.pc-row-selected {
+        background: rgba(13, 115, 119, 0.06);
+      }
+      .pc-slots-table tr:hover {
+        background: rgba(234, 240, 242, 0.55);
+      }
+      .pc-row-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .pc-act-btn {
+        min-height: 36px;
+        padding: 5px 10px;
+        border-radius: 10px;
+        border: 1.5px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.8rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+      }
+      .pc-act-btn:hover {
+        border-color: var(--teal);
+        color: var(--teal);
+        background: var(--teal-soft);
+      }
+      .pc-act-btn.primary {
+        background: var(--teal);
+        border-color: var(--teal);
+        color: #fff;
+      }
+      .pc-act-btn.green {
+        background: #16A34A;
+        border-color: #16A34A;
+        color: #fff;
+      }
+      .pc-act-btn.danger {
+        color: var(--booked-border);
+        border-color: rgba(220, 38, 38, 0.4);
+      }
+      .pc-shortcut-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        border-radius: 8px;
+        background: var(--surface-soft);
+        border: 1px solid var(--border);
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: var(--text-muted);
+      }
     }
   </style>
 </head>
@@ -3707,6 +4078,24 @@
               }
             }
           });
+        } else if (wasHydrated && colDef.stateKey === 'slots') {
+          if (ui && ui.loggedInDoctorId) {
+            const prevSlotsById = {};
+            existingLocal.forEach((s) => { if (s && s.id) prevSlotsById[s.id] = s; });
+            const newDoctorBookings = remoteList.filter((rs) => {
+              if (!rs || rs.doctorId !== ui.loggedInDoctorId || rs.status !== 'BOOKED') return false;
+              const prevS = prevSlotsById[rs.id];
+              return !prevS || prevS.status !== 'BOOKED' || prevS.patientName !== rs.patientName;
+            });
+            if (newDoctorBookings.length > 0) {
+              const latestB = newDoctorBookings[newDoctorBookings.length - 1];
+              const bookTitle = '🗓️ حجز مريض جديد في العيادة!';
+              const bookBody = (latestB.patientName || 'مريض') + ' — ' + formatMinutesAr((latestB.startMinutes || 0) + (latestB.delayMinutes || 0)) + (latestB.patientPhone ? ' (' + latestB.patientPhone + ')' : '');
+              playClinicDesktopAlertSound();
+              triggerPlatformNotification(bookTitle, bookBody, 'clinic_slot_' + latestB.id + '_' + Date.now());
+              showToast(bookTitle + ': ' + bookBody, 5000, { isSuccess: true });
+            }
+          }
         } else if (wasHydrated && colDef.stateKey === 'messages') {
           const prevMsgIds = {};
           existingLocal.forEach((m) => { if (m && m.id) prevMsgIds[m.id] = true; });
@@ -3721,6 +4110,20 @@
             const msgTitle = '📩 رسالة دعم جديدة — ' + (lastNew.patientName || lastNew.senderName || 'عميل');
             triggerPlatformNotification(msgTitle, lastNew.body || '', 'remote_msg_' + lastNew.id);
             showToast(msgTitle, 4500);
+          } else if (ui && ui.loggedInDoctorId) {
+            const newClinicMsgs = remoteList.filter((rm) =>
+              rm && rm.id && !prevMsgIds[rm.id] && !prevMap[safeCloudDocId(rm.id)] &&
+              rm.doctorId === ui.loggedInDoctorId &&
+              rm.senderRole !== 'CLINIC' &&
+              !isMessageReadForRole(rm, 'DOCTOR')
+            );
+            if (newClinicMsgs.length > 0) {
+              const lastClinicMsg = newClinicMsgs[newClinicMsgs.length - 1];
+              const msgTitle = '💬 رسالة مريض جديدة — ' + (lastClinicMsg.patientName || lastClinicMsg.senderName || 'مريض');
+              playClinicDesktopAlertSound();
+              triggerPlatformNotification(msgTitle, lastClinicMsg.body || '', 'remote_cmsg_' + lastClinicMsg.id);
+              showToast(msgTitle, 4800, { isSuccess: true });
+            }
           } else if (db && db.account && ui && !ui.isAdminLoggedIn) {
             const newPatientMsgs = remoteList.filter((rm) =>
               rm && rm.id && !prevMsgIds[rm.id] && !prevMap[safeCloudDocId(rm.id)] &&
@@ -3747,6 +4150,7 @@
           });
           if (newUnreadNotifs.length > 0) {
             const latestN = newUnreadNotifs[0];
+            if (ui && ui.loggedInDoctorId) playClinicDesktopAlertSound();
             triggerPlatformNotification(latestN.senderLabel || '🔔 تنبيه جديد — طب الحجايزة', latestN.message || '', 'remote_n_' + latestN.id);
           }
         }
@@ -4224,6 +4628,113 @@
         }
       }
 
+      const CLINIC_SOUND_PREF_KEY = 'teb_clinic_sound_enabled_v1';
+      let tebAudioCtx = null;
+
+      function isClinicDesktopSoundEnabled() {
+        try {
+          const saved = localStorage.getItem(CLINIC_SOUND_PREF_KEY);
+          return saved !== '0';
+        } catch (e) {
+          return true;
+        }
+      }
+
+      function unlockClinicAudioContext() {
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return null;
+          if (!tebAudioCtx) tebAudioCtx = new AudioCtx();
+          if (tebAudioCtx.state === 'suspended') {
+            tebAudioCtx.resume().catch(function () {});
+          }
+          return tebAudioCtx;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function playClinicDesktopAlertSound(forcePlay) {
+        if (!forcePlay && !isClinicDesktopSoundEnabled()) return false;
+        try {
+          const ctx = unlockClinicAudioContext();
+          if (!ctx) return false;
+          const now = ctx.currentTime;
+          const notes = [880, 1174.66, 1318.51];
+          notes.forEach(function (freq, idx) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.11);
+            gain.gain.setValueAtTime(0.001, now + idx * 0.11);
+            gain.gain.exponentialRampToValueAtTime(0.18, now + idx * 0.11 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.28);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + idx * 0.11);
+            osc.stop(now + idx * 0.11 + 0.3);
+          });
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      const tebPwaInstallState = {
+        deferredPrompt: null,
+        isInstalled: (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || Boolean(window.navigator && window.navigator.standalone)
+      };
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        tebPwaInstallState.deferredPrompt = e;
+        if (ui && ui.roleMode === 'DOCTOR') {
+          renderApp({ deferIfBusy: true });
+        }
+      });
+      window.addEventListener('appinstalled', function () {
+        tebPwaInstallState.deferredPrompt = null;
+        tebPwaInstallState.isInstalled = true;
+        showToast(bi('✅ تم تثبيت نسخة الكمبيوتر (طب الحجايزة) بنجاح!', '✅ Desktop App installed successfully!'), 3600, { isSuccess: true });
+        if (ui && ui.roleMode === 'DOCTOR') renderApp({ deferIfBusy: true });
+      });
+
+      async function triggerDesktopAppInstall() {
+        if (tebPwaInstallState.deferredPrompt) {
+          try {
+            tebPwaInstallState.deferredPrompt.prompt();
+            const choice = await tebPwaInstallState.deferredPrompt.userChoice;
+            tebPwaInstallState.deferredPrompt = null;
+            if (choice && choice.outcome === 'accepted') {
+              showToast(bi('✅ جاري تثبيت تطبيق طب الحجايزة على جهازك...', '✅ Installing Desktop App...'), 3200, { isSuccess: true });
+              return;
+            }
+          } catch (e) {}
+        }
+        openModal(
+          bi('💻 تثبيت نسخة الكمبيوتر (Windows App)', '💻 Install Desktop App (Windows)'),
+          '<div style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div style="background:var(--teal-soft);border:1px solid var(--teal);border-radius:14px;padding:14px;color:var(--teal-text);line-height:1.6;">' +
+              (tebPwaInstallState.isInstalled
+                ? '✅ <strong>' + esc(bi('التطبيق مُثبّت ويعمل الآن كبرنامج سطح مكتب مستقل!', 'App is already installed as a standalone desktop window!')) + '</strong>'
+                : esc(bi('يمكنك تثبيت لوحة العيادة كبرنامج مستقل على سطح المكتب (بدون شريط متصفح) ويعمل بأيقونة مباشرة في شريط المهام:', 'Install the Clinic Dashboard as a standalone Windows app with a desktop & taskbar icon:'))) +
+            '</div>' +
+            '<div class="card" style="padding:12px;background:var(--bg);">' +
+              '<strong>🌐 Google Chrome:</strong><br/>' +
+              '<span style="font-size:0.88rem;color:var(--text-muted);">' + esc(bi('اضغط على أيقونة (💻 تثبيت) يمين شريط العنوان بالأعلى، أو افتح القائمة ⋮ ← حفظ ومشاركة ← تثبيت الصفحة كتطبيق.', 'Click the Install icon (💻) in the top address bar, or Menu ⋮ → Cast, save, and share → Install page as app.')) + '</span>' +
+            '</div>' +
+            '<div class="card" style="padding:12px;background:var(--bg);">' +
+              '<strong>🔷 Microsoft Edge:</strong><br/>' +
+              '<span style="font-size:0.88rem;color:var(--text-muted);">' + esc(bi('اضغط على أيقونة التطبيق (+) في شريط العنوان، أو القائمة ⋯ ← التطبيقات ← تثبيت هذا الموقع كتطبيق.', 'Click the App Available icon (+) in the address bar, or Menu ⋯ → Apps → Install this site as an app.')) + '</span>' +
+            '</div>' +
+            '<button class="btn btn-primary btn-block" id="btnClosePwaHelp" type="button">' + esc(bi('فهمت، إغلاق', 'Got it')) + '</button>' +
+          '</div>',
+          function () {
+            const b = document.getElementById('btnClosePwaHelp');
+            if (b) b.onclick = closeModal;
+          }
+        );
+      }
+
       function triggerPlatformNotification(title, body, tag) {
         const cleanTitle = String(title || 'طب الحجايزة');
         const cleanBody = String(body || '');
@@ -4240,15 +4751,15 @@
             if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistration) {
               navigator.serviceWorker.getRegistration().then((reg) => {
                 if (reg && reg.showNotification) {
-                  reg.showNotification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert', dir: 'rtl' });
+                  reg.showNotification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert', icon: './icon-192.png', dir: 'rtl' });
                 } else {
-                  new Notification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert', dir: 'rtl' });
+                  new Notification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert', icon: './icon-192.png', dir: 'rtl' });
                 }
               }).catch(() => {
-                try { new Notification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert' }); } catch (e2) {}
+                try { new Notification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert', icon: './icon-192.png' }); } catch (e2) {}
               });
             } else {
-              new Notification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert' });
+              new Notification(cleanTitle, { body: cleanBody, tag: tag || 'teb-alert', icon: './icon-192.png' });
             }
             return true;
           }
@@ -4364,9 +4875,36 @@
         };
       }
 
+      function updateSlotStatusByClinicWeb(slotId, newStatus) {
+        const slot = db.slots.find((s) => s.id === slotId);
+        if (!slot) return false;
+        if (slot.status === 'AVAILABLE' && !slot.patientName) {
+          showToast(bi('لا يمكن تغيير حالة موعد فارغ غير محجوز', 'Cannot update status of an empty slot'));
+          return false;
+        }
+        const docObj = db.doctors.find((d) => d.id === slot.doctorId);
+        slot.status = newStatus;
+        if (newStatus === 'BOOKED') {
+          slot.appointmentTimestamp = computeSlotAppointmentTimestampMs(slot);
+          scheduleSlotRemindersWeb(slot, docObj);
+        } else {
+          cancelSlotRemindersWeb(slot.id);
+        }
+        saveState(db);
+        syncDocToFirestoreNamespace('slots', slot.id, slot);
+        const toastMsg = newStatus === 'BOOKED'
+          ? bi('⏳ تم تحديث الحالة إلى: قادم', '⏳ Status updated: Upcoming')
+          : (newStatus === 'COMPLETED'
+              ? bi('✅ تم تحديث الحالة إلى: تم الكشف', '✅ Status updated: Completed')
+              : bi('⚠️ تم تحديث الحالة إلى: تغيب', '⚠️ Status updated: No-Show'));
+        showToast(toastMsg, 2200, { isSuccess: true });
+        renderApp();
+        return true;
+      }
+
       function executeCancelSlot(slotId, actorRole) {
         const slot = db.slots.find((s) => s.id === slotId);
-        if (!slot || slot.status !== 'BOOKED') return false;
+        if (!slot || (slot.status !== 'BOOKED' && slot.status !== 'NO_SHOW')) return false;
         const isPatient = actorRole === 'PATIENT';
         if (isPatient) {
           const gate = getPatientModifyEligibility(slot);
@@ -4418,7 +4956,7 @@
             senderLabel: clinicLabel,
             createdAtMillis: Date.now()
           });
-          dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : patientPhone, CLOUD_PATHS.appointments);
+          dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_CLINIC', clinicLabel, alertMsg, 'PATIENT', targetAcc ? targetAcc.id : prevPatientPhone, CLOUD_PATHS.appointments);
         }
         if (isPatient) {
           dispatchWorkerPush('APPOINTMENT_CANCELLED_BY_PATIENT', clinicLabel, alertMsg, 'ADMIN', slot.id, CLOUD_PATHS.appointments);
@@ -4580,10 +5118,16 @@
         persistedAdminRoleActive = persistedAdminSession && localStorage.getItem(ADMIN_ROLE_ACTIVE_KEY) === '1';
       } catch (e) {}
 
+      const initialPortalParam = (function () {
+        try {
+          return new URLSearchParams(window.location.search || '').get('portal') || '';
+        } catch (e) { return ''; }
+      })();
+
       // Ephemeral UI State
       const ui = {
         lang: loadSavedLang(), // 'ar' | 'en'
-        roleMode: persistedAdminRoleActive ? 'ADMIN' : 'PATIENT', // PATIENT | DOCTOR | ADMIN
+        roleMode: persistedAdminRoleActive ? 'ADMIN' : (initialPortalParam === 'clinic' ? 'DOCTOR' : 'PATIENT'), // PATIENT | DOCTOR | ADMIN
         staffPortalTab: 'DOCTOR', // DOCTOR | LAB
         patientTab: 'HOME', // HOME | PRIVATE | HOSPITAL | SPECIALTIES | EMR
         bookingDoctorId: null,
@@ -4591,7 +5135,10 @@
         searchQuery: '',
         homeSearchQuery: '',
         loggedInDoctorId: null,
-        doctorTab: 'SLOTS', // SLOTS | ACTIVATE_PATIENT | MESSAGES
+        doctorTab: 'SLOTS', // SLOTS | QUICK_RX | ACTIVATE_PATIENT | MESSAGES | CLINIC_SETTINGS
+        desktopSlotsFilter: 'ALL', // ALL | BOOKED | COMPLETED | NO_SHOW | AVAILABLE
+        desktopSlotsSearch: '',
+        selectedDesktopSlotId: '',
         docActivatePhoneQuery: '',
         docActivateResults: [],
         docActivateSuccessMsg: '',
@@ -5866,6 +6413,78 @@
         });
       }
 
+      function compressLogoImageToDataUri(file, maxDim) {
+        const limitDim = maxDim || 200;
+        return new Promise((resolve) => {
+          if (!file) { resolve(''); return; }
+          const reader = new FileReader();
+          reader.onerror = function () { resolve(''); };
+          reader.onload = function () {
+            const rawUrl = String(reader.result || '');
+            const img = new Image();
+            img.onerror = function () { resolve(rawUrl.length <= 75000 ? rawUrl : ''); };
+            img.onload = function () {
+              let w = img.width || limitDim;
+              let h = img.height || limitDim;
+              if (w > limitDim || h > limitDim) {
+                const ratio = Math.min(limitDim / w, limitDim / h);
+                w = Math.max(1, Math.round(w * ratio));
+                h = Math.max(1, Math.round(h * ratio));
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) { resolve(rawUrl.length <= 75000 ? rawUrl : ''); return; }
+              ctx.clearRect(0, 0, w, h);
+              ctx.drawImage(img, 0, 0, w, h);
+              try {
+                const pngUri = canvas.toDataURL('image/png');
+                if (pngUri.length <= 55000) {
+                  resolve(pngUri);
+                  return;
+                }
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', 0.82));
+              } catch (err) {
+                resolve(rawUrl.length <= 75000 ? rawUrl : '');
+              }
+            };
+            img.src = rawUrl;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function getClinicLetterhead(doc) {
+        const cfg = (db && db.config) || DEFAULT_CONFIG;
+        const d = doc || {};
+        return {
+          clinicName: String(d.rxClinicName || '').trim() || getClinicDisplayName(d, false) || (cfg.platformNameAr || 'عيادة طب الحجايزة'),
+          doctorTitle: String(d.rxDoctorTitle || '').trim() || getDoctorDisplayName(d, false) || '',
+          specialtyDegree: String(d.rxSpecialtyDegree || '').trim() || formatDoctorSpecialties(d) || '',
+          logoUrl: String(d.rxLogoDataUrl || '').trim(),
+          address: String(d.rxAddress || '').trim() || getDoctorLocationDisplay(d, false) || (cfg.villageNameAr || ''),
+          phones: String(d.rxPhones || '').trim() || String(d.phone || cfg.supportPhone || '').trim(),
+          paperSize: String(d.rxPaperSize || 'A5').toUpperCase() === 'A4' ? 'A4' : 'A5'
+        };
+      }
+
+      function applyDynamicPrintPageSize(paperSize) {
+        const isA5 = String(paperSize || 'A5').toUpperCase() === 'A5';
+        let styleEl = document.getElementById('tebDynamicPrintPageStyle');
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = 'tebDynamicPrintPageStyle';
+          document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = isA5
+          ? '@page { size: A5 portrait; margin: 7mm; }'
+          : '@page { size: A4 portrait; margin: 11mm; }';
+      }
+
       function recordWebVisitorHitOnce() {
         try {
           if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(VISITOR_HIT_SESSION_KEY) === '1') {
@@ -6973,12 +7592,31 @@
         return list.find((m) => m.id === db.activeMemberId) || list[0];
       }
 
-      function printPrescription(record, isEnOverride) {
-        const cfg = db.config;
+      function printPrescription(record, isEnOverride, printOpts) {
+        const cfg = db.config || DEFAULT_CONFIG;
+        const rec = record || {};
         const isEn = typeof isEnOverride === 'boolean'
           ? isEnOverride
-          : (record && record.id && ui.cardLangOverrides[record.id] ? (ui.cardLangOverrides[record.id] === 'en') : (ui.lang === 'en'));
-        const localized = BilingualMedicalTranslator.resolveForDisplay(record, isEn);
+          : (rec && rec.id && ui.cardLangOverrides[rec.id] ? (ui.cardLangOverrides[rec.id] === 'en') : (ui.lang === 'en'));
+        const localized = BilingualMedicalTranslator.resolveForDisplay(rec, isEn);
+
+        const docObj = (db.doctors || []).find((d) =>
+          (rec.doctorId && d.id === rec.doctorId) ||
+          (rec.doctorName && d.doctorName === rec.doctorName)
+        ) || null;
+        const lh = getClinicLetterhead(docObj || {
+          doctorName: rec.doctorName || '',
+          specialty: rec.specialty || '',
+          clinicName: cfg.platformNameAr
+        });
+        const paperSize = (printOpts && printOpts.paperSize) ? String(printOpts.paperSize).toUpperCase() : (lh.paperSize || 'A5');
+        const isA5 = paperSize !== 'A4';
+        applyDynamicPrintPageSize(isA5 ? 'A5' : 'A4');
+
+        const patientMem = (db.familyMembers || []).find((m) =>
+          (rec.familyMemberId && m.id === rec.familyMemberId) ||
+          (rec.patientName && m.fullName === rec.patientName)
+        ) || null;
 
         const lines = String(localized.medications || '')
           .split('\n')
@@ -6990,55 +7628,165 @@
               const parts = line.split('—');
               const name = esc((parts[0] || '').trim());
               const dose = esc((parts.slice(1).join('—') || (isEn ? 'As directed by physician' : 'حسب إرشادات الطبيب')).trim());
-              return '<tr><td>' + (i + 1) + '. <strong>' + name + '</strong></td><td>' + dose + '</td></tr>';
+              return '<tr><td><strong>' + (i + 1) + '. ' + name + '</strong></td><td>' + dose + '</td></tr>';
             }).join('')
           : '<tr><td colspan="2">' + esc(isEn ? 'No medications recorded' : 'لا توجد أدوية نصية مسجلة') + '</td></tr>';
 
         const notesHtml = localized.notes
-          ? '<div style="margin-top:12px;padding:10px;background:#FFFBEB;border:1px solid #F59E0B;border-radius:10px;"><strong>' +
-              esc(isEn ? 'Doctor Notes & Instructions:' : 'تعليمات وملاحظات:') + '</strong> ' + esc(localized.notes) +
+          ? '<div style="margin-top:9px;padding:8px 10px;background:#FFFBEB;border:1px solid #F59E0B;border-radius:8px;font-size:0.93em;"><strong>' +
+              esc(isEn ? 'Doctor Instructions:' : 'تعليمات وإرشادات الطبيب:') + '</strong> ' + esc(localized.notes) +
             '</div>'
           : '';
 
+        const followUpText = String(rec.followUpDate || '').trim();
+        const followUpHtml = followUpText
+          ? '<div class="rx-followup-pill">📅 ' + esc(isEn ? 'Next Follow-Up: ' : 'موعد الاستشارة القادمة: ') + esc(followUpText) + '</div>'
+          : '';
+
         const reportHtml = localized.aiReport
-          ? '<div style="margin-top:12px;padding:10px 12px;background:#F0FDFD;border:1px solid #0D7377;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.55;">' +
-              '<strong style="color:#0D7377;">' + esc(isEn ? 'Clinical Medical Report (AI):' : 'التقرير الطبي المبسط:') + '</strong>\n' +
+          ? '<div style="margin-top:9px;padding:8px 10px;background:#F0FDFD;border:1px solid #0D7377;border-radius:8px;white-space:pre-wrap;font-size:0.86em;line-height:1.45;">' +
+              '<strong style="color:#0D7377;">' + esc(isEn ? 'Clinical Medical Summary:' : 'الملخص الطبي للمريض:') + '</strong>\n' +
               esc(localized.aiReport) +
             '</div>'
           : '';
 
+        const headerClinicName = isEn ? ((docObj && docObj.clinicNameEn) || lh.clinicName) : lh.clinicName;
+        const headerDoctorName = isEn ? ((docObj && docObj.doctorNameEn) || rec.doctorName || lh.doctorTitle) : (lh.doctorTitle || rec.doctorName);
+        const headerDegree = isEn ? (localized.specialty || lh.specialtyDegree) : (lh.specialtyDegree || localized.specialty);
+        const logoSrc = lh.logoUrl || './icon-192.png';
+
+        const sheet = document.getElementById('printSheet');
+        sheet.classList.toggle('rx-print-ltr', isEn);
+        sheet.innerHTML =
+          '<div class="rx-sheet-frame ' + (isA5 ? 'rx-paper-a5' : 'rx-paper-a4') + '">' +
+            '<div>' +
+              '<div class="rx-brand-header">' +
+                '<div class="rx-brand-identity">' +
+                  '<img class="rx-brand-logo" src="' + esc(logoSrc) + '" alt="Clinic Logo" />' +
+                  '<div style="min-width:0;">' +
+                    '<div style="font-size:' + (isA5 ? '1.22em' : '1.35em') + ';font-weight:900;color:#0D7377;line-height:1.2;">' + esc(headerClinicName) + '</div>' +
+                    '<div style="font-size:' + (isA5 ? '1.05em' : '1.15em') + ';font-weight:800;color:#0F172A;margin-top:2px;">' + esc(headerDoctorName) + '</div>' +
+                    '<div style="font-size:0.88em;color:#334155;font-weight:700;margin-top:1px;">' + esc(headerDegree) + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="rx-brand-rx-badge" aria-hidden="true">℞</div>' +
+              '</div>' +
+
+              '<div class="rx-patient-strip">' +
+                '<div><strong>' + esc(isEn ? 'Patient:' : 'اسم المريض:') + '</strong> ' + esc(rec.patientName || '-') + (patientMem && patientMem.age ? ' (' + esc(patientMem.age) + ' ' + esc(isEn ? 'yrs' : 'سنة') + ')' : '') + '</div>' +
+                '<div><strong>' + esc(isEn ? 'Date:' : 'التاريخ:') + '</strong> ' + esc(rec.visitDateLabel || formatTodayAr()) + '</div>' +
+                '<div><strong>' + esc(isEn ? 'Diagnosis:' : 'التشخيص:') + '</strong> ' + esc(localized.diagnosis || '-') + '</div>' +
+                (rec.patientPhone ? '<div><strong>' + esc(isEn ? 'Phone:' : 'الهاتف:') + '</strong> <span dir="ltr">' + esc(rec.patientPhone) + '</span></div>' : '<div></div>') +
+              '</div>' +
+
+              '<table class="rx-table">' +
+                '<thead><tr><th style="width:52%;">' + esc(isEn ? 'Medication & Strength' : 'الدواء والتركيز') + '</th><th>' + esc(isEn ? 'Dosage & Instructions' : 'الجرعة وطريقة الاستخدام') + '</th></tr></thead>' +
+                '<tbody>' + rowsHtml + '</tbody>' +
+              '</table>' +
+
+              notesHtml +
+              followUpHtml +
+              reportHtml +
+            '</div>' +
+
+            '<div class="rx-brand-footer">' +
+              '<div class="rx-brand-footer-row">' +
+                '<span>📍 <strong>' + esc(isEn ? 'Address:' : 'العنوان:') + '</strong> ' + esc(lh.address || '-') + '</span>' +
+                (lh.phones ? '<span>📞 <strong>' + esc(isEn ? 'Booking:' : 'للحجز والاستفسار:') + '</strong> <span dir="ltr">' + esc(lh.phones) + '</span></span>' : '') +
+              '</div>' +
+              '<div class="rx-brand-footer-row" style="font-size:0.86em;color:#64748B;">' +
+                '<span>' + esc(isEn ? ((cfg.platformNameEn || 'Teb Al-Hajayzah') + ' (' + (cfg.appVersionLabel || 'v1.0.0') + ')') : ('منصة ' + cfg.platformNameAr + ' (' + (cfg.appVersionLabel || 'v1.0.0') + ')')) + '</span>' +
+                '<span>' + esc(isEn ? 'Doctor Signature: ____________________' : 'توقيع وختم الطبيب: ____________________') + '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+
+        window.print();
+      }
+
+      function printClinicVisitReceipt(slot, doc) {
+        if (!slot || !doc) return;
+        const latestRec = (db.records || []).filter((r) =>
+          r.doctorId === doc.id &&
+          ((slot.familyMemberId && r.familyMemberId === slot.familyMemberId) ||
+           (slot.patientName && r.patientName === slot.patientName))
+        ).sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0))[0];
+        if (latestRec && slot.status === 'COMPLETED') {
+          printPrescription(latestRec, ui.lang === 'en');
+          return;
+        }
+        applyDynamicPrintPageSize('A4');
+        const cfg = db.config || DEFAULT_CONFIG;
+        const isEn = ui.lang === 'en';
+        const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+        const turnIdx = docSlots.findIndex((s) => s.id === slot.id) + 1;
+        const eff = (slot.startMinutes || 0) + (slot.delayMinutes || 0);
+        const statusText = slot.status === 'BOOKED'
+          ? (isEn ? 'Upcoming' : 'قادم (مؤكد)')
+          : (slot.status === 'NO_SHOW' ? (isEn ? 'No-Show' : 'تغيب') : (isEn ? 'Completed' : 'تم الكشف'));
+        const sheet = document.getElementById('printSheet');
+        sheet.classList.toggle('rx-print-ltr', isEn);
+        sheet.innerHTML =
+          '<div class="pc-print-receipt">' +
+            '<div class="rx-print-header">' +
+              '<div>' +
+                '<h2 style="color:#0D7377;margin:0;">' + esc(isEn ? (cfg.platformNameEn || 'Teb Al-Hajayzah') : cfg.platformNameAr) + '</h2>' +
+                '<div style="font-size:13px;color:#4F646B;">' + esc(getClinicDisplayName(doc)) + ' • ' + esc(formatDoctorSpecialties(doc)) + '</div>' +
+              '</div>' +
+              '<div style="text-align:' + (isEn ? 'right' : 'left') + ';">' +
+                '<div style="font-size:1.35rem;font-weight:800;color:#0D7377;">#' + turnIdx + '</div>' +
+                '<div style="font-size:12px;color:#4F646B;">' + esc(formatTodayAr()) + '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="pc-print-meta-grid">' +
+              '<div><strong>' + esc(isEn ? 'Patient Name:' : 'اسم المريض:') + '</strong><br/>' + esc(slot.patientName || '-') + '</div>' +
+              '<div><strong>' + esc(isEn ? 'Phone:' : 'الهاتف:') + '</strong><br/><span dir="ltr">' + esc(slot.patientPhone || '-') + '</span></div>' +
+              '<div><strong>' + esc(isEn ? 'Appointment Time:' : 'موعد الكشف:') + '</strong><br/>' + esc(formatMinutesAr(eff)) + '</div>' +
+              '<div><strong>' + esc(isEn ? 'Clinic Fee:' : 'قيمة الكشف:') + '</strong><br/>' + esc(doc.feeEgp) + ' ' + esc(isEn ? 'EGP' : 'ج.م') + '</div>' +
+              '<div><strong>' + esc(isEn ? 'Status:' : 'حالة الموعد:') + '</strong><br/>' + esc(statusText) + '</div>' +
+              '<div><strong>' + esc(isEn ? 'Doctor:' : 'الطبيب المعالج:') + '</strong><br/>' + esc(getDoctorDisplayName(doc, isEn)) + '</div>' +
+            '</div>' +
+            '<div style="margin-top:14px;border-top:1px dashed #94A3B8;padding-top:10px;display:flex;justify-content:space-between;font-size:12px;color:#4F646B;">' +
+              '<span>' + esc(isEn ? 'Clinic Desk Ticket — Teb Al-Hajayzah (v1.0.0)' : 'إيصال استقبال العيادة — منصة طب الحجايزة (v1.0.0)') + '</span>' +
+              '<span>' + esc(cfg.supportPhone || '') + '</span>' +
+            '</div>' +
+          '</div>';
+        window.print();
+      }
+
+      function printClinicDailySchedule(doc, slots) {
+        if (!doc) return;
+        applyDynamicPrintPageSize('A4');
+        const cfg = db.config || DEFAULT_CONFIG;
+        const isEn = ui.lang === 'en';
+        const activeRows = (slots || []).filter((s) => s.status !== 'AVAILABLE');
+        const rowsHtml = activeRows.length === 0
+          ? '<tr><td colspan="5" style="text-align:center;">' + esc(isEn ? 'No booked appointments today' : 'لا توجد حجوزات مسجلة اليوم') + '</td></tr>'
+          : activeRows.map((s, idx) => {
+              const eff = (s.startMinutes || 0) + (s.delayMinutes || 0);
+              const st = s.status === 'BOOKED' ? (isEn ? 'Upcoming' : 'قادم') : (s.status === 'NO_SHOW' ? (isEn ? 'No-Show' : 'تغيب') : (isEn ? 'Done' : 'تم الكشف'));
+              return '<tr>' +
+                '<td>#' + (idx + 1) + '</td>' +
+                '<td>' + esc(formatMinutesAr(eff)) + '</td>' +
+                '<td><strong>' + esc(s.patientName || '-') + '</strong></td>' +
+                '<td dir="ltr">' + esc(s.patientPhone || '-') + '</td>' +
+                '<td>' + esc(st) + '</td>' +
+              '</tr>';
+            }).join('');
         const sheet = document.getElementById('printSheet');
         sheet.classList.toggle('rx-print-ltr', isEn);
         sheet.innerHTML =
           '<div class="rx-print-header">' +
             '<div>' +
-              '<h2 style="color:#0D7377;margin:0;">' + esc(isEn ? (cfg.platformNameEn || 'Teb Al-Hajayzah') : cfg.platformNameAr) + '</h2>' +
-              '<div style="font-size:13px;color:#4F646B;">' +
-                esc(isEn ? (cfg.villageNameEn || DEFAULT_CONFIG.villageNameEn) : cfg.villageNameAr) +
-                ' • ' + esc(isEn ? 'Phone: ' : 'هاتف: ') + esc(cfg.supportPhone) +
-              '</div>' +
+              '<h2 style="color:#0D7377;margin:0;">' + esc(getClinicDisplayName(doc)) + ' — ' + esc(getDoctorDisplayName(doc, isEn)) + '</h2>' +
+              '<div style="font-size:13px;color:#4F646B;">' + esc(formatTodayAr()) + ' • ' + esc(isEn ? 'Daily Clinic Queue Sheet' : 'كشف حجوزات اليوم بالعيادة') + '</div>' +
             '</div>' +
-            '<div style="text-align:' + (isEn ? 'right' : 'left') + ';">' +
-              '<div><strong>' + esc(record.doctorName) + '</strong></div>' +
-              '<div style="font-size:13px;color:#4F646B;">' + esc(localized.specialty) + '</div>' +
-            '</div>' +
+            '<div style="font-size:13px;color:#0D7377;font-weight:800;">' + esc(isEn ? (cfg.platformNameEn || 'Teb Al-Hajayzah') : cfg.platformNameAr) + '</div>' +
           '</div>' +
-          '<div style="margin:14px 0;padding:12px;background:#F4F8F9;border:1px solid #D0DCE0;border-radius:10px;">' +
-            '<div><strong>' + esc(isEn ? 'Patient:' : 'اسم المريض:') + '</strong> ' + esc(record.patientName) + ' &nbsp;|&nbsp; <strong>' + esc(isEn ? 'Date:' : 'التاريخ:') + '</strong> ' + esc(record.visitDateLabel) + '</div>' +
-            '<div><strong>' + esc(isEn ? 'Diagnosis:' : 'التشخيص:') + '</strong> ' + esc(localized.diagnosis) + '</div>' +
-          '</div>' +
-          '<h3 style="color:#0D7377;margin:10px 0 6px;">℞ ' + esc(isEn ? 'E-Prescription' : 'الروشتة الطبية') + '</h3>' +
           '<table class="rx-table">' +
-            '<thead><tr><th>' + esc(isEn ? 'Medication & Strength' : 'الدواء والتركيز') + '</th><th>' + esc(isEn ? 'Dosage & Instructions' : 'الجرعة وطريقة الاستخدام') + '</th></tr></thead>' +
+            '<thead><tr><th>#</th><th>' + esc(isEn ? 'Time' : 'الموعد') + '</th><th>' + esc(isEn ? 'Patient' : 'اسم المريض') + '</th><th>' + esc(isEn ? 'Phone' : 'الهاتف') + '</th><th>' + esc(isEn ? 'Status' : 'الحالة') + '</th></tr></thead>' +
             '<tbody>' + rowsHtml + '</tbody>' +
-          '</table>' +
-          notesHtml +
-          reportHtml +
-          '<div style="margin-top:28px;border-top:1px dashed #94A3B8;padding-top:10px;display:flex;justify-content:space-between;font-size:12px;color:#4F646B;">' +
-            '<span>' + esc(isEn ? ('Issued electronically via ' + (cfg.platformNameEn || 'Teb Al-Hajayzah') + ' (' + cfg.appVersionLabel + ')') : ('صدرت إلكترونياً عبر منصة ' + cfg.platformNameAr + ' (' + cfg.appVersionLabel + ')')) + '</span>' +
-            '<span>' + esc(isEn ? 'Doctor Signature: ____________________' : 'توقيع الطبيب: ____________________') + '</span>' +
-          '</div>';
-
+          '</table>';
         window.print();
       }
 
@@ -7375,6 +8123,15 @@
         nav.querySelectorAll('.nav-item').forEach((btn) => {
           btn.classList.toggle('active', btn.getAttribute('data-tab') === ui.patientTab);
         });
+
+        const isPcClinicMode = Boolean(
+          ui.roleMode === 'DOCTOR' &&
+          ui.staffPortalTab !== 'LAB' &&
+          ui.loggedInDoctorId &&
+          typeof window !== 'undefined' &&
+          window.innerWidth >= 1024
+        );
+        document.body.classList.toggle('pc-clinic-mode', isPcClinicMode);
       }
 
       function renderDoctorCardHtml(doc) {
@@ -7574,6 +8331,7 @@
             '<div><strong>' + esc(diagLabel) + '</strong>' + esc(localized.diagnosis) + '</div>' +
             (localized.medications ? '<div style="margin-top:6px;"><strong>💊 ' + esc(t('الأدوية:', 'Medications:')) + '</strong>\n' + esc(localized.medications) + '</div>' : '') +
             (localized.notes ? '<div style="margin-top:6px;color:var(--text-muted);"><strong>' + esc(t('ملاحظات:', 'Notes:')) + '</strong> ' + esc(localized.notes) + '</div>' : '') +
+            (rec.followUpDate ? '<div style="margin-top:8px;display:inline-block;padding:4px 10px;border-radius:8px;background:#ECFDF5;border:1px solid #86EFAC;color:#166534;font-weight:700;font-size:0.84rem;">📅 ' + esc(t('موعد الاستشارة القادمة: ', 'Next Follow-Up: ')) + esc(rec.followUpDate) + '</div>' : '') +
           '</div>' +
           ((canBilingual && localized.aiReport)
             ? '<div class="rx-ai-report-box">' +
@@ -7942,7 +8700,11 @@
               const cls = slot.status === 'AVAILABLE' ? 'avail' : (slot.status === 'BOOKED' ? 'booked' : 'completed');
               const label = slot.status === 'AVAILABLE'
                 ? bi('متاح', 'Available')
-                : (isMine ? bi('محجوز لك', 'Your Booking') : (slot.status === 'BOOKED' ? bi('محجوز', 'Booked') : bi('تم الكشف', 'Done')));
+                : (isMine
+                    ? bi('محجوز لك', 'Your Booking')
+                    : (slot.status === 'BOOKED'
+                        ? bi('محجوز', 'Booked')
+                        : (slot.status === 'NO_SHOW' ? bi('تغيب', 'No-Show') : bi('تم الكشف', 'Done'))));
               return '<div class="slot-tile ' + cls + '" ' + (slot.status === 'AVAILABLE' ? 'data-book-slot="' + esc(slot.id) + '"' : '') + '>' +
                 '<div class="slot-time">' + formatMinutesAr(eff) + '</div>' +
                 '<div class="slot-state">' + esc(label) + '</div>' +
@@ -8090,7 +8852,7 @@
       }
 
       function renderDoctorLoginGate() {
-        return '<section class="card" style="max-width:480px;margin:12px auto;padding:22px;display:flex;flex-direction:column;gap:14px;">' +
+        return '<section class="card" style="max-width:500px;margin:12px auto;padding:22px;display:flex;flex-direction:column;gap:14px;">' +
             '<div style="display:flex;align-items:center;gap:12px;">' +
               '<div class="tile-icon" style="background:var(--teal-soft);color:var(--teal);">🩺</div>' +
               '<div>' +
@@ -8102,6 +8864,7 @@
             renderPasswordFieldHtml('docLoginPassword', '', bi('كلمة المرور', 'Password')) +
             '<div id="docLoginError" style="display:none;color:var(--booked-border);font-weight:700;font-size:0.88rem;"></div>' +
             '<button class="btn btn-primary btn-block" id="btnDocLoginSubmit" type="button">🔐 ' + esc(bi('دخول إلى لوحة العيادة', 'Sign In to Clinic Dashboard')) + '</button>' +
+            '<button class="btn btn-outline btn-block" id="btnInstallDesktopAppGate" data-install-desktop-app="1" type="button">💻 ' + esc(bi('تثبيت نسخة الكمبيوتر (Windows App)', 'Install Desktop App (Windows)')) + '</button>' +
             '<div style="background:var(--bg);border:1px dashed var(--border);border-radius:12px;padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">' +
               esc(bi('تُنشأ حسابات الأطباء وتُدار حصرياً عبر إدارة المنصة.', 'Doctor accounts are created and managed exclusively by platform administration.')) +
             '</div>' +
@@ -8239,6 +9002,290 @@
           '</section>';
       }
 
+      function getSlotStatusMetaWeb(status) {
+        if (status === 'AVAILABLE') {
+          return { icon: '🟢', ar: 'متاح', en: 'Available', badgeCls: 'badge-avail' };
+        }
+        if (status === 'BOOKED') {
+          return { icon: '⏳', ar: 'قادم', en: 'Upcoming', badgeCls: 'badge-booked' };
+        }
+        if (status === 'NO_SHOW') {
+          return { icon: '⚠️', ar: 'تغيب', en: 'No-Show', badgeCls: 'badge-noshow' };
+        }
+        return { icon: '✅', ar: 'تم الكشف', en: 'Completed', badgeCls: 'badge-done' };
+      }
+
+      function renderSlotStatusToggleBarHtml(slot) {
+        if (!slot || slot.status === 'AVAILABLE') return '';
+        return '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">' +
+          '<button class="status-pill-btn ' + (slot.status === 'BOOKED' ? 'active-upcoming' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':BOOKED">⏳ ' + esc(bi('قادم', 'Upcoming')) + '</button>' +
+          '<button class="status-pill-btn ' + (slot.status === 'COMPLETED' ? 'active-completed' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':COMPLETED">✅ ' + esc(bi('تم الكشف', 'Completed')) + '</button>' +
+          '<button class="status-pill-btn ' + (slot.status === 'NO_SHOW' ? 'active-noshow' : '') + '" type="button" data-set-slot-status="' + esc(slot.id) + ':NO_SHOW">⚠️ ' + esc(bi('تغيب', 'No-Show')) + '</button>' +
+        '</div>';
+      }
+
+      function renderDoctorQuickRxWorkspaceHtml(doc, slots) {
+        const patientSlots = slots.filter((s) => s.status !== 'AVAILABLE');
+        const nextUpcoming = patientSlots.find((s) => s.status === 'BOOKED') || patientSlots[0] || null;
+        return '<section class="card" style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<h3 style="font-size:1.15rem;color:var(--teal);">🩺 ' + esc(bi('كشف سريع وكتابة روشتة إلكترونية', 'Quick Exam & E-Prescription Workspace')) + '</h3>' +
+                '<div style="font-size:0.85rem;color:var(--text-muted);">' + esc(bi('اختر المريض من قائمة الحضور لفتح الملف الطبي أو كتابة الروشتة والطباعة الفورية (Ctrl+P).', 'Select a patient from today\'s queue to open EMR, write Rx, or print immediately (Ctrl+P).')) + '</div>' +
+              '</div>' +
+              (nextUpcoming
+                ? '<button class="btn btn-primary" type="button" data-write-rx="' + esc(nextUpcoming.id) + '">💊 ' + esc(bi('بدء كشف المريض التالي: ' + nextUpcoming.patientName, 'Examine Next: ' + nextUpcoming.patientName)) + '</button>'
+                : '') +
+            '</div>' +
+          '</section>' +
+          '<section class="card" style="display:flex;flex-direction:column;gap:10px;">' +
+            '<h3>📋 ' + esc(bi('قائمة مرضى اليوم الجاهزين للكشف (' + patientSlots.length + ')', 'Today\'s Queue for Exam & Rx (' + patientSlots.length + ')')) + '</h3>' +
+            (patientSlots.length === 0
+              ? '<div style="padding:20px;text-align:center;color:var(--text-muted);">' + esc(bi('لا يوجد مرضى محجوزون حالياً في جدول اليوم.', 'No booked patients in today\'s schedule yet.')) + '</div>'
+              : '<div style="display:flex;flex-direction:column;gap:10px;">' +
+                  patientSlots.map((slot) => {
+                    const eff = (slot.startMinutes || 0) + (slot.delayMinutes || 0);
+                    const meta = getSlotStatusMetaWeb(slot.status);
+                    return '<div class="card" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bg);">' +
+                      '<div style="display:flex;align-items:center;gap:10px;min-width:220px;">' +
+                        '<span class="badge ' + meta.badgeCls + '">' + meta.icon + ' ' + esc(bi(meta.ar, meta.en)) + '</span>' +
+                        '<div>' +
+                          '<div style="font-weight:800;">' + esc(slot.patientName) + ' • <span style="color:var(--teal);">' + formatMinutesAr(eff) + '</span></div>' +
+                          '<div style="font-size:0.82rem;color:var(--text-muted);" dir="ltr">' + esc(slot.patientPhone || '-') + '</div>' +
+                        '</div>' +
+                      '</div>' +
+                      renderSlotStatusToggleBarHtml(slot) +
+                      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                        '<button class="btn btn-outline" type="button" data-view-emr="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;">📁 ' + esc(bi('ملف المريض', 'EMR')) + '</button>' +
+                        '<button class="btn btn-primary" type="button" data-write-rx="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;">💊 ' + esc(bi('كتابة روشتة', 'Write Rx')) + '</button>' +
+                        '<button class="btn btn-outline" type="button" data-print-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;">🖨️ ' + esc(bi('طباعة', 'Print')) + '</button>' +
+                      '</div>' +
+                    '</div>';
+                  }).join('') +
+                '</div>') +
+          '</section>';
+      }
+
+      function renderDoctorClinicSettingsWorkspaceHtml(doc) {
+        const soundEnabled = isClinicDesktopSoundEnabled();
+        const lh = getClinicLetterhead(doc);
+        const logoPreviewSrc = lh.logoUrl || './icon-192.png';
+        return '<section class="card" style="display:flex;flex-direction:column;gap:14px;border-color:rgba(13,115,119,0.45);background:linear-gradient(180deg,#F8FCFC 0%,#FFFFFF 100%);">' +
+            '<div>' +
+              '<h3 style="font-size:1.15rem;color:var(--teal);">🏥 ' + esc(bi('تخصيص ترويسة الروشتة الطبية المطبوعة (Letterhead Settings)', 'Branded Prescription Letterhead Settings')) + '</h3>' +
+              '<div style="font-size:0.85rem;color:var(--text-muted);">' + esc(bi('تظهر هذه الترويسة والشعار والعنوان وأرقام الحجز تلقائياً أعلى وأسفل كل روشتة مطبوعة بمقاس A5 أو A4.', 'This clinic header, logo, address, and booking phones automatically appear on every printed A5 / A4 prescription.')) + '</div>' +
+            '</div>' +
+
+            '<div class="rx-letterhead-preview" id="docLhLivePreview">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:2px solid #0D7377;padding-bottom:8px;">' +
+                '<div style="display:flex;align-items:center;gap:10px;">' +
+                  '<img id="docLhPreviewImg" src="' + esc(logoPreviewSrc) + '" alt="شعار العيادة" style="width:52px;height:52px;object-fit:contain;border-radius:10px;border:1px solid #CBD5E1;background:#fff;padding:2px;" />' +
+                  '<div>' +
+                    '<div id="docLhPreviewClinic" style="font-weight:900;color:#0D7377;font-size:1rem;">' + esc(lh.clinicName) + '</div>' +
+                    '<div id="docLhPreviewDoctor" style="font-weight:800;font-size:0.9rem;">' + esc(lh.doctorTitle) + '</div>' +
+                    '<div id="docLhPreviewDegree" style="font-size:0.78rem;color:var(--text-muted);">' + esc(lh.specialtyDegree) + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<span style="font-weight:900;color:#0D7377;font-size:1.3rem;font-family:Georgia,serif;">℞</span>' +
+              '</div>' +
+              '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:0.78rem;color:var(--text-muted);">' +
+                '<span id="docLhPreviewAddress">📍 ' + esc(lh.address) + '</span>' +
+                '<span id="docLhPreviewPhones" dir="ltr">📞 ' + esc(lh.phones || '-') + '</span>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم العيادة / المركز الطبي:', 'Clinic / Center Name:')) +
+                '<input class="input" id="docLhClinicName" value="' + esc(doc.rxClinicName || getClinicDisplayName(doc, false)) + '" placeholder="' + esc(bi('مثال: مركز الشفاء التخصصي', 'Clinic Name')) + '" style="margin-top:4px;" />' +
+              '</label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('اسم الطبيب على الترويسة:', 'Doctor Name on Header:')) +
+                '<input class="input" id="docLhDoctorTitle" value="' + esc(doc.rxDoctorTitle || getDoctorDisplayName(doc, false)) + '" placeholder="' + esc(bi('مثال: أ.د / أحمد محمد', 'Doctor Name')) + '" style="margin-top:4px;" />' +
+              '</label>' +
+            '</div>' +
+
+            '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('التخصص والدرجة العلمية:', 'Specialty & Academic Degree:')) +
+              '<input class="input" id="docLhSpecialtyDegree" value="' + esc(doc.rxSpecialtyDegree || formatDoctorSpecialties(doc)) + '" placeholder="' + esc(bi('مثال: استشاري الباطنة والجهاز الهضمي — دكتوراه طب القصر العيني', 'e.g. Consultant Internal Medicine — MD')) + '" style="margin-top:4px;" />' +
+            '</label>' +
+
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('عنوان العيادة (أسفل الروشتة):', 'Clinic Address (Footer):')) +
+                '<input class="input" id="docLhAddress" value="' + esc(doc.rxAddress || getDoctorLocationDisplay(doc, false)) + '" placeholder="' + esc(bi('قرية الحجايزة — شارع ... أمام ...', 'Clinic street / landmark')) + '" style="margin-top:4px;" />' +
+              '</label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('أرقام هاتف الحجز (أسفل الروشتة):', 'Booking Phone Numbers (Footer):')) +
+                '<input class="input" id="docLhPhones" value="' + esc(doc.rxPhones || doc.phone || (db.config && db.config.supportPhone) || '') + '" placeholder="010xxxxxxxx / 011xxxxxxxx" dir="ltr" style="margin-top:4px;" />' +
+              '</label>' +
+            '</div>' +
+
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('المقاس الافتراضي لورق الطباعة:', 'Default Print Paper Size:')) +
+                '<select class="select" id="docLhPaperSize" style="margin-top:4px;">' +
+                  '<option value="A5"' + (lh.paperSize === 'A5' ? ' selected' : '') + '>' + esc(bi('A5 — مقاس دفتر الروشتات الطبي القياسي (موصى به)', 'A5 — Standard Prescription Pad (Recommended)')) + '</option>' +
+                  '<option value="A4"' + (lh.paperSize === 'A4' ? ' selected' : '') + '>' + esc(bi('A4 — ورق طباعة كامل', 'A4 — Full Page')) + '</option>' +
+                '</select>' +
+              '</label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط شعار العيادة (أو ارفع صورة):', 'Clinic Logo URL (or Upload below):')) +
+                '<input class="input" id="docLhLogoUrl" value="' + esc(doc.rxLogoDataUrl || '') + '" placeholder="https://... أو ارفع صورة من زر الشعار" dir="ltr" style="margin-top:4px;" />' +
+              '</label>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+              '<label class="btn btn-outline" style="cursor:pointer;min-height:42px;">🖼️ ' + esc(bi('رفع شعار العيادة (PNG / JPG)', 'Upload Clinic Logo')) + '<input type="file" id="docLhLogoFile" accept="image/*" style="display:none;" /></label>' +
+              '<button class="btn btn-danger-outline" id="btnClearDocLhLogo" type="button" style="min-height:42px;">🗑️ ' + esc(bi('إعادة الشعار الافتراضي', 'Reset Default Logo')) + '</button>' +
+              '<button class="btn btn-green" id="btnSaveClinicLetterhead" type="button" style="flex:1;min-width:220px;">💾 ' + esc(bi('حفظ ومزامنة ترويسة الروشتة', 'Save & Sync Clinic Letterhead')) + '</button>' +
+            '</div>' +
+          '</section>' +
+
+          '<section class="card" style="display:flex;flex-direction:column;gap:14px;">' +
+            '<div>' +
+              '<h3 style="font-size:1.15rem;color:var(--teal);">⚙️ ' + esc(bi('إعدادات العيادة، الجدول الزمني، و Google Drive', 'Clinic Settings, Schedule & Google Drive')) + '</h3>' +
+              '<div style="font-size:0.85rem;color:var(--text-muted);">' + esc(bi('تُحفظ الإعدادات محلياً وتُزامَن مباشرةً مع قاعدة البيانات السحابية.', 'Settings save locally and sync directly with live cloud storage.')) + '</div>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">' +
+              '<button class="btn btn-warn" id="btnDelay15Settings" data-delay-mins="15" type="button">🕒 ' + esc(bi('تأخير العيادة 15 دقيقة', 'Delay +15 min')) + '</button>' +
+              '<button class="btn btn-outline" id="btnDelay30Settings" data-delay-mins="30" type="button">🕒 ' + esc(bi('تأخير العيادة 30 دقيقة', 'Delay +30 min')) + '</button>' +
+              '<button class="btn btn-primary" id="btnOpenScheduleGenSettings" type="button">📅 ' + esc(bi('تعديل ساعات العمل وتوليد المواعيد', 'Edit Work Hours & Generate Slots')) + '</button>' +
+            '</div>' +
+            '<div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:10px;">' +
+              '<div style="font-weight:800;color:var(--teal-text);">☁️ ' + esc(bi('روابط Google Drive الخاصة بحفظ روشتات وملفات العيادة', 'Clinic Google Drive Web App Links')) + '</div>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط Google Apps Script / Drive الأساسي للعيادة:', 'Primary Drive Web App URL:')) +
+                '<input class="input" id="docDriveUrlPrimary" value="' + esc(doc.driveWebAppUrl || '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" style="margin-top:4px;" />' +
+              '</label>' +
+              '<label style="font-size:0.84rem;font-weight:700;">' + esc(bi('رابط Drive الاحتياطي / الثانوي (اختياري):', 'Secondary / Backup Drive URL (optional):')) +
+                '<input class="input" id="docDriveUrlSecondary" value="' + esc(doc.secondaryDriveWebAppUrl || '') + '" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr" style="margin-top:4px;" />' +
+              '</label>' +
+              '<button class="btn btn-green" id="btnSaveClinicDriveSettings" type="button">💾 ' + esc(bi('حفظ ومزامنة إعدادات العيادة و Drive', 'Save & Sync Clinic & Drive Settings')) + '</button>' +
+            '</div>' +
+          '</section>' +
+          '<section class="card" style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<h3 style="font-size:1.08rem;">🔊 ' + esc(bi('إشعارات وتنبيهات سطح المكتب للسكرتارية والطبيب', 'Desktop Sound & Notification Alerts')) + '</h3>' +
+                '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('تشغيل نغمة تنبيه وإشعار سطح مكتب فوري عند وصول أي حجز جديد أو رسالة مريض.', 'Play alert chime & desktop notification immediately on new bookings or patient messages.')) + '</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<button class="btn ' + (soundEnabled ? 'btn-green' : 'btn-outline') + '" id="btnToggleClinicSound" type="button">' + (soundEnabled ? '🔊 ' + esc(bi('الصوت مُفعّل', 'Sound ON')) : '🔇 ' + esc(bi('الصوت صامت', 'Sound OFF'))) + '</button>' +
+                '<button class="btn btn-outline" id="btnTestClinicDesktopAlert" type="button">🔔 ' + esc(bi('تجربة الصوت والإشعار', 'Test Sound & Alert')) + '</button>' +
+              '</div>' +
+            '</div>' +
+            renderNotificationStatusCardHtml('doctor_notif_settings') +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--border);">' +
+              '<div style="font-size:0.85rem;color:var(--text-muted);">' + esc(bi('اختصارات لوحة المفاتيح: Ctrl+P للطباعة الفورية • / للبحث السريع • Esc لإغلاق النوافذ', 'Keyboard shortcuts: Ctrl+P Print • / Quick Search • Esc Close Modal')) + '</div>' +
+              '<button class="btn btn-primary" data-install-desktop-app="1" type="button">💻 ' + esc(bi('تثبيت نسخة الكمبيوتر (Windows App)', 'Install Desktop App (Windows)')) + '</button>' +
+            '</div>' +
+          '</section>';
+      }
+
+      function renderDesktopAppointmentsSectionHtml(doc, slots, bookedCount, availCount, doneCount, noShowCount) {
+        const filterVal = ui.desktopSlotsFilter || 'ALL';
+        const q = (ui.desktopSlotsSearch || '').trim().toLowerCase();
+        const filteredSlots = slots.filter((s) => {
+          if (filterVal !== 'ALL' && s.status !== filterVal) return false;
+          if (!q) return true;
+          return String(s.patientName || '').toLowerCase().includes(q) ||
+            String(s.patientPhone || '').toLowerCase().includes(q) ||
+            formatMinutesAr((s.startMinutes || 0) + (s.delayMinutes || 0)).toLowerCase().includes(q);
+        });
+        const nextBooked = slots.find((s) => s.status === 'BOOKED');
+        return '<section class="pc-kpi-grid">' +
+            '<div class="pc-kpi-card" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);"><div><div style="font-size:0.8rem;font-weight:700;">⏳ ' + esc(bi('قادم / محجوز', 'Upcoming')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + bookedCount + '</div></div><span style="font-size:1.5rem;">🗓️</span></div>' +
+            '<div class="pc-kpi-card" style="background:var(--avail-bg);border-color:var(--avail-border);color:var(--avail-text);"><div><div style="font-size:0.8rem;font-weight:700;">🟢 ' + esc(bi('متاح للحجز', 'Available')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + availCount + '</div></div><span style="font-size:1.5rem;">🕒</span></div>' +
+            '<div class="pc-kpi-card" style="background:var(--done-bg);border-color:var(--done-border);color:var(--done-text);"><div><div style="font-size:0.8rem;font-weight:700;">✅ ' + esc(bi('تم الكشف', 'Completed')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + doneCount + '</div></div><span style="font-size:1.5rem;">💊</span></div>' +
+            '<div class="pc-kpi-card" style="background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text);"><div><div style="font-size:0.8rem;font-weight:700;">⚠️ ' + esc(bi('تغيب', 'No-Show')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + noShowCount + '</div></div><span style="font-size:1.5rem;">⚠️</span></div>' +
+          '</section>' +
+
+          '<section class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+              '<button class="btn btn-warn" data-delay-mins="15" type="button" style="min-height:42px;">🕒 ' + esc(bi('تأخير +15 د', 'Delay +15m')) + '</button>' +
+              '<button class="btn btn-outline" data-delay-mins="30" type="button" style="min-height:42px;">+30 د</button>' +
+              '<button class="btn btn-outline" id="btnOpenScheduleGenDesktop" type="button" style="min-height:42px;">📅 ' + esc(bi('توليد جدول المواعيد', 'Schedule Generator')) + '</button>' +
+              '<button class="btn btn-outline" id="btnPrintDailyScheduleDesktop" type="button" style="min-height:42px;">🖨️ ' + esc(bi('طباعة كشف اليوم (Ctrl+P)', 'Print Schedule (Ctrl+P)')) + '</button>' +
+            '</div>' +
+            (nextBooked
+              ? '<button class="btn btn-primary" type="button" data-write-rx="' + esc(nextBooked.id) + '" style="min-height:42px;">🏥 ' + esc(bi('المريض التالي: ' + nextBooked.patientName, 'Next Patient: ' + nextBooked.patientName)) + '</button>'
+              : '') +
+          '</section>' +
+
+          '<section class="card" style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+              '<input class="input" id="pcSlotsSearchInput" value="' + esc(ui.desktopSlotsSearch || '') + '" placeholder="' + esc(bi('🔍 ابحث باسم المريض أو رقم الهاتف أو الموعد (اضغط / للتركيز)...', '🔍 Search patient name, phone, or time (press /)...')) + '" style="flex:1;min-width:260px;" />' +
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                '<button class="chip ' + (filterVal === 'ALL' ? 'active' : '') + '" type="button" data-pc-slot-filter="ALL">' + esc(bi('الكل (' + slots.length + ')', 'All (' + slots.length + ')')) + '</button>' +
+                '<button class="chip ' + (filterVal === 'BOOKED' ? 'active' : '') + '" type="button" data-pc-slot-filter="BOOKED">⏳ ' + esc(bi('قادم (' + bookedCount + ')', 'Upcoming (' + bookedCount + ')')) + '</button>' +
+                '<button class="chip ' + (filterVal === 'COMPLETED' ? 'active' : '') + '" type="button" data-pc-slot-filter="COMPLETED">✅ ' + esc(bi('تم الكشف (' + doneCount + ')', 'Done (' + doneCount + ')')) + '</button>' +
+                '<button class="chip ' + (filterVal === 'NO_SHOW' ? 'active' : '') + '" type="button" data-pc-slot-filter="NO_SHOW">⚠️ ' + esc(bi('تغيب (' + noShowCount + ')', 'No-Show (' + noShowCount + ')')) + '</button>' +
+                '<button class="chip ' + (filterVal === 'AVAILABLE' ? 'active' : '') + '" type="button" data-pc-slot-filter="AVAILABLE">🟢 ' + esc(bi('متاح (' + availCount + ')', 'Open (' + availCount + ')')) + '</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="pc-table-scroll">' +
+              '<table class="pc-slots-table">' +
+                '<thead><tr>' +
+                  '<th>#</th>' +
+                  '<th>' + esc(bi('الموعد', 'Time')) + '</th>' +
+                  '<th>' + esc(bi('بيانات المريض', 'Patient Details')) + '</th>' +
+                  '<th>' + esc(bi('الحالة (تغيير بضغطة واحدة)', 'Status (1-Tap Update)')) + '</th>' +
+                  '<th>' + esc(bi('الإجراءات السريعة', 'Quick Actions')) + '</th>' +
+                '</tr></thead>' +
+                '<tbody>' +
+                  (filteredSlots.length === 0
+                    ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">' + esc(bi('لا توجد مواعيد مطابقة للبحث أو التصفية الحالية.', 'No appointments match your current filter.')) + '</td></tr>'
+                    : filteredSlots.map((slot) => {
+                        const turnNum = slots.findIndex((x) => x.id === slot.id) + 1;
+                        const eff = (slot.startMinutes || 0) + (slot.delayMinutes || 0);
+                        const meta = getSlotStatusMetaWeb(slot.status);
+                        const sourceText = slot.bookingSource === 'PHONE_WALKIN' ? bi('حجز هاتفي/حضور', 'Phone / Walk-in') : bi('حجز عبر التطبيق', 'App Booking');
+                        const isSelectedRow = ui.selectedDesktopSlotId === slot.id;
+                        const chatAcc = slot.status !== 'AVAILABLE'
+                          ? (db.accounts || []).find((a) =>
+                              (slot.familyMemberId && (db.familyMembers || []).some((m) => m.id === slot.familyMemberId && m.accountId === a.id)) ||
+                              (slot.patientPhone && normalizePhoneDigits(a.phone) === normalizePhoneDigits(slot.patientPhone))
+                            )
+                          : null;
+                        return '<tr class="' + (isSelectedRow ? 'pc-row-selected' : '') + '" data-select-desktop-slot="' + esc(slot.id) + '">' +
+                          '<td><strong>#' + turnNum + '</strong></td>' +
+                          '<td style="white-space:nowrap;"><span class="badge ' + meta.badgeCls + '" style="font-size:0.92rem;padding:5px 10px;">' + formatMinutesAr(eff) + '</span></td>' +
+                          '<td>' +
+                            (slot.status === 'AVAILABLE'
+                              ? '<span style="color:var(--avail-text);font-weight:700;">' + esc(bi('موعد متاح للحجز', 'Available Slot')) + '</span>'
+                              : '<div style="font-weight:800;font-size:0.95rem;">' + esc(slot.patientName) + '</div>' +
+                                '<div style="font-size:0.8rem;color:var(--text-muted);" dir="ltr">' + esc(slot.patientPhone || '-') + ' <span style="direction:rtl;">• ' + esc(sourceText) + '</span></div>') +
+                          '</td>' +
+                          '<td>' +
+                            (slot.status === 'AVAILABLE'
+                              ? '<span class="badge badge-avail">🟢 ' + esc(bi('متاح', 'Open')) + '</span>'
+                              : '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                                  '<div><span class="badge ' + meta.badgeCls + '">' + meta.icon + ' ' + esc(bi(meta.ar, meta.en)) + '</span></div>' +
+                                  renderSlotStatusToggleBarHtml(slot) +
+                                '</div>') +
+                          '</td>' +
+                          '<td>' +
+                            (slot.status === 'AVAILABLE'
+                              ? '<button class="pc-act-btn green" type="button" data-manual-slot="' + esc(slot.id) + '">📞 ' + esc(bi('إضافة حجز هاتفي / حضور', 'Add Walk-in Booking')) + '</button>'
+                              : '<div class="pc-row-actions">' +
+                                  (slot.status !== 'COMPLETED'
+                                    ? '<button class="pc-act-btn green" type="button" data-set-slot-status="' + esc(slot.id) + ':COMPLETED">✅ ' + esc(bi('تم الكشف', 'Done')) + '</button>'
+                                    : '') +
+                                  '<button class="pc-act-btn primary" type="button" data-write-rx="' + esc(slot.id) + '">📄 ' + esc(bi('روشتة/تحليل', 'Rx / Lab')) + '</button>' +
+                                  '<button class="pc-act-btn" type="button" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('الملف', 'EMR')) + '</button>' +
+                                  (chatAcc
+                                    ? '<button class="pc-act-btn" type="button" data-doc-reply-patient="' + esc(chatAcc.id) + '">💬 ' + esc(bi('مراسلة', 'Chat')) + '</button>'
+                                    : '') +
+                                  '<button class="pc-act-btn" type="button" data-print-slot="' + esc(slot.id) + '" title="' + esc(bi('طباعة الإيصال / الروشتة', 'Print Receipt / Rx')) + '">🖨️</button>' +
+                                  (slot.status === 'BOOKED'
+                                    ? '<button class="pc-act-btn" type="button" data-clinic-reschedule-slot="' + esc(slot.id) + '">📅</button>'
+                                    : '') +
+                                  (slot.status === 'BOOKED' || slot.status === 'NO_SHOW'
+                                    ? '<button class="pc-act-btn danger" type="button" data-cancel-slot="' + esc(slot.id) + '">❌ ' + esc(bi('إلغاء', 'Cancel')) + '</button>'
+                                    : '') +
+                                '</div>') +
+                          '</td>' +
+                        '</tr>';
+                      }).join('')) +
+                '</tbody>' +
+              '</table>' +
+            '</div>' +
+          '</section>';
+      }
+
       function renderDoctorDashboard() {
         const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
         if (!doc) return renderDoctorLoginGate();
@@ -8246,13 +9293,19 @@
         const bookedCount = slots.filter((s) => s.status === 'BOOKED').length;
         const availCount = slots.filter((s) => s.status === 'AVAILABLE').length;
         const doneCount = slots.filter((s) => s.status === 'COMPLETED').length;
+        const noShowCount = slots.filter((s) => s.status === 'NO_SHOW').length;
         const unreadClinicMsgs = getUnreadMessagesForDoctor(doc.id);
+        const activeDocTab = ui.doctorTab || 'SLOTS';
 
-        const bodyHtml = ui.doctorTab === 'ACTIVATE_PATIENT'
+        const mobileBodyHtml = activeDocTab === 'ACTIVATE_PATIENT'
           ? renderDoctorActivationSectionHtml(doc)
-          : (ui.doctorTab === 'MESSAGES'
+          : (activeDocTab === 'MESSAGES'
               ? renderDoctorMessagesSectionHtml(doc)
-              : '<section class="card">' +
+              : (activeDocTab === 'QUICK_RX'
+                  ? renderDoctorQuickRxWorkspaceHtml(doc, slots)
+                  : (activeDocTab === 'CLINIC_SETTINGS'
+                      ? renderDoctorClinicSettingsWorkspaceHtml(doc)
+                      : '<section class="card">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
                 '<div>' +
                   '<h3 style="font-size:1.15rem;">' + esc(getClinicDisplayName(doc)) + ' (' + esc(formatDoctorSpecialties(doc)) + ')</h3>' +
@@ -8263,15 +9316,16 @@
                   : '') +
               '</div>' +
 
-              '<div class="stats-row" style="margin-bottom:12px;">' +
-                '<div class="stat-box" style="background:var(--booked-bg);color:var(--booked-text);"><div class="stat-num">' + bookedCount + '</div><div>' + esc(bi('محجوز', 'Booked')) + '</div></div>' +
-                '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + availCount + '</div><div>' + esc(bi('متاح', 'Available')) + '</div></div>' +
+              '<div class="stats-row" style="margin-bottom:12px;grid-template-columns:repeat(4,1fr);">' +
+                '<div class="stat-box" style="background:var(--booked-bg);color:var(--booked-text);"><div class="stat-num">' + bookedCount + '</div><div>' + esc(bi('قادم', 'Upcoming')) + '</div></div>' +
+                '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + availCount + '</div><div>' + esc(bi('متاح', 'Open')) + '</div></div>' +
                 '<div class="stat-box" style="background:var(--done-bg);color:var(--done-text);"><div class="stat-num">' + doneCount + '</div><div>' + esc(bi('تم الكشف', 'Done')) + '</div></div>' +
+                '<div class="stat-box" style="background:var(--warn-bg);color:var(--warn-text);"><div class="stat-num">' + noShowCount + '</div><div>' + esc(bi('تغيب', 'No-Show')) + '</div></div>' +
               '</div>' +
 
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
-                '<button class="btn btn-warn" id="btnDelay15" type="button">🕒 ' + esc(bi('تأخير 15 دقيقة', 'Delay 15 min')) + '</button>' +
-                '<button class="btn btn-outline" id="btnDelay30" type="button">' + esc(bi('تأخير 30 دقيقة', 'Delay 30 min')) + '</button>' +
+                '<button class="btn btn-warn" id="btnDelay15" data-delay-mins="15" type="button">🕒 ' + esc(bi('تأخير 15 دقيقة', 'Delay 15 min')) + '</button>' +
+                '<button class="btn btn-outline" id="btnDelay30" data-delay-mins="30" type="button">' + esc(bi('تأخير 30 دقيقة', 'Delay 30 min')) + '</button>' +
               '</div>' +
               '<button class="btn btn-outline btn-block" id="btnOpenScheduleGen" type="button">📅 ' + esc(bi('توليد جدول المواعيد التلقائي (كل 15 / 20 / 30 دقيقة)', 'Auto-Generate Schedule (15/20/30 min)')) + '</button>' +
             '</section>' +
@@ -8281,19 +9335,27 @@
               '<div style="display:flex;flex-direction:column;gap:10px;">' +
                 slots.map((slot) => {
                   const eff = slot.startMinutes + slot.delayMinutes;
-                  const badgeCls = slot.status === 'AVAILABLE' ? 'badge-avail' : (slot.status === 'BOOKED' ? 'badge-booked' : 'badge-done');
+                  const meta = getSlotStatusMetaWeb(slot.status);
                   const titleText = slot.status === 'AVAILABLE'
                     ? bi('موعد متاح للحجز', 'Available Slot')
-                    : (slot.status === 'BOOKED' ? slot.patientName : slot.patientName + ' (' + bi('تم الكشف ✓', 'Completed ✓') + ')');
+                    : slot.patientName;
                   const sourceText = slot.bookingSource === 'PHONE_WALKIN' ? bi('حجز هاتفي/حضور', 'Phone / Walk-in') : bi('حجز عبر التطبيق', 'App Booking');
                   return '<div class="card">' +
-                    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
-                      '<span class="badge ' + badgeCls + '" style="font-size:1rem;padding:6px 12px;">' + formatMinutesAr(eff) + '</span>' +
-                      '<div>' +
-                        '<div style="font-weight:800;">' + esc(titleText) + '</div>' +
-                        (slot.status !== 'AVAILABLE' ? '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(slot.patientPhone) + ' • ' + esc(sourceText) + '</div>' : '') +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">' +
+                      '<div style="display:flex;align-items:center;gap:10px;">' +
+                        '<span class="badge ' + meta.badgeCls + '" style="font-size:1rem;padding:6px 12px;">' + formatMinutesAr(eff) + '</span>' +
+                        '<div>' +
+                          '<div style="font-weight:800;">' + esc(titleText) + '</div>' +
+                          (slot.status !== 'AVAILABLE' ? '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(slot.patientPhone) + ' • ' + esc(sourceText) + '</div>' : '') +
+                        '</div>' +
                       '</div>' +
+                      (slot.status !== 'AVAILABLE'
+                        ? '<span class="badge ' + meta.badgeCls + '">' + meta.icon + ' ' + esc(bi(meta.ar, meta.en)) + '</span>'
+                        : '') +
                     '</div>' +
+                    (slot.status !== 'AVAILABLE'
+                      ? '<div style="margin-bottom:10px;">' + renderSlotStatusToggleBarHtml(slot) + '</div>'
+                      : '') +
                     (slot.status === 'AVAILABLE'
                       ? '<button class="btn btn-green btn-block" type="button" data-manual-slot="' + esc(slot.id) + '">📞 ' + esc(bi('إضافة حجز هاتفي / حضور مباشر', 'Add Phone / Walk-in Booking')) + '</button>'
                       : (slot.status === 'BOOKED'
@@ -8305,22 +9367,28 @@
                               '<button class="btn btn-outline" type="button" style="min-height:36px;padding:4px 10px;" data-clinic-reschedule-slot="' + esc(slot.id) + '">📅 ' + esc(bi('تعديل الموعد', 'Reschedule')) + '</button>' +
                               '<button class="btn" type="button" style="background:transparent;color:var(--booked-border);min-height:36px;padding:4px 8px;" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إلغاء الحجز وإتاحته', 'Cancel & Free Slot')) + '</button>' +
                             '</div>'
-                          : '<button class="btn btn-outline btn-block" type="button" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('عرض الملف الطبي والروشتة', 'View Record & Rx')) + '</button>')) +
+                          : '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                              '<button class="btn btn-outline" type="button" style="flex:1;" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('عرض الملف الطبي والروشتة', 'View Record & Rx')) + '</button>' +
+                              (slot.status === 'NO_SHOW'
+                                ? '<button class="btn btn-danger-outline" type="button" data-cancel-slot="' + esc(slot.id) + '">' + esc(bi('إتاحة الموعد', 'Free Slot')) + '</button>'
+                                : '') +
+                            '</div>')) +
                   '</div>';
                 }).join('') +
               '</div>' +
-            '</section>');
+            '</section>')));
 
-        return '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
-            '<div>' +
-              '<h2>' + esc(bi('لوحة تحكم عيادة ' + getDoctorDisplayName(doc, false), 'Clinic Dashboard — ' + getDoctorDisplayName(doc, true))) + '</h2>' +
-              '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وتفعيل حسابات المرضى.', 'Manage clinic schedule, walk-in bookings, delays, and direct patient activation.')) + '</div>' +
-            '</div>' +
-            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
-              '<button class="btn btn-outline" id="btnDoctorChatAdminTop" type="button" style="min-height:40px;padding:6px 12px;">📩 ' + esc(bi('مراسلة وتواصل مع الإدارة العامة', 'Message Super Admin')) + '</button>' +
-              '<button class="btn btn-danger-outline" id="btnDoctorLogout" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
-            '</div>' +
-          '</section>' +
+        const desktopMainHtml = activeDocTab === 'ACTIVATE_PATIENT'
+          ? renderDoctorActivationSectionHtml(doc)
+          : (activeDocTab === 'MESSAGES'
+              ? renderDoctorMessagesSectionHtml(doc)
+              : (activeDocTab === 'QUICK_RX'
+                  ? renderDoctorQuickRxWorkspaceHtml(doc, slots)
+                  : (activeDocTab === 'CLINIC_SETTINGS'
+                      ? renderDoctorClinicSettingsWorkspaceHtml(doc)
+                      : renderDesktopAppointmentsSectionHtml(doc, slots, bookedCount, availCount, doneCount, noShowCount))));
+
+        const topActivationHtml =
           '<section class="card" style="background:linear-gradient(135deg,#ECFDF5 0%,#F0FDF4 100%);border:1.5px solid #16A34A;display:flex;flex-direction:column;gap:8px;">' +
             '<div style="font-weight:800;color:#166534;font-size:1rem;">✅ ' + esc(bi('تفعيل وتوثيق حساب مريض جديد', 'Verify & Activate New Patient Account')) + '</div>' +
             '<div style="font-size:0.82rem;color:#15803D;">' + esc(bi('أدخل رقم هاتف المريض المسجل لتفعيل حسابه فوراً بضغطة واحدة باسم عيادتك.', 'Enter registered patient phone to verify their account immediately in your clinic.')) + '</div>' +
@@ -8328,14 +9396,75 @@
               '<input class="input" id="docTopQuickActivatePhone" type="tel" inputmode="numeric" placeholder="' + esc(bi('رقم هاتف المريض (مثال: 010...)', 'Patient phone number...')) + '" dir="ltr" style="flex:1;min-width:180px;background:#fff;" />' +
               '<button class="btn btn-green" id="btnDocTopQuickActivate" type="button" style="min-height:46px;">' + esc(bi('توثيق الحساب فوراً ✓', 'Verify Account Now ✓')) + '</button>' +
             '</div>' +
-          '</section>' +
-          renderNotificationStatusCardHtml('doctor_notif') +
-          '<div class="chips-row">' +
-            '<button class="chip ' + (ui.doctorTab === 'SLOTS' || !ui.doctorTab ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
-            '<button class="chip ' + (ui.doctorTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT">✅ ' + esc(bi('تفعيل / ملف مريض برقم الهاتف', 'Activate / Patient EMR')) + '</button>' +
-            '<button class="chip ' + (ui.doctorTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-doc-tab="MESSAGES">💬 ' + esc(bi('رسائل المرضى', 'Patient Messages')) + (unreadClinicMsgs > 0 ? ' (' + unreadClinicMsgs + ')' : '') + '</button>' +
-          '</div>' +
-          bodyHtml;
+          '</section>';
+
+        const desktopLayoutHtml =
+          '<div class="pc-desktop-table-wrap">' +
+            '<div class="pc-clinic-layout">' +
+              '<aside class="pc-clinic-sidebar pc-only-sidebar">' +
+                '<div style="padding-bottom:10px;border-bottom:1px solid var(--border);">' +
+                  '<div style="font-weight:800;font-size:1.04rem;color:var(--teal);">🩺 ' + esc(getDoctorDisplayName(doc)) + '</div>' +
+                  '<div style="font-size:0.82rem;color:var(--text-muted);margin-top:2px;">' + esc(getClinicDisplayName(doc)) + '</div>' +
+                  '<div style="font-size:0.78rem;color:var(--teal-text);margin-top:4px;font-weight:700;">🕒 ' + formatMinutesAr(doc.workStartMinutes) + ' - ' + formatMinutesAr(doc.workEndMinutes) + ' • ' + doc.feeEgp + ' ' + esc(bi('ج.م', 'EGP')) + '</div>' +
+                '</div>' +
+                '<button class="pc-nav-item ' + (activeDocTab === 'SLOTS' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS"><span>📅 ' + esc(bi('حجوزات اليوم', 'Today\'s Appointments')) + '</span><span class="badge badge-booked" style="font-size:0.75rem;">' + bookedCount + '</span></button>' +
+                '<button class="pc-nav-item ' + (activeDocTab === 'QUICK_RX' ? 'active' : '') + '" type="button" data-doc-tab="QUICK_RX"><span>🩺 ' + esc(bi('كشف سريع وكتابة روشتة', 'Quick Exam & Rx')) + '</span></button>' +
+                '<button class="pc-nav-item ' + (activeDocTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT"><span>📁 ' + esc(bi('سجل المرضى والتفعيل', 'Patients & Activation')) + '</span></button>' +
+                '<button class="pc-nav-item ' + (activeDocTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-doc-tab="MESSAGES"><span>💬 ' + esc(bi('رسائل المرضى', 'Patient Messages')) + '</span>' + (unreadClinicMsgs > 0 ? '<span class="badge badge-booked">' + unreadClinicMsgs + '</span>' : '') + '</button>' +
+                '<button class="pc-nav-item ' + (activeDocTab === 'CLINIC_SETTINGS' ? 'active' : '') + '" type="button" data-doc-tab="CLINIC_SETTINGS"><span>⚙️ ' + esc(bi('إعدادات العيادة و Drive', 'Clinic & Drive Settings')) + '</span></button>' +
+                '<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px;display:flex;flex-direction:column;gap:8px;">' +
+                  '<button class="btn btn-primary btn-block" id="btnInstallDesktopAppSidebar" data-install-desktop-app="1" type="button" style="min-height:42px;font-size:0.86rem;">💻 ' + esc(bi('تثبيت نسخة الكمبيوتر (Windows App)', 'Install Desktop App')) + '</button>' +
+                  '<button class="btn btn-outline btn-block" id="btnDoctorChatAdminDesktop" data-chat-admin-btn="1" type="button" style="min-height:40px;font-size:0.85rem;">📩 ' + esc(bi('مراسلة الإدارة العامة', 'Message Admin')) + '</button>' +
+                  '<button class="btn btn-danger-outline btn-block" data-doctor-logout="1" type="button" style="min-height:40px;font-size:0.85rem;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
+                '</div>' +
+                '<div style="display:flex;gap:4px;flex-wrap:wrap;padding-top:4px;">' +
+                  '<span class="pc-shortcut-pill">Ctrl+P ' + esc(bi('طباعة', 'Print')) + '</span>' +
+                  '<span class="pc-shortcut-pill">/ ' + esc(bi('بحث', 'Search')) + '</span>' +
+                  '<span class="pc-shortcut-pill">Esc ' + esc(bi('إغلاق', 'Close')) + '</span>' +
+                '</div>' +
+              '</aside>' +
+              '<div class="pc-clinic-main">' +
+                '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">' +
+                  '<div>' +
+                    '<h2 style="font-size:1.35rem;">' + esc(bi('لوحة سطح المكتب — عيادة ' + getDoctorDisplayName(doc, false), 'PC Clinic Dashboard — ' + getDoctorDisplayName(doc, true))) + '</h2>' +
+                    '<div style="color:var(--text-muted);font-size:0.88rem;">' + esc(getClinicDisplayName(doc)) + ' • ' + esc(formatDoctorSpecialties(doc)) + (doc.currentDelayMinutes > 0 ? ' • ⚠️ +' + doc.currentDelayMinutes + ' ' + esc(bi('دقيقة تأخير', 'min delay')) : '') + '</div>' +
+                  '</div>' +
+                  '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+                    '<button class="btn ' + (isClinicDesktopSoundEnabled() ? 'btn-green' : 'btn-outline') + '" id="btnTopClinicSoundToggle" type="button" style="min-height:40px;padding:6px 12px;font-size:0.85rem;">' + (isClinicDesktopSoundEnabled() ? '🔊 ' + esc(bi('تنبيه صوتي مفعّل', 'Sound ON')) : '🔇 ' + esc(bi('الصوت صامت', 'Sound OFF'))) + '</button>' +
+                    '<button class="btn btn-outline" id="btnPrintDesktopTop" type="button" style="min-height:40px;padding:6px 12px;font-size:0.85rem;">🖨️ ' + esc(bi('طباعة (Ctrl+P)', 'Print (Ctrl+P)')) + '</button>' +
+                  '</div>' +
+                '</section>' +
+                topActivationHtml +
+                desktopMainHtml +
+              '</div>' +
+            '</div>' +
+          '</div>';
+
+        const mobileLayoutHtml =
+          '<div class="mobile-clinic-only" style="display:flex;flex-direction:column;gap:14px;">' +
+            '<section style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+              '<div>' +
+                '<h2>' + esc(bi('لوحة تحكم عيادة ' + getDoctorDisplayName(doc, false), 'Clinic Dashboard — ' + getDoctorDisplayName(doc, true))) + '</h2>' +
+                '<div style="color:var(--text-muted);font-size:0.9rem;">' + esc(bi('إدارة جدول المواعيد، الحجوزات الهاتفية، تنبيهات التأخير، وتفعيل حسابات المرضى.', 'Manage clinic schedule, walk-in bookings, delays, and direct patient activation.')) + '</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+                '<button class="btn btn-outline" id="btnInstallDesktopAppMobile" data-install-desktop-app="1" type="button" style="min-height:40px;padding:6px 12px;">💻 ' + esc(bi('تثبيت نسخة الكمبيوتر', 'Windows App')) + '</button>' +
+                '<button class="btn btn-outline" id="btnDoctorChatAdminTop" data-chat-admin-btn="1" type="button" style="min-height:40px;padding:6px 12px;">📩 ' + esc(bi('مراسلة وتواصل مع الإدارة العامة', 'Message Super Admin')) + '</button>' +
+                '<button class="btn btn-danger-outline" id="btnDoctorLogout" data-doctor-logout="1" type="button" style="min-height:40px;padding:6px 14px;">🚪 ' + esc(bi('تسجيل خروج', 'Sign Out')) + '</button>' +
+              '</div>' +
+            '</section>' +
+            topActivationHtml +
+            renderNotificationStatusCardHtml('doctor_notif') +
+            '<div class="chips-row">' +
+              '<button class="chip ' + (activeDocTab === 'SLOTS' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
+              '<button class="chip ' + (activeDocTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT">✅ ' + esc(bi('تفعيل / ملف مريض برقم الهاتف', 'Activate / Patient EMR')) + '</button>' +
+              '<button class="chip ' + (activeDocTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-doc-tab="MESSAGES">💬 ' + esc(bi('رسائل المرضى', 'Patient Messages')) + (unreadClinicMsgs > 0 ? ' (' + unreadClinicMsgs + ')' : '') + '</button>' +
+              '<button class="chip ' + (activeDocTab === 'CLINIC_SETTINGS' ? 'active' : '') + '" type="button" data-doc-tab="CLINIC_SETTINGS">🏥 ' + esc(bi('إعدادات العيادة وترويسة الروشتة', 'Clinic & Rx Header')) + '</button>' +
+            '</div>' +
+            mobileBodyHtml +
+          '</div>';
+
+        return desktopLayoutHtml + mobileLayoutHtml;
       }
 
       function renderStaffPortalSwitcherHtml() {
@@ -11174,6 +12303,18 @@
             '<button class="btn btn-outline" id="btnSaveCustomMedFav" type="button" style="min-height:36px;padding:4px 10px;font-size:0.8rem;align-self:flex-end;">⭐ ' + esc(bi('حفظ الدواء المخصص في مفضلاتي', 'Save Custom Med to Favorites')) + '</button>' +
           '</div>' +
           '<textarea class="textarea" id="rxNotes" placeholder="' + esc(bi('تعليمات وملاحظات إضافية للمريض (اختياري)', 'Additional notes for patient (optional)')) + '"></textarea>' +
+          '<div class="card" style="padding:12px;background:#ECFDF5;border-color:#86EFAC;display:flex;flex-direction:column;gap:8px;">' +
+            '<div style="font-weight:800;font-size:0.86rem;color:#166534;">📅 ' + esc(bi('موعد الاستشارة القادمة (اختياري — يظهر بالروشتة المطبوعة والرقمية):', 'Next Follow-Up Consultation Date (optional):')) + '</div>' +
+            '<div class="chips-row">' +
+              '<button class="chip" type="button" data-rx-followup="بعد أسبوع">' + esc(bi('بعد أسبوع', '1 Week')) + '</button>' +
+              '<button class="chip" type="button" data-rx-followup="بعد 10 أيام">' + esc(bi('بعد 10 أيام', '10 Days')) + '</button>' +
+              '<button class="chip" type="button" data-rx-followup="بعد أسبوعين">' + esc(bi('بعد أسبوعين', '2 Weeks')) + '</button>' +
+              '<button class="chip" type="button" data-rx-followup="بعد شهر">' + esc(bi('بعد شهر', '1 Month')) + '</button>' +
+              '<button class="chip" type="button" data-rx-followup="عند اللزوم">' + esc(bi('عند اللزوم', 'As Needed')) + '</button>' +
+              '<button class="chip" type="button" data-rx-followup="">' + esc(bi('بدون موعد', 'Clear')) + '</button>' +
+            '</div>' +
+            '<input class="input" id="rxFollowUpDate" placeholder="' + esc(bi('مثال: بعد أسبوعين — الخميس الموافق ...', 'e.g. In 2 weeks / Specific date')) + '" style="background:#FFFFFF;" />' +
+          '</div>' +
           '<button class="btn btn-primary btn-block" id="btnRxGenerateBilingual" type="button" style="background:linear-gradient(135deg,#0D7377 0%,#0F5E8C 100%);">' +
             esc(bi('🧠 توليد الروشتة والتقرير الطبي باللغتين (AR + EN)', '🧠 Generate Bilingual Rx & AI Medical Report (AR + EN)')) +
           '</button>' +
@@ -11187,13 +12328,44 @@
           '</div>' +
           '<label class="btn btn-outline btn-block" style="cursor:pointer;">📷 ' + esc(bi('إرفاق صورة روشتة ورقية (اختياري)', 'Attach paper Rx photo (optional)')) + '<input type="file" id="rxPhotoInput" accept="image/*" style="display:none;" /></label>' +
           '<div id="rxPhotoPreview"></div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-            '<button class="btn btn-outline" id="btnPrintRxModalAr" type="button">🖨️ ' + esc(bi('طباعة عربي (AR)', 'Print AR')) + '</button>' +
-            '<button class="btn btn-outline" id="btnPrintRxModalEn" type="button">🖨️ ' + esc(bi('طباعة إنجليزي (EN)', 'Print EN')) + '</button>' +
-          '</div>' +
-          '<button class="btn btn-primary btn-block" id="btnSaveCompleteRx" type="button">✓ ' + esc(bi('إرسال لملف المريض وإنهاء الكشف', 'Save & Send to Patient Record')) + '</button>',
+          '<div class="card" style="padding:12px;background:#F8FCFC;border-color:rgba(13,115,119,0.28);display:flex;flex-direction:column;gap:10px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<span style="font-weight:800;font-size:0.86rem;color:var(--teal-text);">📐 ' + esc(bi('مقاس الطباعة الرسمي بترويسة العيادة:', 'Clinic Letterhead Print Paper Size:')) + '</span>' +
+              '<div class="chips-row">' +
+                '<button class="chip ' + (getClinicLetterhead(doc).paperSize === 'A5' ? 'active' : '') + '" id="rxPaperA5" type="button">📄 A5 (' + esc(bi('روشتة قياسية', 'Standard Rx')) + ')</button>' +
+                '<button class="chip ' + (getClinicLetterhead(doc).paperSize === 'A4' ? 'active' : '') + '" id="rxPaperA4" type="button">📃 A4 (' + esc(bi('ورق كبير', 'Full Page')) + ')</button>' +
+              '</div>' +
+            '</div>' +
+            '<button class="btn btn-green btn-block" id="btnSaveAndPrintBrandedRx" type="button" style="font-size:1rem;min-height:52px;">🖨️ ' + esc(bi('طباعة الروشتة + إرسالها للمريض', 'Print Branded Rx + Send to Patient')) + '</button>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+              '<button class="btn btn-outline" id="btnPrintRxModalAr" type="button">🖨️ ' + esc(bi('معاينة طباعة عربي (AR)', 'Preview Print AR')) + '</button>' +
+              '<button class="btn btn-outline" id="btnPrintRxModalEn" type="button">🖨️ ' + esc(bi('معاينة طباعة إنجليزي (EN)', 'Preview Print EN')) + '</button>' +
+            '</div>' +
+            '<button class="btn btn-primary btn-block" id="btnSaveCompleteRx" type="button">✓ ' + esc(bi('حفظ وإرسال لملف المريض فقط (بدون طباعة)', 'Save & Send to Patient Only')) + '</button>' +
+          '</div>',
           function () {
+            let selectedPaperSize = getClinicLetterhead(doc).paperSize || 'A5';
             renderRxModalBody();
+
+            document.querySelectorAll('[data-rx-followup]').forEach((btn) => {
+              btn.onclick = function () {
+                const val = btn.getAttribute('data-rx-followup') || '';
+                const inp = document.getElementById('rxFollowUpDate');
+                if (inp) inp.value = val;
+              };
+            });
+
+            function updatePaperSizeChips(nextSize) {
+              selectedPaperSize = nextSize === 'A4' ? 'A4' : 'A5';
+              const a5Btn = document.getElementById('rxPaperA5');
+              const a4Btn = document.getElementById('rxPaperA4');
+              if (a5Btn) a5Btn.classList.toggle('active', selectedPaperSize === 'A5');
+              if (a4Btn) a4Btn.classList.toggle('active', selectedPaperSize === 'A4');
+            }
+            const rxA5Btn = document.getElementById('rxPaperA5');
+            const rxA4Btn = document.getElementById('rxPaperA4');
+            if (rxA5Btn) rxA5Btn.onclick = () => updatePaperSizeChips('A5');
+            if (rxA4Btn) rxA4Btn.onclick = () => updatePaperSizeChips('A4');
 
             document.getElementById('btnSaveDiagFav').onclick = function () {
               const dVal = document.getElementById('rxDiagnosis').value.trim();
@@ -11280,29 +12452,37 @@
 
             function printFromModal(isEnPrint) {
               const b = populateBilingualFields(false);
+              const followUpVal = ((document.getElementById('rxFollowUpDate') || {}).value || '').trim();
               printPrescription({
                 patientName: slot.patientName,
+                patientPhone: slot.patientPhone || '',
+                familyMemberId: slot.familyMemberId || '',
+                doctorId: doc.id,
                 doctorName: getDoctorDisplayName(doc, isEnPrint),
                 specialty: doc.specialty,
                 visitDateLabel: formatTodayAr(),
                 diagnosis: b.diagnosisAr,
                 medications: b.medicationsAr || buildMedicationsText(),
                 notes: b.notesAr,
+                followUpDate: followUpVal,
                 diagnosisEn: document.getElementById('rxDiagnosisEn').value.trim() || b.diagnosisEn,
                 medicationsEn: document.getElementById('rxMedsEn').value.trim() || b.medicationsEn,
                 notesEn: document.getElementById('rxNotesEn').value.trim() || b.notesEn,
                 aiReportAr: document.getElementById('rxAiReportAr').value.trim() || b.aiReportAr,
                 aiReportEn: document.getElementById('rxAiReportEn').value.trim() || b.aiReportEn
-              }, isEnPrint);
+              }, isEnPrint, { paperSize: selectedPaperSize });
             }
 
-            document.getElementById('btnPrintRxModalAr').onclick = () => printFromModal(false);
-            document.getElementById('btnPrintRxModalEn').onclick = () => printFromModal(true);
-
-            document.getElementById('btnSaveCompleteRx').onclick = function () {
+            function saveAndPushRxFromModal(shouldPrintAfterSave, isEnPrint) {
               const diag = document.getElementById('rxDiagnosis').value.trim();
-              if (!diag) { showToast(bi('يرجى كتابة التشخيص الطبي', 'Please enter a diagnosis')); return; }
+              if (!diag) {
+                showToast(bi('يرجى كتابة التشخيص الطبي', 'Please enter a diagnosis'));
+                const dInp = document.getElementById('rxDiagnosis');
+                if (dInp) dInp.focus();
+                return;
+              }
               const bundle = populateBilingualFields(false);
+              const followUpVal = ((document.getElementById('rxFollowUpDate') || {}).value || '').trim();
               slot.status = 'COMPLETED';
               const newRxRec = {
                 id: 'rec_' + Date.now(),
@@ -11316,6 +12496,7 @@
                 diagnosis: bundle.diagnosisAr,
                 medications: bundle.medicationsAr || buildMedicationsText(),
                 notes: bundle.notesAr || document.getElementById('rxNotes').value.trim(),
+                followUpDate: followUpVal,
                 diagnosisEn: document.getElementById('rxDiagnosisEn').value.trim() || bundle.diagnosisEn,
                 medicationsEn: document.getElementById('rxMedsEn').value.trim() || bundle.medicationsEn,
                 notesEn: document.getElementById('rxNotesEn').value.trim() || bundle.notesEn,
@@ -11331,17 +12512,18 @@
               db.records.unshift(newRxRec);
               const rxTargetAcc = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === normalizePhoneDigits(slot.patientPhone));
               const rxTargetId = rxTargetAcc ? rxTargetAcc.id : (slot.familyMemberId || '');
-              const rxMsg = '💊 تم إضافة روشتة وتقرير طبي جديد من ' + doc.doctorName + ' (' + (doc.clinicName || doc.doctorName) + '): ' + newRxRec.diagnosis;
+              const followMsgPart = followUpVal ? (' — الاستشارة: ' + followUpVal) : '';
+              const rxMsg = '💊 تم إضافة روشتة وتقرير طبي جديد من ' + doc.doctorName + ' (' + getClinicLetterhead(doc).clinicName + '): ' + newRxRec.diagnosis + followMsgPart;
               const rxNotif = {
                 id: Date.now(),
                 doctorId: doc.id,
                 doctorName: doc.doctorName,
-                clinicName: doc.clinicName || doc.doctorName,
+                clinicName: getClinicLetterhead(doc).clinicName,
                 message: rxMsg,
                 isRead: false,
                 targetAudience: 'PATIENT',
                 targetId: rxTargetId,
-                senderLabel: doc.clinicName || doc.doctorName,
+                senderLabel: getClinicLetterhead(doc).clinicName,
                 createdAtMillis: newRxRec.createdAtMillis
               };
               db.notifications.unshift(rxNotif);
@@ -11351,13 +12533,29 @@
               syncDocToFirestoreNamespace('notifications', String(rxNotif.id), rxNotif);
               createAndSyncPermanentMedicalLogWeb(newRxRec, 'CLINIC_VISIT', doc.doctorName);
               if (newRxRec.attachmentDataUrl) {
-                uploadFileToGoogleDriveWebApp(newRxRec, doc, doc.clinicName || doc.doctorName);
+                uploadFileToGoogleDriveWebApp(newRxRec, doc, getClinicLetterhead(doc).clinicName);
               }
-              dispatchWorkerPush('PRESCRIPTION_ADDED', '💊 روشتة جديدة — ' + (doc.clinicName || doc.doctorName), rxMsg, 'PATIENT', rxTargetId, CLOUD_PATHS.records);
+              dispatchWorkerPush('PRESCRIPTION_ADDED', '💊 روشتة جديدة — ' + getClinicLetterhead(doc).clinicName, rxMsg, 'PATIENT', rxTargetId, CLOUD_PATHS.records);
               closeModal();
-              showToast(bi('تم حفظ الروشتة والتقرير الثنائي وتدوينها في السجل الدائم مدى الحياة', 'Bilingual Rx saved & permanently logged'));
+              showToast(
+                shouldPrintAfterSave
+                  ? bi('✓ تم حفظ الروشتة وإرسالها للمريض — جاري فتح الطباعة (' + selectedPaperSize + ')', '✓ Rx saved & pushed to patient — Opening Print (' + selectedPaperSize + ')')
+                  : bi('تم حفظ الروشتة والتقرير الثنائي وتدوينها في السجل الدائم مدى الحياة', 'Bilingual Rx saved & permanently logged'),
+                3200,
+                { isSuccess: true }
+              );
               renderApp();
-            };
+              if (shouldPrintAfterSave) {
+                setTimeout(function () {
+                  printPrescription(newRxRec, Boolean(isEnPrint), { paperSize: selectedPaperSize });
+                }, 120);
+              }
+            }
+
+            document.getElementById('btnPrintRxModalAr').onclick = () => printFromModal(false);
+            document.getElementById('btnPrintRxModalEn').onclick = () => printFromModal(true);
+            document.getElementById('btnSaveAndPrintBrandedRx').onclick = () => saveAndPushRxFromModal(true, false);
+            document.getElementById('btnSaveCompleteRx').onclick = () => saveAndPushRxFromModal(false, false);
           }
         );
       }
@@ -12468,6 +13666,9 @@
             if (e.key === 'Enter') attemptDoctorLogin();
           };
         }
+        document.querySelectorAll('[data-install-desktop-app]').forEach((btn) => {
+          btn.onclick = triggerDesktopAppInstall;
+        });
         bindPasswordToggleButtons(document);
       }
 
@@ -13338,20 +14539,23 @@
           };
         });
 
-        const docChatAdmBtn = document.getElementById('btnDoctorChatAdmin');
-        if (docChatAdmBtn) {
-          docChatAdmBtn.onclick = function () {
+        document.querySelectorAll('[data-install-desktop-app]').forEach((btn) => {
+          btn.onclick = triggerDesktopAppInstall;
+        });
+
+        document.querySelectorAll('[data-chat-admin-btn]').forEach((btn) => {
+          btn.onclick = function () {
             openDirectChatModal({
               threadType: 'CLINIC_ADMIN',
               doctorId: doc.id,
               doctorName: getDoctorDisplayName(doc)
             });
           };
-        }
+        });
 
-        const docChatAdmTopBtn = document.getElementById('btnDoctorChatAdminTop');
-        if (docChatAdmTopBtn) {
-          docChatAdmTopBtn.onclick = function () {
+        const docChatAdmBtn = document.getElementById('btnDoctorChatAdmin');
+        if (docChatAdmBtn) {
+          docChatAdmBtn.onclick = function () {
             openDirectChatModal({
               threadType: 'CLINIC_ADMIN',
               doctorId: doc.id,
@@ -13430,17 +14634,18 @@
           };
         });
 
-        const logoutBtn = document.getElementById('btnDoctorLogout');
-        if (logoutBtn) {
-          logoutBtn.onclick = function () {
+        document.querySelectorAll('[data-doctor-logout]').forEach((btn) => {
+          btn.onclick = function () {
             ui.loggedInDoctorId = null;
+            ui.doctorTab = 'SLOTS';
+            ui.selectedDesktopSlotId = '';
             ui.docActivatePhoneQuery = '';
             ui.docActivateResults = [];
             ui.docActivateSuccessMsg = '';
             showToast(bi('تم تسجيل خروج الطبيب', 'Doctor signed out'));
             renderApp();
           };
-        }
+        });
 
         function runDoctorPatientSearch() {
           const inp = document.getElementById('docActivatePhoneInput');
@@ -13542,18 +14747,226 @@
           renderApp();
         }
 
-        const delay15Btn = document.getElementById('btnDelay15');
-        if (delay15Btn) delay15Btn.onclick = () => applyDelay(15);
-        const delay30Btn = document.getElementById('btnDelay30');
-        if (delay30Btn) delay30Btn.onclick = () => applyDelay(30);
+        document.querySelectorAll('[data-delay-mins]').forEach((btn) => {
+          btn.onclick = function () {
+            applyDelay(parseInt(btn.getAttribute('data-delay-mins'), 10) || 15);
+          };
+        });
+
         const schedGenBtn = document.getElementById('btnOpenScheduleGen');
         if (schedGenBtn) schedGenBtn.onclick = () => openScheduleGenModal(doc);
+        const schedGenDesktopBtn = document.getElementById('btnOpenScheduleGenDesktop');
+        if (schedGenDesktopBtn) schedGenDesktopBtn.onclick = () => openScheduleGenModal(doc);
+        const schedGenSettingsBtn = document.getElementById('btnOpenScheduleGenSettings');
+        if (schedGenSettingsBtn) schedGenSettingsBtn.onclick = () => openScheduleGenModal(doc);
+
+        const pcSearchInp = document.getElementById('pcSlotsSearchInput');
+        if (pcSearchInp) {
+          pcSearchInp.oninput = function () {
+            ui.desktopSlotsSearch = pcSearchInp.value || '';
+            const tbodyWrap = pcSearchInp.closest('.card');
+            renderApp();
+            const nextInp = document.getElementById('pcSlotsSearchInput');
+            if (nextInp) {
+              nextInp.focus();
+              try {
+                const len = nextInp.value.length;
+                nextInp.setSelectionRange(len, len);
+              } catch (e) {}
+            }
+          };
+        }
+
+        document.querySelectorAll('[data-pc-slot-filter]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.desktopSlotsFilter = btn.getAttribute('data-pc-slot-filter') || 'ALL';
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-select-desktop-slot]').forEach((row) => {
+          row.onclick = function (e) {
+            if (e.target && e.target.closest && e.target.closest('button')) return;
+            ui.selectedDesktopSlotId = row.getAttribute('data-select-desktop-slot') || '';
+            document.querySelectorAll('[data-select-desktop-slot]').forEach((r) => {
+              r.classList.toggle('pc-row-selected', r.getAttribute('data-select-desktop-slot') === ui.selectedDesktopSlotId);
+            });
+          };
+        });
+
+        document.querySelectorAll('[data-set-slot-status]').forEach((btn) => {
+          btn.onclick = function (e) {
+            e.stopPropagation();
+            const raw = btn.getAttribute('data-set-slot-status') || '';
+            const parts = raw.split(':');
+            if (parts.length === 2) {
+              updateSlotStatusByClinicWeb(parts[0], parts[1]);
+            }
+          };
+        });
+
+        document.querySelectorAll('[data-print-slot]').forEach((btn) => {
+          btn.onclick = function (e) {
+            e.stopPropagation();
+            const s = db.slots.find((x) => x.id === btn.getAttribute('data-print-slot'));
+            if (s) {
+              ui.selectedDesktopSlotId = s.id;
+              printClinicVisitReceipt(s, doc);
+            }
+          };
+        });
+
+        const printDailyBtn = document.getElementById('btnPrintDailyScheduleDesktop');
+        if (printDailyBtn) {
+          printDailyBtn.onclick = function () {
+            const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+            printClinicDailySchedule(doc, docSlots);
+          };
+        }
+        const printTopBtn = document.getElementById('btnPrintDesktopTop');
+        if (printTopBtn) {
+          printTopBtn.onclick = function () {
+            const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+            const selSlot = ui.selectedDesktopSlotId ? docSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE') : null;
+            if (selSlot) {
+              printClinicVisitReceipt(selSlot, doc);
+            } else {
+              printClinicDailySchedule(doc, docSlots);
+            }
+          };
+        }
+
+        function toggleSoundState() {
+          const next = !isClinicDesktopSoundEnabled();
+          try { localStorage.setItem(CLINIC_SOUND_PREF_KEY, next ? '1' : '0'); } catch (e) {}
+          if (next) playClinicDesktopAlertSound(true);
+          showToast(next ? bi('🔊 تم تفعيل التنبيهات الصوتية للعيادة', '🔊 Clinic desktop sound alerts enabled') : bi('🔇 تم كتم التنبيهات الصوتية مؤقتاً', '🔇 Clinic desktop sound alerts muted'));
+          renderApp();
+        }
+        const soundTopBtn = document.getElementById('btnTopClinicSoundToggle');
+        if (soundTopBtn) soundTopBtn.onclick = toggleSoundState;
+        const soundSettingsBtn = document.getElementById('btnToggleClinicSound');
+        if (soundSettingsBtn) soundSettingsBtn.onclick = toggleSoundState;
+
+        const testAlertBtn = document.getElementById('btnTestClinicDesktopAlert');
+        if (testAlertBtn) {
+          testAlertBtn.onclick = async function () {
+            if (typeof Notification !== 'undefined' && Notification.permission !== 'granted' && Notification.requestPermission) {
+              try { await Notification.requestPermission(); } catch (e) {}
+            }
+            playClinicDesktopAlertSound(true);
+            triggerPlatformNotification(
+              '🔔 اختبار إشعارات سطح المكتب — ' + getClinicDisplayName(doc),
+              'إشعارات الحجوزات الجديدة ورسائل المرضى والصوت تعمل بنجاح ✓',
+              'clinic_desktop_test_' + Date.now()
+            );
+            showToast(bi('🔊🔔 تم تشغيل نغمة التنبيه وإشعار سطح المكتب بنجاح ✓', '🔊🔔 Desktop chime & alert fired ✓'), 3000, { isSuccess: true });
+          };
+        }
+
+        function readLetterheadInputsIntoDoc(persistChanges) {
+          const lhClinicInp = document.getElementById('docLhClinicName');
+          const lhDocInp = document.getElementById('docLhDoctorTitle');
+          const lhDegInp = document.getElementById('docLhSpecialtyDegree');
+          const lhAddrInp = document.getElementById('docLhAddress');
+          const lhPhoneInp = document.getElementById('docLhPhones');
+          const lhLogoInp = document.getElementById('docLhLogoUrl');
+          const lhPaperSel = document.getElementById('docLhPaperSize');
+          if (lhClinicInp) doc.rxClinicName = lhClinicInp.value.trim();
+          if (lhDocInp) doc.rxDoctorTitle = lhDocInp.value.trim();
+          if (lhDegInp) doc.rxSpecialtyDegree = lhDegInp.value.trim();
+          if (lhAddrInp) doc.rxAddress = lhAddrInp.value.trim();
+          if (lhPhoneInp) doc.rxPhones = lhPhoneInp.value.trim();
+          if (lhLogoInp) doc.rxLogoDataUrl = lhLogoInp.value.trim();
+          if (lhPaperSel) doc.rxPaperSize = lhPaperSel.value === 'A4' ? 'A4' : 'A5';
+
+          const curLh = getClinicLetterhead(doc);
+          const pImg = document.getElementById('docLhPreviewImg');
+          const pClinic = document.getElementById('docLhPreviewClinic');
+          const pDoc = document.getElementById('docLhPreviewDoctor');
+          const pDeg = document.getElementById('docLhPreviewDegree');
+          const pAddr = document.getElementById('docLhPreviewAddress');
+          const pPhones = document.getElementById('docLhPreviewPhones');
+          if (pImg) pImg.src = curLh.logoUrl || './icon-192.png';
+          if (pClinic) pClinic.textContent = curLh.clinicName;
+          if (pDoc) pDoc.textContent = curLh.doctorTitle;
+          if (pDeg) pDeg.textContent = curLh.specialtyDegree;
+          if (pAddr) pAddr.textContent = '📍 ' + curLh.address;
+          if (pPhones) pPhones.textContent = '📞 ' + (curLh.phones || '-');
+
+          if (persistChanges) {
+            saveState(db);
+            syncDocToFirestoreNamespace('doctors', doc.id, doc);
+          }
+        }
+
+        ['docLhClinicName', 'docLhDoctorTitle', 'docLhSpecialtyDegree', 'docLhAddress', 'docLhPhones', 'docLhLogoUrl'].forEach((inpId) => {
+          const el = document.getElementById(inpId);
+          if (el) {
+            el.oninput = function () { readLetterheadInputsIntoDoc(false); };
+          }
+        });
+
+        const lhLogoFile = document.getElementById('docLhLogoFile');
+        if (lhLogoFile) {
+          lhLogoFile.onchange = async function (e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const compactLogo = await compressLogoImageToDataUri(file, 200);
+            if (!compactLogo) {
+              showToast(bi('تعذر معالجة صورة الشعار، جرب صورة أصغر', 'Could not process logo image'));
+              return;
+            }
+            const lhLogoInp = document.getElementById('docLhLogoUrl');
+            if (lhLogoInp) lhLogoInp.value = compactLogo;
+            readLetterheadInputsIntoDoc(true);
+            showToast(bi('🖼️ تم رفع وحفظ شعار العيادة بنجاح ✓', '🖼️ Clinic logo uploaded & saved ✓'), 2600, { isSuccess: true });
+          };
+        }
+
+        const clearLhLogoBtn = document.getElementById('btnClearDocLhLogo');
+        if (clearLhLogoBtn) {
+          clearLhLogoBtn.onclick = function () {
+            const lhLogoInp = document.getElementById('docLhLogoUrl');
+            if (lhLogoInp) lhLogoInp.value = '';
+            doc.rxLogoDataUrl = '';
+            readLetterheadInputsIntoDoc(true);
+            showToast(bi('تمت استعادة الشعار الافتراضي للعيادة', 'Default clinic logo restored'));
+          };
+        }
+
+        const saveLhBtn = document.getElementById('btnSaveClinicLetterhead');
+        if (saveLhBtn) {
+          saveLhBtn.onclick = function () {
+            readLetterheadInputsIntoDoc(true);
+            showToast(bi('💾 تم حفظ ومزامنة ترويسة الروشتة الرسمية بنجاح ✓', '💾 Branded Rx letterhead saved & synced ✓'), 2800, { isSuccess: true });
+            renderApp();
+          };
+        }
+
+        const saveDriveBtn = document.getElementById('btnSaveClinicDriveSettings');
+        if (saveDriveBtn) {
+          saveDriveBtn.onclick = function () {
+            readLetterheadInputsIntoDoc(false);
+            const pUrl = ((document.getElementById('docDriveUrlPrimary') || {}).value || '').trim();
+            const sUrl = ((document.getElementById('docDriveUrlSecondary') || {}).value || '').trim();
+            doc.driveWebAppUrl = pUrl;
+            doc.secondaryDriveWebAppUrl = sUrl;
+            saveState(db);
+            syncDocToFirestoreNamespace('doctors', doc.id, doc);
+            showToast(bi('💾 تم حفظ ومزامنة إعدادات العيادة وروابط Drive بنجاح ✓', '💾 Clinic & Drive settings saved & synced ✓'), 2800, { isSuccess: true });
+            renderApp();
+          };
+        }
 
         document.querySelectorAll('[data-manual-slot]').forEach((btn) => {
           btn.onclick = () => openManualPhoneModal(btn.getAttribute('data-manual-slot'));
         });
         document.querySelectorAll('[data-write-rx]').forEach((btn) => {
-          btn.onclick = () => openSmartPrescriptionModal(btn.getAttribute('data-write-rx'));
+          btn.onclick = function () {
+            ui.selectedDesktopSlotId = btn.getAttribute('data-write-rx') || '';
+            openSmartPrescriptionModal(btn.getAttribute('data-write-rx'));
+          };
         });
         document.querySelectorAll('[data-view-emr]').forEach((btn) => {
           btn.onclick = () => openPatientEmrModal(btn.getAttribute('data-view-emr'));
@@ -13770,16 +15183,68 @@
         }
       });
 
-      // Clear any stale legacy SW caches automatically while preserving clean v1.0.0 rev4 cache
+      // Clear any stale legacy SW caches automatically while preserving clean v1.0.0 rev5 cache
       if ('caches' in window && caches.keys) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== 'teb-alhajayzah-v1.0.0-rev4') {
+            if (k !== 'teb-alhajayzah-v1.0.0-rev5') {
               caches.delete(k).catch(function () {});
             }
           });
         }).catch(function () {});
       }
+
+      // Unlock Web Audio on first gesture & handle PC Keyboard Shortcuts (Ctrl+P, /, Esc)
+      document.addEventListener('pointerdown', unlockClinicAudioContext, { passive: true });
+      document.addEventListener('keydown', function (e) {
+        unlockClinicAudioContext();
+        if (e.key === 'Escape') {
+          const mr = document.getElementById('modalRoot');
+          if (mr && mr.innerHTML && mr.innerHTML.trim() !== '') {
+            closeModal();
+          }
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && String(e.key || '').toLowerCase() === 'p') {
+          const printRxBtn = document.getElementById('btnPrintRxModalAr');
+          if (printRxBtn) {
+            e.preventDefault();
+            printRxBtn.click();
+            return;
+          }
+          if (ui.roleMode === 'DOCTOR' && ui.loggedInDoctorId) {
+            const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
+            if (doc) {
+              e.preventDefault();
+              const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+              const selSlot = ui.selectedDesktopSlotId ? docSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE') : null;
+              if (selSlot) {
+                printClinicVisitReceipt(selSlot, doc);
+              } else {
+                printClinicDailySchedule(doc, docSlots);
+              }
+            }
+          }
+          return;
+        }
+        if (e.key === '/' && ui.roleMode === 'DOCTOR' && ui.loggedInDoctorId && !isUiBusyForBackgroundRender()) {
+          const searchInp = document.getElementById('pcSlotsSearchInput');
+          if (searchInp) {
+            e.preventDefault();
+            searchInp.focus();
+          }
+        }
+      });
+
+      let pcResizeTimer = null;
+      window.addEventListener('resize', function () {
+        if (pcResizeTimer) clearTimeout(pcResizeTimer);
+        pcResizeTimer = setTimeout(function () {
+          if (ui.roleMode === 'DOCTOR' && ui.loggedInDoctorId) {
+            updateHeader();
+          }
+        }, 120);
+      });
 
       // Service Worker & Dynamic Firebase Cloud Messaging Registration
       if ('serviceWorker' in navigator) {

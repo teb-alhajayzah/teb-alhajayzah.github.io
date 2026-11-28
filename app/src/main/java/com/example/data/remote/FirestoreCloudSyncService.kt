@@ -574,6 +574,13 @@ object FirestoreCloudSyncService {
         put("chatEnabled", d.chatEnabled)
         put("driveWebAppUrl", d.driveWebAppUrl)
         put("secondaryDriveWebAppUrl", d.secondaryDriveWebAppUrl)
+        put("rxClinicName", d.rxClinicName)
+        put("rxDoctorTitle", d.rxDoctorTitle)
+        put("rxSpecialtyDegree", d.rxSpecialtyDegree)
+        put("rxLogoDataUrl", d.rxLogoDataUrl)
+        put("rxAddress", d.rxAddress)
+        put("rxPhones", d.rxPhones)
+        put("rxPaperSize", d.rxPaperSize.ifBlank { "A5" })
     }
 
     fun doctorFromJson(j: JSONObject): ClinicDoctorEntity? {
@@ -611,6 +618,13 @@ object FirestoreCloudSyncService {
             chatEnabled = if (j.has("chatEnabled")) j.optBoolean("chatEnabled", true) else true,
             driveWebAppUrl = j.optString("driveWebAppUrl", "").trim(),
             secondaryDriveWebAppUrl = j.optString("secondaryDriveWebAppUrl", "").trim(),
+            rxClinicName = j.optString("rxClinicName", "").trim(),
+            rxDoctorTitle = j.optString("rxDoctorTitle", "").trim(),
+            rxSpecialtyDegree = j.optString("rxSpecialtyDegree", "").trim(),
+            rxLogoDataUrl = j.optString("rxLogoDataUrl", "").trim(),
+            rxAddress = j.optString("rxAddress", "").trim(),
+            rxPhones = j.optString("rxPhones", "").trim(),
+            rxPaperSize = j.optString("rxPaperSize", "A5").trim().ifBlank { "A5" },
         )
     }
 
@@ -802,6 +816,7 @@ object FirestoreCloudSyncService {
         put("aiReportAr", r.aiReportAr)
         put("aiReportEn", r.aiReportEn)
         put("driveFileUrl", r.driveFileUrl)
+        put("followUpDate", r.followUpDate)
     }
 
     fun recordFromJson(j: JSONObject, existingLocalAttachmentPath: String = ""): MedicalRecordEntity? {
@@ -831,6 +846,7 @@ object FirestoreCloudSyncService {
             aiReportAr = j.optString("aiReportAr", ""),
             aiReportEn = j.optString("aiReportEn", ""),
             driveFileUrl = j.optString("driveFileUrl", "").trim(),
+            followUpDate = j.optString("followUpDate", "").trim(),
         )
     }
 

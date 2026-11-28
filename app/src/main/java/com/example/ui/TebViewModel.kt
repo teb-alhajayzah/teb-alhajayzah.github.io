@@ -1483,6 +1483,27 @@ class TebViewModel(
         }
     }
 
+    fun updateSlotStatusByClinic(slotId: String, newStatus: String) {
+        viewModelScope.launch {
+            val result = repository.updateSlotStatusByClinic(slotId, newStatus)
+            result.onSuccess {
+                val msg = when (newStatus) {
+                    com.example.data.local.SlotStatus.BOOKED ->
+                        bi(uiState.value.isEn, "⏳ تم تحديث حالة الحجز إلى: قادم", "⏳ Status updated: Upcoming")
+                    com.example.data.local.SlotStatus.COMPLETED ->
+                        bi(uiState.value.isEn, "✅ تم تحديث حالة الحجز إلى: تم الكشف", "✅ Status updated: Completed")
+                    com.example.data.local.SlotStatus.NO_SHOW ->
+                        bi(uiState.value.isEn, "⚠️ تم تحديث حالة الحجز إلى: تغيب", "⚠️ Status updated: No-Show")
+                    else ->
+                        bi(uiState.value.isEn, "✓ تم تحديث حالة الموعد", "✓ Appointment status updated")
+                }
+                _snackbarMessages.tryEmit(msg)
+            }.onFailure { err ->
+                _snackbarMessages.tryEmit(err.message ?: bi(uiState.value.isEn, "تعذر تحديث حالة الحجز", "Failed to update booking status"))
+            }
+        }
+    }
+
     fun generateSchedule(doctorId: String, startMinutes: Int, endMinutes: Int, durationMinutes: Int) {
         viewModelScope.launch {
             val result = repository.generateDoctorSchedule(doctorId, startMinutes, endMinutes, durationMinutes)

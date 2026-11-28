@@ -12,6 +12,7 @@ object SlotStatus {
     const val AVAILABLE = "AVAILABLE"
     const val BOOKED = "BOOKED"
     const val COMPLETED = "COMPLETED"
+    const val NO_SHOW = "NO_SHOW"
 }
 
 object BookingSource {
@@ -120,6 +121,13 @@ data class ClinicDoctorEntity(
     val chatEnabled: Boolean = true,
     val driveWebAppUrl: String = "",
     val secondaryDriveWebAppUrl: String = "",
+    val rxClinicName: String = "",
+    val rxDoctorTitle: String = "",
+    val rxSpecialtyDegree: String = "",
+    val rxLogoDataUrl: String = "",
+    val rxAddress: String = "",
+    val rxPhones: String = "",
+    val rxPaperSize: String = "A5",
 )
 
 object FamilyLinkStatus {
@@ -198,6 +206,7 @@ data class MedicalRecordEntity(
     val aiReportAr: String = "",
     val aiReportEn: String = "",
     val driveFileUrl: String = "",
+    val followUpDate: String = "",
 )
 
 @Entity(tableName = "permanent_medical_logs")

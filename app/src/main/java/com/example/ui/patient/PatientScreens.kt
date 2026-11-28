@@ -2120,22 +2120,26 @@ fun DoctorBookingScreen(
                         val bgColor = when (slot.status) {
                             SlotStatus.AVAILABLE -> SlotAvailableBg
                             SlotStatus.BOOKED -> SlotBookedBg
+                            SlotStatus.NO_SHOW -> DelayWarningBg
                             else -> SlotCompletedBg
                         }
                         val borderColor = when (slot.status) {
                             SlotStatus.AVAILABLE -> SlotAvailableBorder
                             SlotStatus.BOOKED -> SlotBookedBorder
+                            SlotStatus.NO_SHOW -> DelayWarningBorder
                             else -> SlotCompletedBorder
                         }
                         val textColor = when (slot.status) {
                             SlotStatus.AVAILABLE -> SlotAvailableText
                             SlotStatus.BOOKED -> SlotBookedText
+                            SlotStatus.NO_SHOW -> DelayWarningText
                             else -> SlotCompletedText
                         }
                         val statusText = when {
                             slot.status == SlotStatus.AVAILABLE -> bi(isEn, "متاح", "Open")
                             isMine -> bi(isEn, "محجوز لك", "Yours")
                             slot.status == SlotStatus.BOOKED -> bi(isEn, "محجوز", "Booked")
+                            slot.status == SlotStatus.NO_SHOW -> bi(isEn, "تغيب", "No-Show")
                             else -> bi(isEn, "تم الكشف", "Done")
                         }
 

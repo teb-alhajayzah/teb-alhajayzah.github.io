@@ -1,5 +1,5 @@
-const CACHE_NAME = 'teb-alhajayzah-v1.0.0-rev4';
-const CORE_ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
+const CACHE_NAME = 'teb-alhajayzah-v1.0.0-rev5';
+const CORE_ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
