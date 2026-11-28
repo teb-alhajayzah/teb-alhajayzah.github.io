@@ -540,7 +540,8 @@ function resolvePatientTokensForSlot(slot, tokenDocs) {
 
 /**
  * Checks upcoming booked appointments in `teb_alhajayzah_appointments`:
- * - Sends 2-hour reminder (`reminded2h`) when 30 < minsLeft <= 120
+ * - Sends 2-hour reminder (`reminded2h`) when 65 < minsLeft <= 120
+ * - Sends 1-hour reminder (`reminded1h`) when 30 < minsLeft <= 65
  * - Sends 30-minute urgent reminder (`reminded30m`) when 0 < minsLeft <= 30
  */
 async function checkAndDispatchAppointmentReminders(env) {
@@ -555,6 +556,7 @@ async function checkAndDispatchAppointmentReminders(env) {
   const nowMs = Date.now();
   let checkedAppointments = 0;
   let sent2h = 0;
+  let sent1h = 0;
   let sent30m = 0;
   const details = [];
 
@@ -593,7 +595,28 @@ async function checkAndDispatchAppointmentReminders(env) {
           details.push({ slotId: slot._docId, type: '30m', tokensCount: tokens.length });
         }
       }
-    } else if (diffMins <= 120 && diffMins > 30 && !slot.reminded2h) {
+    } else if (diffMins <= 65 && diffMins > 30 && !slot.reminded1h) {
+      const tokens = resolvePatientTokensForSlot(slot, tokenDocs);
+      if (tokens.length > 0) {
+        const title = '⏰ تذكير بموعد الكشف (قبل ساعة)';
+        const body = `لديك موعد كشف قادم لدى ${doctorLabel}${timeLabel ? ' الساعة ' + timeLabel : ''} خلال ساعة تقريباً في منصة طب الحجايزة.`;
+        const dataMap = stringifyDataMap(null, {
+          eventType: 'APPOINTMENT_REMINDER_1H',
+          slotId: String(slot.id || slot._docId),
+          title,
+          body
+        });
+        const settled = await Promise.allSettled(
+          tokens.map((t) => sendSingleFcmMessage(config.projectId, accessToken, t, title, body, dataMap))
+        );
+        const anySent = settled.some((r) => r.status === 'fulfilled' && r.value && r.value.ok);
+        if (anySent) {
+          await firestorePatchBooleanFlag(config, accessToken, APPOINTMENTS_COLLECTION, slot._docId, 'reminded1h', true);
+          sent1h++;
+          details.push({ slotId: slot._docId, type: '1h', tokensCount: tokens.length });
+        }
+      }
+    } else if (diffMins <= 120 && diffMins > 65 && !slot.reminded2h) {
       const tokens = resolvePatientTokensForSlot(slot, tokenDocs);
       if (tokens.length > 0) {
         const title = '⏰ تذكير بموعد الكشف (بعد ساعتين)';
@@ -621,6 +644,7 @@ async function checkAndDispatchAppointmentReminders(env) {
     success: true,
     checkedAppointments,
     sent2h,
+    sent1h,
     sent30m,
     details,
     checkedAtIso: new Date(nowMs).toISOString()

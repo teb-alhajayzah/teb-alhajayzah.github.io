@@ -4652,6 +4652,11 @@
         } catch (e) { /* offline-safe REST pull */ }
         finally {
           __isRestPullInFlight = false;
+          setTimeout(function () {
+            if (typeof checkAndDispatchDesktop1HourPushReminders === 'function') {
+              checkAndDispatchDesktop1HourPushReminders(false);
+            }
+          }, 350);
         }
         return anyChanged;
       }
@@ -4747,7 +4752,7 @@
         }
       }
 
-      async function resolveTargetFcmTokens(targetAudience, targetId, forceRefresh) {
+      async function resolveTargetFcmTokens(targetAudience, targetId, forceRefresh, altPhone) {
         try {
           const cfg = (db && db.config) || DEFAULT_CONFIG;
           if (forceRefresh || !Array.isArray(tebCloudRuntime.fcmTokensList) || Date.now() - (tebCloudRuntime.lastFcmFetchAt || 0) > 60000) {
@@ -4762,6 +4767,7 @@
           const aud = String(targetAudience || 'ALL').toUpperCase();
           const tid = String(targetId || '').trim();
           const tidDigits = normalizePhoneDigits(tid);
+          const altDigits = normalizePhoneDigits(altPhone || '');
           const tokensSet = new Set();
           (tebCloudRuntime.fcmTokensList || []).forEach((row) => {
             if (!row) return;
@@ -4786,7 +4792,7 @@
             } else if (aud === 'CLINIC' && (rRole === 'CLINIC' || rRole === 'DOCTOR' || rUid.indexOf('doc') === 0) && (!tid || rUid === tid || rUid === 'doctor_' + safeCloudDocId(tid))) {
               rowTokens.forEach((t) => tokensSet.add(t));
             } else if (aud === 'PATIENT' && (rRole === 'PATIENT' || (rRole !== 'ADMIN' && rRole !== 'CLINIC' && rRole !== 'DOCTOR'))) {
-              if (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid || (tidDigits && rPhoneDigits === tidDigits)) {
+              if (!tid || rAcc === tid || rUid === safeCloudDocId(tid) || rUid === tid || (tidDigits && rPhoneDigits === tidDigits) || (altDigits && rPhoneDigits === altDigits)) {
                 rowTokens.forEach((t) => tokensSet.add(t));
               }
             }
@@ -4807,7 +4813,8 @@
           const cleanTitle = String(title || 'طب الحجايزة');
           const cleanBody = String(body || '');
           const forceRefresh = Boolean(opts && opts.forceRefresh);
-          const tokens = await resolveTargetFcmTokens(targetAudience, targetId, forceRefresh);
+          const altPhone = (opts && opts.targetPhone) || '';
+          const tokens = await resolveTargetFcmTokens(targetAudience, targetId, forceRefresh, altPhone);
           const resp = await fetchWithTimeout(wUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -5220,6 +5227,169 @@
         return d.getTime();
       }
 
+      const DESKTOP_1H_PUSH_PREF_KEY = 'teb_desktop_1h_push_enabled_v1';
+      const DESKTOP_1H_PUSH_FIRED_KEY = 'teb_pc_1h_push_fired_v1';
+
+      function isDesktop1HourPushEnabled() {
+        try {
+          return localStorage.getItem(DESKTOP_1H_PUSH_PREF_KEY) !== '0';
+        } catch (e) {
+          return true;
+        }
+      }
+
+      function isDesktop1HourPushRuntimeActive() {
+        if (!ui || ui.roleMode !== 'DOCTOR' || !ui.loggedInDoctorId) return false;
+        const isMobileUa = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+        return (typeof window !== 'undefined' && window.innerWidth >= 1024) || !isMobileUa;
+      }
+
+      function resolvePatientPushTargetForSlot(slot) {
+        if (!slot) return { accountId: '', phone: '' };
+        const slotPhone = String(slot.patientPhone || '').trim();
+        const slotDigits = normalizePhoneDigits(slotPhone);
+        let acc = null;
+        if (slot.familyMemberId) {
+          const fam = (db.familyMembers || []).find((m) => m.id === slot.familyMemberId);
+          if (fam && fam.accountId) {
+            acc = (db.accounts || []).find((a) => a.id === fam.accountId) || null;
+          }
+        }
+        if (!acc && slotDigits) {
+          acc = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === slotDigits) || null;
+        }
+        return {
+          accountId: acc ? acc.id : '',
+          phone: slotPhone || (acc ? String(acc.phone || '').trim() : '')
+        };
+      }
+
+      async function sendOneHourAppointmentReminderPushForSlot(slot, docObj, opts) {
+        if (!slot || slot.status !== 'BOOKED') return { sentPush: false, notified: false };
+        const effMin = (Number(slot.startMinutes) || 0) + (Number(slot.delayMinutes) || 0);
+        const nowMin = getCurrentLocalMinutesOfDay();
+        const remMin = effMin - nowMin;
+        const clinicLabel = docObj ? getClinicDisplayName(docObj, false) : 'العيادة';
+        const docLabel = docObj ? getDoctorDisplayName(docObj, false) : 'الطبيب';
+        const timeLabel = formatMinutesAr(effMin);
+        const remText = remMin >= 45
+          ? 'بعد ساعة تقريباً'
+          : (remMin > 0 ? ('خلال ' + remMin + ' دقيقة') : 'قريباً');
+        const title = '⏰ تذكير بموعدك القادم (قبل ساعة) — ' + clinicLabel;
+        const body = 'مرحباً ' + (slot.patientName || 'عميلنا العزيز') + '، نذكرك بموعد الكشف القادم لدى ' + docLabel + ' في ' + clinicLabel + ' الساعة ' + timeLabel + ' (' + remText + ').';
+
+        const targetInfo = resolvePatientPushTargetForSlot(slot);
+        const targetId = targetInfo.accountId || targetInfo.phone || '';
+        const pushRes = await dispatchWorkerPush(
+          'APPOINTMENT_REMINDER_1H',
+          title,
+          body,
+          'PATIENT',
+          targetId,
+          CLOUD_PATHS.appointments,
+          { forceRefresh: Boolean(opts && opts.forceRefresh), targetPhone: targetInfo.phone }
+        );
+
+        const notifEntry = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          doctorId: docObj ? docObj.id : slot.doctorId,
+          doctorName: docLabel,
+          clinicName: clinicLabel,
+          message: '⏰ ' + body,
+          isRead: false,
+          targetAudience: 'PATIENT',
+          targetId: targetInfo.accountId || '',
+          senderLabel: clinicLabel,
+          createdAtMillis: Date.now()
+        };
+        db.notifications.unshift(notifEntry);
+        slot.reminded1h = true;
+        slot.reminded1hAtMillis = Date.now();
+        saveState(db, { skipCloudSync: true });
+        syncDocToFirestoreNamespace('slots', slot.id, slot);
+        syncDocToFirestoreNamespace('notifications', String(notifEntry.id), notifEntry);
+
+        return {
+          sentPush: Boolean(pushRes && pushRes.ok),
+          tokensCount: (pushRes && pushRes.tokensCount) || 0,
+          notified: true,
+          patientName: slot.patientName || ''
+        };
+      }
+
+      async function checkAndDispatchDesktop1HourPushReminders(forceManualScan) {
+        try {
+          if (!db || !Array.isArray(db.slots) || !ui || ui.roleMode !== 'DOCTOR' || !ui.loggedInDoctorId) {
+            return { checked: 0, sentCount: 0, pushSentCount: 0 };
+          }
+          if (!forceManualScan && (!isDesktop1HourPushEnabled() || !isDesktop1HourPushRuntimeActive())) {
+            return { checked: 0, sentCount: 0, pushSentCount: 0 };
+          }
+          if (tebCloudRuntime._checkingDesktop1hPush && !forceManualScan) {
+            return { checked: 0, sentCount: 0, pushSentCount: 0 };
+          }
+          tebCloudRuntime._checkingDesktop1hPush = true;
+          if (!tebCloudRuntime._sending1hIds) tebCloudRuntime._sending1hIds = new Set();
+
+          const loggedDoc = (db.doctors || []).find((d) => d.id === ui.loggedInDoctorId);
+          const scope = loggedDoc ? getDesktopAppointmentScope(loggedDoc) : { slots: [] };
+          const scopeDoctorIds = new Set((scope.scopedDocs || []).map((d) => d.id));
+          if (loggedDoc) scopeDoctorIds.add(loggedDoc.id);
+
+          const nowMin = getCurrentLocalMinutesOfDay();
+          const dayKey = new Date().toISOString().slice(0, 10);
+          let firedMap = {};
+          try { firedMap = JSON.parse(localStorage.getItem(DESKTOP_1H_PUSH_FIRED_KEY) || '{}'); } catch (e) { firedMap = {}; }
+
+          const dueSlots = db.slots.filter((s) => {
+            if (!s || s.status !== 'BOOKED') return false;
+            if (!scopeDoctorIds.has(s.doctorId)) return false;
+            if (s.reminded1h) return false;
+            if (tebCloudRuntime._sending1hIds.has(s.id)) return false;
+            const effMin = (Number(s.startMinutes) || 0) + (Number(s.delayMinutes) || 0);
+            const remMin = effMin - nowMin;
+            const firedKey = dayKey + '_' + s.id + '_' + effMin;
+            if (firedMap[firedKey]) return false;
+            return remMin > 0 && remMin <= 65;
+          });
+
+          let sentCount = 0;
+          let pushSentCount = 0;
+          const sentNames = [];
+
+          for (let i = 0; i < dueSlots.length; i++) {
+            const slot = dueSlots[i];
+            const effMin = (Number(slot.startMinutes) || 0) + (Number(slot.delayMinutes) || 0);
+            const firedKey = dayKey + '_' + slot.id + '_' + effMin;
+            tebCloudRuntime._sending1hIds.add(slot.id);
+            firedMap[firedKey] = Date.now();
+            try { localStorage.setItem(DESKTOP_1H_PUSH_FIRED_KEY, JSON.stringify(firedMap)); } catch (e) {}
+
+            const slotDoc = (db.doctors || []).find((d) => d.id === slot.doctorId) || loggedDoc;
+            const res = await sendOneHourAppointmentReminderPushForSlot(slot, slotDoc, { forceRefresh: i === 0 });
+            if (res && res.notified) {
+              sentCount++;
+              if (res.sentPush) pushSentCount++;
+              if (res.patientName) sentNames.push(res.patientName);
+            }
+          }
+
+          if (sentCount > 0) {
+            const summaryMsg = pushSentCount > 0
+              ? bi('🔔 تم إرسال تذكير Push قبل ساعة تلقائياً إلى: ' + sentNames.join('، '), '🔔 Auto 1h Push reminder sent to: ' + sentNames.join(', '))
+              : bi('⏰ تم تسجيل وإرسال تذكير قبل ساعة إلى: ' + sentNames.join('، '), '⏰ 1h reminder dispatched for: ' + sentNames.join(', '));
+            showToast(summaryMsg, 3400, { isSuccess: true });
+            renderApp({ deferIfBusy: true });
+          }
+
+          return { checked: dueSlots.length, sentCount: sentCount, pushSentCount: pushSentCount };
+        } catch (e) {
+          return { checked: 0, sentCount: 0, pushSentCount: 0 };
+        } finally {
+          tebCloudRuntime._checkingDesktop1hPush = false;
+        }
+      }
+
       function checkUpcomingSlotRemindersWeb() {
         try {
           if (!db || !Array.isArray(db.slots) || !db.account) return;
@@ -5241,11 +5411,16 @@
             let winTag = '';
             let bodyMsg = '';
             let is2hWin = false;
+            let is1hWin = false;
             let is30mWin = false;
-            if (remMin > 55 && remMin <= 125 && !s.reminded2h) {
-              winTag = 'early_' + dayKey + '_' + s.id;
+            if (remMin > 70 && remMin <= 125 && !s.reminded2h) {
+              winTag = '2h_' + dayKey + '_' + s.id;
               is2hWin = true;
-              bodyMsg = bi('تذكير: موعدك في ' + clinicLabel + ' بعد ' + (remMin >= 90 ? 'ساعتين' : 'ساعة') + ' (' + formatMinutesAr(effMin) + ')', 'Reminder: Your appointment at ' + clinicLabel + ' is soon (' + formatMinutesAr(effMin) + ')');
+              bodyMsg = bi('تذكير: موعدك في ' + clinicLabel + ' بعد ساعتين تقريباً (' + formatMinutesAr(effMin) + ')', 'Reminder: Your appointment at ' + clinicLabel + ' is in ~2 hours (' + formatMinutesAr(effMin) + ')');
+            } else if (remMin > 35 && remMin <= 70 && !s.reminded1h) {
+              winTag = '1h_' + dayKey + '_' + s.id;
+              is1hWin = true;
+              bodyMsg = bi('تذكير: موعدك في ' + clinicLabel + ' بعد ساعة تقريباً (' + formatMinutesAr(effMin) + ')', 'Reminder: Your appointment at ' + clinicLabel + ' is in ~1 hour (' + formatMinutesAr(effMin) + ')');
             } else if (remMin > 0 && remMin <= 35 && !s.reminded30m) {
               winTag = '30m_' + dayKey + '_' + s.id;
               is30mWin = true;
@@ -5255,6 +5430,7 @@
               firedMap[winTag] = Date.now();
               changed = true;
               if (is2hWin) s.reminded2h = true;
+              if (is1hWin) s.reminded1h = true;
               if (is30mWin) s.reminded30m = true;
               syncDocToFirestoreNamespace('slots', s.id, s);
               triggerPlatformNotification('⏰ ' + bi('تذكير بموعد الكشف — طب الحجايزة', 'Appointment Reminder'), bodyMsg, winTag);
@@ -5353,6 +5529,7 @@
         slot.bookingSource = '';
         slot.appointmentTimestamp = 0;
         slot.reminded2h = false;
+        slot.reminded1h = false;
         slot.reminded30m = false;
 
         let alertMsg = '';
@@ -5427,6 +5604,7 @@
         fromSlot.bookingSource = '';
         fromSlot.appointmentTimestamp = 0;
         fromSlot.reminded2h = false;
+        fromSlot.reminded1h = false;
         fromSlot.reminded30m = false;
 
         toSlot.status = 'BOOKED';
@@ -5436,6 +5614,7 @@
         toSlot.bookingSource = bookingSource;
         toSlot.appointmentTimestamp = computeSlotAppointmentTimestampMs(toSlot);
         toSlot.reminded2h = false;
+        toSlot.reminded1h = false;
         toSlot.reminded30m = false;
 
         let alertMsg = '';
@@ -5561,6 +5740,7 @@
         loggedInDoctorId: null,
         doctorTab: 'SLOTS', // SLOTS | QUICK_RX | ACTIVATE_PATIENT | MESSAGES | CLINIC_SETTINGS
         desktopSlotsFilter: 'ALL', // ALL | BOOKED | COMPLETED | NO_SHOW | AVAILABLE
+        desktopDoctorFilterId: 'CURRENT', // CURRENT | ALL_HOSPITAL | ALL_DOCS | <doctorId>
         desktopSlotsSearch: '',
         selectedDesktopSlotId: '',
         docActivatePhoneQuery: '',
@@ -9715,14 +9895,75 @@
           '</section>';
       }
 
-      function renderDesktopAppointmentsSectionHtml(doc, slots, bookedCount, availCount, doneCount, noShowCount) {
+      function getDesktopAppointmentScope(loggedDoc) {
+        const allDocs = (db && Array.isArray(db.doctors)) ? db.doctors : [];
+        const hospitalDocs = allDocs.filter((d) => d.clinicType === 'HOSPITAL');
+        const rawFilter = ui.desktopDoctorFilterId || 'CURRENT';
+        if (rawFilter === 'ALL_HOSPITAL' && hospitalDocs.length > 0) {
+          const hospIds = new Set(hospitalDocs.map((d) => d.id));
+          return {
+            filterVal: 'ALL_HOSPITAL',
+            activeDoc: loggedDoc,
+            isMultiDoc: hospitalDocs.length > 1,
+            scopedDocs: hospitalDocs,
+            hospitalDocs: hospitalDocs,
+            slots: db.slots
+              .filter((s) => hospIds.has(s.doctorId))
+              .sort((a, b) => ((a.startMinutes || 0) + (a.delayMinutes || 0)) - ((b.startMinutes || 0) + (b.delayMinutes || 0)) || String(a.doctorId).localeCompare(String(b.doctorId)))
+          };
+        }
+        if (rawFilter === 'ALL_DOCS' && allDocs.length > 0) {
+          return {
+            filterVal: 'ALL_DOCS',
+            activeDoc: loggedDoc,
+            isMultiDoc: allDocs.length > 1,
+            scopedDocs: allDocs,
+            hospitalDocs: hospitalDocs,
+            slots: db.slots
+              .slice()
+              .sort((a, b) => ((a.startMinutes || 0) + (a.delayMinutes || 0)) - ((b.startMinutes || 0) + (b.delayMinutes || 0)) || String(a.doctorId).localeCompare(String(b.doctorId)))
+          };
+        }
+        const pickedDoc = (rawFilter && rawFilter !== 'CURRENT')
+          ? (allDocs.find((d) => d.id === rawFilter) || loggedDoc)
+          : loggedDoc;
+        return {
+          filterVal: pickedDoc ? pickedDoc.id : 'CURRENT',
+          activeDoc: pickedDoc,
+          isMultiDoc: false,
+          scopedDocs: pickedDoc ? [pickedDoc] : [],
+          hospitalDocs: hospitalDocs,
+          slots: pickedDoc
+            ? db.slots.filter((s) => s.doctorId === pickedDoc.id).sort((a, b) => a.startMinutes - b.startMinutes)
+            : []
+        };
+      }
+
+      function renderDesktopAppointmentsSectionHtml(doc, scope) {
+        const slots = (scope && scope.slots) || [];
+        const activeDoc = (scope && scope.activeDoc) || doc;
+        const isMultiDoc = Boolean(scope && scope.isMultiDoc);
+        const allDocs = db.doctors || [];
+        const hospitalDocs = allDocs.filter((d) => d.clinicType === 'HOSPITAL');
+        const otherPrivateDocs = allDocs.filter((d) => d.clinicType !== 'HOSPITAL' && d.id !== doc.id);
+        const currentDoctorFilterVal = (scope && scope.filterVal) || doc.id;
+
+        const bookedCount = slots.filter((s) => s.status === 'BOOKED').length;
+        const availCount = slots.filter((s) => s.status === 'AVAILABLE').length;
+        const doneCount = slots.filter((s) => s.status === 'COMPLETED').length;
+        const noShowCount = slots.filter((s) => s.status === 'NO_SHOW').length;
+        const reminded1hCount = slots.filter((s) => s.status === 'BOOKED' && s.reminded1h).length;
+        const auto1hEnabled = isDesktop1HourPushEnabled();
+
         const filterVal = ui.desktopSlotsFilter || 'ALL';
         const q = (ui.desktopSlotsSearch || '').trim().toLowerCase();
         const filteredSlots = slots.filter((s) => {
           if (filterVal !== 'ALL' && s.status !== filterVal) return false;
           if (!q) return true;
+          const sDoc = allDocs.find((d) => d.id === s.doctorId);
           return String(s.patientName || '').toLowerCase().includes(q) ||
             String(s.patientPhone || '').toLowerCase().includes(q) ||
+            (sDoc && (getDoctorDisplayName(sDoc).toLowerCase().includes(q) || getClinicDisplayName(sDoc).toLowerCase().includes(q))) ||
             formatMinutesAr((s.startMinutes || 0) + (s.delayMinutes || 0)).toLowerCase().includes(q);
         });
         const nextBooked = slots.find((s) => s.status === 'BOOKED');
@@ -9732,6 +9973,9 @@
         }
         const selectedSlotObj = ui.selectedDesktopSlotId ? slots.find((s) => s.id === ui.selectedDesktopSlotId) : null;
         const selectedMeta = selectedSlotObj ? getSlotStatusMetaWeb(selectedSlotObj.status) : null;
+        const nowMinLocal = getCurrentLocalMinutesOfDay();
+        const colSpanCount = isMultiDoc ? 6 : 5;
+
         return '<section class="pc-kpi-grid">' +
             '<div class="pc-kpi-card" style="background:var(--booked-bg);border-color:var(--booked-border);color:var(--booked-text);"><div><div style="font-size:0.8rem;font-weight:700;">⏳ ' + esc(bi('قادم / محجوز', 'Upcoming')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + bookedCount + '</div></div><span style="font-size:1.5rem;">🗓️</span></div>' +
             '<div class="pc-kpi-card" style="background:var(--avail-bg);border-color:var(--avail-border);color:var(--avail-text);"><div><div style="font-size:0.8rem;font-weight:700;">🟢 ' + esc(bi('متاح للحجز', 'Available')) + '</div><div style="font-size:1.6rem;font-weight:800;">' + availCount + '</div></div><span style="font-size:1.5rem;">🕒</span></div>' +
@@ -9745,6 +9989,12 @@
               '<button class="btn btn-outline" data-delay-mins="30" type="button" style="min-height:42px;">+30 د</button>' +
               '<button class="btn btn-outline" id="btnOpenScheduleGenDesktop" type="button" style="min-height:42px;">📅 ' + esc(bi('توليد جدول المواعيد', 'Schedule Generator')) + '</button>' +
               '<button class="btn btn-outline" id="btnPrintDailyScheduleDesktop" type="button" style="min-height:42px;">🖨️ ' + esc(bi('طباعة كشف اليوم (Ctrl+P)', 'Print Schedule (Ctrl+P)')) + '</button>' +
+              '<button class="btn ' + (auto1hEnabled ? 'btn-green' : 'btn-outline') + '" id="btnToggleDesktop1hPush" type="button" style="min-height:42px;font-size:0.84rem;">' +
+                (auto1hEnabled
+                  ? '🔔 ' + esc(bi('تذكير Push قبل ساعة: مفعّل (' + reminded1hCount + ')', '1h Auto Push: ON (' + reminded1hCount + ')'))
+                  : '🔕 ' + esc(bi('تذكير Push قبل ساعة: متوقف', '1h Auto Push: OFF'))) +
+              '</button>' +
+              '<button class="btn btn-outline" id="btnRunDesktop1hPushNow" type="button" style="min-height:42px;font-size:0.84rem;" title="' + esc(bi('فحص وإرسال إشعار Push الآن للمرضى المتبقي على موعدهم ساعة أو أقل', 'Check & send 1h Push notifications now')) + '">📤 ' + esc(bi('إرسال تذكيرات قبل ساعة الآن', 'Send 1h Push Now')) + '</button>' +
             '</div>' +
             (nextBooked
               ? '<button class="btn btn-primary" type="button" data-write-rx="' + esc(nextBooked.id) + '" style="min-height:42px;">🏥 ' + esc(bi('المريض التالي: ' + nextBooked.patientName, 'Next Patient: ' + nextBooked.patientName)) + '</button>'
@@ -9752,8 +10002,43 @@
           '</section>' +
 
           '<section class="card" style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:8px;border-bottom:1px dashed var(--border);">' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:260px;">' +
+                '<label for="pcClinicDoctorFilter" style="font-weight:800;font-size:0.86rem;color:var(--teal-text);white-space:nowrap;">🏥 ' + esc(bi('الطبيب / العيادة الفرعية بالمستشفى:', 'Doctor / Hospital Sub-Clinic:')) + '</label>' +
+                '<select class="select" id="pcClinicDoctorFilter" style="flex:1;min-width:230px;max-width:440px;">' +
+                  '<option value="' + esc(doc.id) + '"' + (currentDoctorFilterVal === doc.id ? ' selected' : '') + '>' +
+                    (doc.clinicType === 'HOSPITAL' ? '🏥 ' : '👨‍⚕️ ') + esc(bi('عيادتي الحالية: ', 'My Clinic: ')) + esc(getDoctorDisplayName(doc)) + ' — ' + esc(getClinicDisplayName(doc)) +
+                  '</option>' +
+                  (hospitalDocs.length > 0
+                    ? '<option value="ALL_HOSPITAL"' + (currentDoctorFilterVal === 'ALL_HOSPITAL' ? ' selected' : '') + '>🏥 ' + esc(bi('جميع أطباء وعيادات المستشفى (' + hospitalDocs.length + ')', 'All Hospital Sub-Clinics & Doctors (' + hospitalDocs.length + ')')) + '</option>' +
+                      '<optgroup label="' + esc(bi('🏥 العيادات الفرعية وأطباء المستشفى', '🏥 Hospital Sub-Clinics & Doctors')) + '">' +
+                        hospitalDocs.filter((d) => d.id !== doc.id).map((d) =>
+                          '<option value="' + esc(d.id) + '"' + (currentDoctorFilterVal === d.id ? ' selected' : '') + '>🏥 ' + esc(getDoctorDisplayName(d)) + ' — ' + esc(getClinicDisplayName(d)) + ' (' + esc(formatDoctorSpecialties(d)) + ')</option>'
+                        ).join('') +
+                      '</optgroup>'
+                    : '<optgroup label="' + esc(bi('🏥 عيادات المستشفى الفرعية (تُضاف من الإدارة)', '🏥 Hospital Sub-Clinics (Admin Managed)')) + '">' +
+                        '<option value="" disabled>' + esc(bi('لا توجد عيادات مستشفى فرعية مضافة حالياً', 'No hospital sub-clinics added yet')) + '</option>' +
+                      '</optgroup>') +
+                  (allDocs.length > 1
+                    ? '<option value="ALL_DOCS"' + (currentDoctorFilterVal === 'ALL_DOCS' ? ' selected' : '') + '>📋 ' + esc(bi('جميع الأطباء والعيادات (' + allDocs.length + ')', 'All Doctors & Clinics (' + allDocs.length + ')')) + '</option>'
+                    : '') +
+                  (otherPrivateDocs.length > 0
+                    ? '<optgroup label="' + esc(bi('🩺 عيادات خاصة أخرى', '🩺 Other Private Clinics')) + '">' +
+                        otherPrivateDocs.map((d) =>
+                          '<option value="' + esc(d.id) + '"' + (currentDoctorFilterVal === d.id ? ' selected' : '') + '>🩺 ' + esc(getDoctorDisplayName(d)) + ' — ' + esc(getClinicDisplayName(d)) + '</option>'
+                        ).join('') +
+                      '</optgroup>'
+                    : '') +
+                '</select>' +
+              '</div>' +
+              '<div style="font-size:0.8rem;color:var(--text-muted);font-weight:700;">' +
+                (isMultiDoc
+                  ? esc(bi('عرض مجمع لـ ' + (scope.scopedDocs || []).length + ' عيادات/أطباء (' + slots.length + ' موعد)', 'Combined view: ' + (scope.scopedDocs || []).length + ' clinics (' + slots.length + ' slots)'))
+                  : esc(bi('الجدول المعروض: ' + getDoctorDisplayName(activeDoc) + ' — ' + getClinicDisplayName(activeDoc), 'Showing: ' + getDoctorDisplayName(activeDoc) + ' — ' + getClinicDisplayName(activeDoc)))) +
+              '</div>' +
+            '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
-              '<input class="input" id="pcSlotsSearchInput" value="' + esc(ui.desktopSlotsSearch || '') + '" placeholder="' + esc(bi('🔍 ابحث باسم المريض أو رقم الهاتف أو الموعد (اضغط / للتركيز)...', '🔍 Search patient name, phone, or time (press /)...')) + '" style="flex:1;min-width:260px;" />' +
+              '<input class="input" id="pcSlotsSearchInput" value="' + esc(ui.desktopSlotsSearch || '') + '" placeholder="' + esc(bi('🔍 ابحث باسم المريض أو الهاتف أو الطبيب أو الموعد (اضغط / للتركيز)...', '🔍 Search patient name, phone, doctor, or time (press /)...')) + '" style="flex:1;min-width:260px;" />' +
               '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
                 '<button class="chip ' + (filterVal === 'ALL' ? 'active' : '') + '" type="button" data-pc-slot-filter="ALL">' + esc(bi('الكل (' + slots.length + ')', 'All (' + slots.length + ')')) + '</button>' +
                 '<button class="chip ' + (filterVal === 'BOOKED' ? 'active' : '') + '" type="button" data-pc-slot-filter="BOOKED">⏳ ' + esc(bi('قادم (' + bookedCount + ')', 'Upcoming (' + bookedCount + ')')) + '</button>' +
@@ -9782,17 +10067,20 @@
                 '<thead><tr>' +
                   '<th>#</th>' +
                   '<th>' + esc(bi('الموعد', 'Time')) + '</th>' +
+                  (isMultiDoc ? '<th>' + esc(bi('الطبيب / العيادة الفرعية', 'Doctor / Sub-Clinic')) + '</th>' : '') +
                   '<th>' + esc(bi('بيانات المريض', 'Patient Details')) + '</th>' +
                   '<th>' + esc(bi('حالة الحجز (تغيير سريع)', 'Booking Status (Quick Toggle)')) + '</th>' +
                   '<th>' + esc(bi('الإجراءات السريعة', 'Quick Actions')) + '</th>' +
                 '</tr></thead>' +
                 '<tbody>' +
                   (filteredSlots.length === 0
-                    ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">' + esc(bi('لا توجد مواعيد مطابقة للبحث أو التصفية الحالية.', 'No appointments match your current filter.')) + '</td></tr>'
-                    : filteredSlots.map((slot) => {
-                        const turnNum = slots.findIndex((x) => x.id === slot.id) + 1;
+                    ? '<tr><td colspan="' + colSpanCount + '" style="text-align:center;padding:24px;color:var(--text-muted);">' + esc(bi('لا توجد مواعيد مطابقة للبحث أو التصفية الحالية.', 'No appointments match your current filter.')) + '</td></tr>'
+                    : filteredSlots.map((slot, rowIdx) => {
+                        const turnNum = rowIdx + 1;
                         const eff = (slot.startMinutes || 0) + (slot.delayMinutes || 0);
+                        const remMin = eff - nowMinLocal;
                         const meta = getSlotStatusMetaWeb(slot.status);
+                        const slotDoc = allDocs.find((d) => d.id === slot.doctorId) || activeDoc;
                         const sourceText = slot.bookingSource === 'PHONE_WALKIN' ? bi('حجز هاتفي/حضور', 'Phone / Walk-in') : bi('حجز عبر التطبيق', 'App Booking');
                         const isSelectedRow = ui.selectedDesktopSlotId === slot.id;
                         const chatAcc = slot.status !== 'AVAILABLE'
@@ -9801,15 +10089,26 @@
                               (slot.patientPhone && normalizePhoneDigits(a.phone) === normalizePhoneDigits(slot.patientPhone))
                             )
                           : null;
+                        const reminderTagHtml = slot.status === 'BOOKED'
+                          ? (slot.reminded1h
+                              ? '<span class="badge badge-avail" style="font-size:0.72rem;padding:2px 7px;">🔔 ' + esc(bi('أُرسل تذكير الساعة', '1h Push Sent')) + '</span>'
+                              : (remMin > 0 && remMin <= 65
+                                  ? '<span class="badge badge-noshow" style="font-size:0.72rem;padding:2px 7px;">⏰ ' + esc(bi('تذكير قبل ' + remMin + ' د', 'Due in ' + remMin + 'm')) + '</span>'
+                                  : ''))
+                          : '';
                         return '<tr class="' + meta.rowCls + (isSelectedRow ? ' pc-row-selected' : '') + '" data-select-desktop-slot="' + esc(slot.id) + '">' +
                           '<td><div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;"><strong>#' + turnNum + '</strong><span class="pc-selected-pill">⌨️ ' + esc(bi('محدد', 'Active')) + '</span></div></td>' +
                           '<td style="white-space:nowrap;"><span class="badge ' + meta.badgeCls + '" style="font-size:0.9rem;padding:5px 10px;">' + meta.icon + ' ' + formatMinutesAr(eff) + '</span></td>' +
+                          (isMultiDoc
+                            ? '<td><div style="font-weight:800;font-size:0.86rem;color:var(--teal-text);">' + esc(slotDoc ? getDoctorDisplayName(slotDoc) : '') + '</div><div style="font-size:0.76rem;color:var(--text-muted);">' + esc(slotDoc ? getClinicDisplayName(slotDoc) : '') + '</div></td>'
+                            : '') +
                           '<td>' +
                             (slot.status === 'AVAILABLE'
                               ? '<span style="color:var(--avail-text);font-weight:700;">🟢 ' + esc(bi('موعد متاح للحجز', 'Available Slot')) + '</span>'
                               : '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
                                   '<span style="font-weight:800;font-size:0.95rem;">' + esc(slot.patientName) + '</span>' +
                                   '<span class="badge ' + meta.badgeCls + '" style="font-size:0.74rem;padding:2px 8px;">' + meta.icon + ' ' + esc(bi(meta.ar, meta.en)) + '</span>' +
+                                  reminderTagHtml +
                                 '</div>' +
                                 '<div style="font-size:0.8rem;color:var(--text-muted);" dir="ltr">' + esc(slot.patientPhone || '-') + ' <span style="direction:rtl;">• ' + esc(sourceText) + '</span></div>') +
                           '</td>' +
@@ -9830,6 +10129,9 @@
                                     : '') +
                                   '<button class="pc-act-btn primary" type="button" data-write-rx="' + esc(slot.id) + '">📄 ' + esc(bi('روشتة/تحليل', 'Rx / Lab')) + '</button>' +
                                   '<button class="pc-act-btn" type="button" data-view-emr="' + esc(slot.id) + '">📁 ' + esc(bi('الملف', 'EMR')) + '</button>' +
+                                  (slot.status === 'BOOKED'
+                                    ? '<button class="pc-act-btn" type="button" data-push-1h-slot="' + esc(slot.id) + '" title="' + esc(bi('إرسال إشعار Push تذكيري للمريض الآن', 'Send Push Reminder Now')) + '">🔔 ' + esc(bi('تذكير', 'Remind')) + '</button>'
+                                    : '') +
                                   (chatAcc
                                     ? '<button class="pc-act-btn" type="button" data-doc-reply-patient="' + esc(chatAcc.id) + '">💬 ' + esc(bi('مراسلة', 'Chat')) + '</button>'
                                     : '') +
@@ -9853,6 +10155,7 @@
       function renderDoctorDashboard() {
         const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
         if (!doc) return renderDoctorLoginGate();
+        const desktopScope = getDesktopAppointmentScope(doc);
         const slots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
         const bookedCount = slots.filter((s) => s.status === 'BOOKED').length;
         const availCount = slots.filter((s) => s.status === 'AVAILABLE').length;
@@ -9950,7 +10253,7 @@
                   ? renderDoctorQuickRxWorkspaceHtml(doc, slots)
                   : (activeDocTab === 'CLINIC_SETTINGS'
                       ? renderDoctorClinicSettingsWorkspaceHtml(doc)
-                      : renderDesktopAppointmentsSectionHtml(doc, slots, bookedCount, availCount, doneCount, noShowCount))));
+                      : renderDesktopAppointmentsSectionHtml(doc, desktopScope))));
 
         const topActivationHtml =
           '<section class="card" style="background:linear-gradient(135deg,#ECFDF5 0%,#F0FDF4 100%);border:1.5px solid #16A34A;display:flex;flex-direction:column;gap:8px;">' +
@@ -11080,6 +11383,7 @@
                   latestSlot.bookingSource = 'APP';
                   latestSlot.appointmentTimestamp = computeSlotAppointmentTimestampMs(latestSlot);
                   latestSlot.reminded2h = false;
+                  latestSlot.reminded1h = false;
                   latestSlot.reminded30m = false;
                   const newBookTime = formatMinutesAr((latestSlot.startMinutes || 0) + (latestSlot.delayMinutes || 0));
                   const bookAlert = '🩺 حجز جديد في ' + getClinicDisplayName(doc) + ': ' + member.fullName + ' (' + newBookTime + ')';
@@ -12572,6 +12876,7 @@
               slot.bookingSource = 'PHONE_WALKIN';
               slot.appointmentTimestamp = computeSlotAppointmentTimestampMs(slot);
               slot.reminded2h = false;
+              slot.reminded1h = false;
               slot.reminded30m = false;
               saveState(db);
               scheduleSlotRemindersWeb(slot, doc);
@@ -15328,6 +15633,7 @@
           btn.onclick = function () {
             ui.loggedInDoctorId = null;
             ui.doctorTab = 'SLOTS';
+            ui.desktopDoctorFilterId = 'CURRENT';
             ui.selectedDesktopSlotId = '';
             ui.docActivatePhoneQuery = '';
             ui.docActivateResults = [];
@@ -15412,6 +15718,7 @@
               if (s.status === 'BOOKED') {
                 s.appointmentTimestamp = computeSlotAppointmentTimestampMs(s);
                 s.reminded2h = false;
+                s.reminded1h = false;
                 s.reminded30m = false;
                 cancelSlotRemindersWeb(s.id);
                 scheduleSlotRemindersWeb(s, doc);
@@ -15492,13 +15799,78 @@
           }
         }
 
+        const pcDoctorFilterSel = document.getElementById('pcClinicDoctorFilter');
+        if (pcDoctorFilterSel) {
+          pcDoctorFilterSel.onchange = function () {
+            ui.desktopDoctorFilterId = pcDoctorFilterSel.value || 'CURRENT';
+            ui.selectedDesktopSlotId = '';
+            renderApp();
+          };
+        }
+
+        const toggle1hPushBtn = document.getElementById('btnToggleDesktop1hPush');
+        if (toggle1hPushBtn) {
+          toggle1hPushBtn.onclick = function () {
+            const next = !isDesktop1HourPushEnabled();
+            try { localStorage.setItem(DESKTOP_1H_PUSH_PREF_KEY, next ? '1' : '0'); } catch (e) {}
+            showToast(
+              next
+                ? bi('🔔 تم تفعيل التذكير التلقائي للمريض قبل ساعة (Push Notification)', '🔔 Auto 1-hour Push reminders enabled')
+                : bi('🔕 تم إيقاف التذكير التلقائي قبل ساعة مؤقتاً', '🔕 Auto 1-hour Push reminders paused'),
+              2600,
+              { isSuccess: next }
+            );
+            renderApp();
+            if (next) checkAndDispatchDesktop1HourPushReminders(false);
+          };
+        }
+
+        const run1hPushNowBtn = document.getElementById('btnRunDesktop1hPushNow');
+        if (run1hPushNowBtn) {
+          run1hPushNowBtn.onclick = async function () {
+            run1hPushNowBtn.disabled = true;
+            const prevTxt = run1hPushNowBtn.innerHTML;
+            run1hPushNowBtn.innerHTML = '⏳ ' + esc(bi('جاري فحص المواعيد...', 'Checking slots...'));
+            try {
+              const res = await checkAndDispatchDesktop1HourPushReminders(true);
+              if (!res || res.sentCount === 0) {
+                showToast(bi('✅ تم الفحص: لا توجد مواعيد قادمة خلال ساعة تحتاج تذكير حالياً', '✅ Checked: No upcoming appointments within 1 hour need reminders now'), 2600);
+              }
+            } finally {
+              run1hPushNowBtn.disabled = false;
+              run1hPushNowBtn.innerHTML = prevTxt;
+            }
+          };
+        }
+
+        document.querySelectorAll('[data-push-1h-slot]').forEach((btn) => {
+          btn.onclick = async function (e) {
+            e.stopPropagation();
+            const slotId = btn.getAttribute('data-push-1h-slot');
+            const s = db.slots.find((x) => x.id === slotId);
+            if (!s) return;
+            btn.disabled = true;
+            const slotDoc = (db.doctors || []).find((d) => d.id === s.doctorId) || doc;
+            const res = await sendOneHourAppointmentReminderPushForSlot(s, slotDoc, { forceRefresh: true });
+            btn.disabled = false;
+            showToast(
+              res.sentPush
+                ? bi('🔔 تم إرسال إشعار Push تذكيري فوراً إلى ' + s.patientName, '🔔 Push reminder sent immediately to ' + s.patientName)
+                : bi('⏰ تم حفظ وإرسال التذكير الداخلي للمريض ' + s.patientName + (res.tokensCount === 0 ? ' (لا يوجد جهاز Push مسجل له حالياً)' : ''), '⏰ In-app reminder sent to ' + s.patientName),
+              3000,
+              { isSuccess: true }
+            );
+            renderApp();
+          };
+        });
+
         function handleDesktopClinicShortcutKey(keyName) {
-          const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+          const scopeSlots = (getDesktopAppointmentScope(doc).slots || []);
           let targetSlot = ui.selectedDesktopSlotId
-            ? docSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE')
+            ? scopeSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE')
             : null;
           if (!targetSlot) {
-            targetSlot = docSlots.find((s) => s.status === 'BOOKED') || docSlots.find((s) => s.status !== 'AVAILABLE') || null;
+            targetSlot = scopeSlots.find((s) => s.status === 'BOOKED') || scopeSlots.find((s) => s.status !== 'AVAILABLE') || null;
             if (targetSlot) ui.selectedDesktopSlotId = targetSlot.id;
           }
           if (!targetSlot) {
@@ -15516,8 +15888,8 @@
           }
           if (keyName === 'F4') {
             const nextUpcoming =
-              docSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED' && (s.startMinutes || 0) > (targetSlot.startMinutes || 0)) ||
-              docSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED') ||
+              scopeSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED' && (s.startMinutes || 0) > (targetSlot.startMinutes || 0)) ||
+              scopeSlots.find((s) => s.id !== targetSlot.id && s.status === 'BOOKED') ||
               null;
             if (targetSlot.status !== 'COMPLETED') {
               updateSlotStatusByClinicWeb(targetSlot.id, 'COMPLETED');
@@ -15570,7 +15942,8 @@
             const s = db.slots.find((x) => x.id === btn.getAttribute('data-print-slot'));
             if (s) {
               ui.selectedDesktopSlotId = s.id;
-              printClinicVisitReceipt(s, doc);
+              const slotDoc = (db.doctors || []).find((d) => d.id === s.doctorId) || doc;
+              printClinicVisitReceipt(s, slotDoc);
             }
           };
         });
@@ -15578,19 +15951,21 @@
         const printDailyBtn = document.getElementById('btnPrintDailyScheduleDesktop');
         if (printDailyBtn) {
           printDailyBtn.onclick = function () {
-            const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
-            printClinicDailySchedule(doc, docSlots);
+            const scope = getDesktopAppointmentScope(doc);
+            printClinicDailySchedule(scope.activeDoc || doc, scope.slots || []);
           };
         }
         const printTopBtn = document.getElementById('btnPrintDesktopTop');
         if (printTopBtn) {
           printTopBtn.onclick = function () {
-            const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
-            const selSlot = ui.selectedDesktopSlotId ? docSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE') : null;
+            const scope = getDesktopAppointmentScope(doc);
+            const scopeSlots = scope.slots || [];
+            const selSlot = ui.selectedDesktopSlotId ? scopeSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE') : null;
             if (selSlot) {
-              printClinicVisitReceipt(selSlot, doc);
+              const slotDoc = (db.doctors || []).find((d) => d.id === selSlot.doctorId) || doc;
+              printClinicVisitReceipt(selSlot, slotDoc);
             } else {
-              printClinicDailySchedule(doc, docSlots);
+              printClinicDailySchedule(scope.activeDoc || doc, scopeSlots);
             }
           };
         }
@@ -16009,7 +16384,7 @@
               if (ui.doctorTab !== 'SLOTS' && ui.doctorTab !== 'QUICK_RX') {
                 ui.doctorTab = 'SLOTS';
               }
-              const docSlots = db.slots.filter((s) => s.doctorId === doc.id).sort((a, b) => a.startMinutes - b.startMinutes);
+              const docSlots = (getDesktopAppointmentScope(doc).slots || []);
               let targetSlot = ui.selectedDesktopSlotId
                 ? docSlots.find((s) => s.id === ui.selectedDesktopSlotId && s.status !== 'AVAILABLE')
                 : null;
@@ -16211,7 +16586,11 @@
       renderApp();
       startRealtimeCloudSync();
       setTimeout(checkUpcomingSlotRemindersWeb, 3000);
-      setInterval(checkUpcomingSlotRemindersWeb, 30000);
+      setTimeout(function () { checkAndDispatchDesktop1HourPushReminders(false); }, 3500);
+      setInterval(function () {
+        checkUpcomingSlotRemindersWeb();
+        checkAndDispatchDesktop1HourPushReminders(false);
+      }, 30000);
       refreshMedicationsFromApi().finally(function () {
         renderApp({ deferIfBusy: true });
       });
