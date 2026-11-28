@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -54,6 +57,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -64,6 +68,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,10 +86,12 @@ import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
+import com.example.data.local.MedicalRecordType
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.NotificationAudience
 import com.example.data.local.PermanentMedicalLogEntity
 import com.example.data.local.SlotStatus
+import kotlinx.coroutines.launch
 import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
@@ -1884,7 +1891,33 @@ private fun PatientEmrViewerDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                val sortedRecords = remember(records) {
+                    records.sortedByDescending { it.createdAtMillis }
+                }
+                val isRxRecord: (MedicalRecordEntity) -> Boolean = { rec ->
+                    rec.recordType == MedicalRecordType.PRESCRIPTION || rec.recordType == MedicalRecordType.EXTERNAL_VISIT
+                }
+                val rxOnlyRecords = remember(sortedRecords) {
+                    sortedRecords.filter(isRxRecord)
+                }
+                val labOnlyRecords = remember(sortedRecords) {
+                    sortedRecords.filterNot(isRxRecord)
+                }
+                var emrFilter by remember(patientName) {
+                    mutableStateOf(if (rxOnlyRecords.isNotEmpty()) "RX" else "ALL")
+                }
+                val visibleRecords = remember(sortedRecords, rxOnlyRecords, labOnlyRecords, emrFilter) {
+                    when (emrFilter) {
+                        "RX" -> rxOnlyRecords
+                        "LAB" -> labOnlyRecords
+                        else -> sortedRecords
+                    }
+                }
+                val emrListState = rememberLazyListState()
+                val emrScope = rememberCoroutineScope()
+
                 LazyColumn(
+                    state = emrListState,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.height(500.dp),
                 ) {
@@ -1905,6 +1938,76 @@ private fun PatientEmrViewerDialog(
                             isEn = isEn,
                         )
                     }
+                    if (sortedRecords.isNotEmpty()) {
+                        item(key = "emr_rx_timeline_controls") {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(
+                                        text = bi(
+                                            isEn,
+                                            "💊 سجل الروشتات السابقة (جدول زمني)",
+                                            "💊 Previous Prescriptions Timeline",
+                                        ),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = TealPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        item {
+                                            FilterChip(
+                                                selected = emrFilter == "RX",
+                                                onClick = { emrFilter = "RX" },
+                                                label = { Text(bi(isEn, "الروشتات (${rxOnlyRecords.size})", "Rx (${rxOnlyRecords.size})")) },
+                                            )
+                                        }
+                                        item {
+                                            FilterChip(
+                                                selected = emrFilter == "LAB",
+                                                onClick = { emrFilter = "LAB" },
+                                                label = { Text(bi(isEn, "التحاليل (${labOnlyRecords.size})", "Labs (${labOnlyRecords.size})")) },
+                                            )
+                                        }
+                                        item {
+                                            FilterChip(
+                                                selected = emrFilter == "ALL",
+                                                onClick = { emrFilter = "ALL" },
+                                                label = { Text(bi(isEn, "الكل (${sortedRecords.size})", "All (${sortedRecords.size})")) },
+                                            )
+                                        }
+                                    }
+                                    if (visibleRecords.isNotEmpty()) {
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            itemsIndexed(visibleRecords, key = { _, item -> "jump_${item.id}" }) { idx, rec ->
+                                                val shortTitle = rec.diagnosis.trim().take(18).ifBlank { rec.doctorName }
+                                                SuggestionChip(
+                                                    onClick = {
+                                                        emrScope.launch {
+                                                            // Header items: alert (0), ai summary (1), controls (2), perm log (3) => records start at 4
+                                                            emrListState.animateScrollToItem(4 + idx)
+                                                        }
+                                                    },
+                                                    label = {
+                                                        Text(
+                                                            text = "${rec.visitDateLabel.ifBlank { bi(isEn, "زيارة", "Visit") }} • $shortTitle",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     item(key = "emr_permanent_log") {
                         PermanentMedicalLogSection(
                             patientName = patientName,
@@ -1912,7 +2015,7 @@ private fun PatientEmrViewerDialog(
                             isEn = isEn,
                         )
                     }
-                    if (records.isEmpty()) {
+                    if (visibleRecords.isEmpty()) {
                         item(key = "emr_empty") {
                             Surface(
                                 color = MaterialTheme.colorScheme.surface,
@@ -1922,8 +2025,8 @@ private fun PatientEmrViewerDialog(
                                 Text(
                                     text = bi(
                                         isEn,
-                                        "لا توجد زيارات سابقة أو تحاليل مرفوعة لهذا المريض حتى الآن.",
-                                        "No previous visits or lab reports uploaded for this patient yet.",
+                                        "لا توجد زيارات أو تحاليل مسجلة لهذا المريض في هذا التصنيف.",
+                                        "No previous visits or lab reports in this category yet.",
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1932,15 +2035,36 @@ private fun PatientEmrViewerDialog(
                             }
                         }
                     } else {
-                        items(records, key = { it.id }) { rec ->
-                            MedicalRecordTimelineCard(
-                                record = rec,
-                                brandConfig = brandConfig,
-                                isEn = isEn,
-                                onPreviewAttachment = onPreviewAttachment,
-                                onDeleteRecordFile = null,
-                                onShowMessage = onShowMessage,
-                            )
+                        items(visibleRecords, key = { it.id }) { rec ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(top = 18.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .background(
+                                                color = if (isRxRecord(rec)) TealPrimary else Color(0xFF4338CA),
+                                                shape = CircleShape,
+                                            ),
+                                    )
+                                }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    MedicalRecordTimelineCard(
+                                        record = rec,
+                                        brandConfig = brandConfig,
+                                        isEn = isEn,
+                                        onPreviewAttachment = onPreviewAttachment,
+                                        onDeleteRecordFile = null,
+                                        onShowMessage = onShowMessage,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

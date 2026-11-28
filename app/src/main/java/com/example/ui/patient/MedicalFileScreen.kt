@@ -1359,6 +1359,25 @@ fun MedicalRecordTimelineCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    if (record.followUpDate.isNotBlank()) {
+                        Surface(
+                            color = Color(0xFFECFDF5),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                        ) {
+                            Text(
+                                text = bi(
+                                    cardIsEn,
+                                    "📅 موعد الاستشارة القادمة: ${record.followUpDate}",
+                                    "📅 Next Follow-Up: ${record.followUpDate}",
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF166534),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            )
+                        }
+                    }
                 }
             }
 

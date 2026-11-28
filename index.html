@@ -1185,6 +1185,15 @@
       background: var(--teal-soft);
     }
 
+    @keyframes modalBackdropIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes modalPanelIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
     /* Modals */
     .modal-backdrop {
       position: fixed;
@@ -1195,6 +1204,7 @@
       justify-content: center;
       padding: 16px;
       z-index: 100;
+      animation: modalBackdropIn 0.2s ease-out both;
     }
 
     .modal-panel {
@@ -1209,6 +1219,7 @@
       flex-direction: column;
       gap: 12px;
       box-shadow: 0 20px 45px rgba(0,0,0,0.25);
+      animation: modalPanelIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
     .modal-header {
@@ -1494,6 +1505,329 @@
         text-align: center;
         background: #F8FCFC;
         page-break-inside: avoid;
+      }
+    }
+
+    /* Shared Branded Rx Sheet Styles (Screen Preview + Print) */
+    .rx-sheet-frame {
+      border: 2px solid #0D7377;
+      border-radius: 12px;
+      background: #FFFFFF;
+      color: #0F172A;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-sizing: border-box;
+      font-family: 'Cairo', 'Tajawal', Arial, sans-serif;
+    }
+    .rx-sheet-frame.rx-paper-a5 {
+      padding: 14px 16px;
+      min-height: 188mm;
+      font-size: 12.5px;
+    }
+    .rx-sheet-frame.rx-paper-a4 {
+      padding: 18px 22px;
+      min-height: 266mm;
+      font-size: 13.5px;
+    }
+    .rx-brand-header {
+      border-bottom: 2.5px solid #0D7377;
+      padding-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .rx-brand-identity {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+    .rx-brand-logo {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      border-radius: 10px;
+      border: 1px solid #CBD5E1;
+      background: #FFFFFF;
+      padding: 2px;
+      flex-shrink: 0;
+    }
+    .rx-paper-a4 .rx-brand-logo {
+      width: 72px;
+      height: 72px;
+    }
+    .rx-brand-rx-badge {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: #E0F2F1;
+      border: 1.5px solid #0D7377;
+      color: #0D7377;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      font-family: Georgia, serif;
+      flex-shrink: 0;
+    }
+    .rx-patient-strip {
+      margin: 10px 0;
+      padding: 8px 12px;
+      background: #F4F8F9;
+      border: 1px solid #CBD5E1;
+      border-radius: 9px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      font-size: 0.94em;
+    }
+    .rx-followup-pill {
+      margin-top: 8px;
+      padding: 7px 11px;
+      background: #ECFDF5;
+      border: 1.5px solid #16A34A;
+      border-radius: 8px;
+      color: #14532D;
+      font-weight: 800;
+      display: inline-block;
+    }
+    .rx-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    .rx-table th, .rx-table td {
+      border: 1px solid #CBD5E1;
+      padding: 7px 9px;
+      text-align: right;
+      vertical-align: top;
+    }
+    .rx-paper-a4 .rx-table th, .rx-paper-a4 .rx-table td {
+      padding: 9px 11px;
+    }
+    .rx-print-ltr .rx-table th,
+    .rx-print-ltr .rx-table td {
+      text-align: left;
+    }
+    .rx-table th {
+      background: #E0F2F1;
+      color: #0F4C50;
+    }
+    .rx-brand-footer {
+      margin-top: 14px;
+      border-top: 2px solid #0D7377;
+      padding-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 0.88em;
+      color: #334155;
+    }
+    .rx-brand-footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Animated Prescription Print Window */
+    @keyframes rxBackdropFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes rxBackdropFadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+    @keyframes rxPrintWindowIn {
+      0% { opacity: 0; transform: translateY(28px) scale(0.94); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes rxPrintWindowOut {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(18px) scale(0.96); }
+    }
+    @keyframes rxPaperUnfold {
+      0% { opacity: 0; transform: translateY(18px) scale(0.965); filter: blur(1px); }
+      100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
+    @keyframes rxStaggerReveal {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .rx-print-preview-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 250;
+      background: rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      animation: rxBackdropFadeIn 0.24s ease-out both;
+    }
+    .rx-print-preview-backdrop.is-closing {
+      animation: rxBackdropFadeOut 0.2s ease-in both;
+    }
+    .rx-print-preview-window {
+      width: 100%;
+      max-width: 860px;
+      max-height: 92vh;
+      background: #F1F5F9;
+      border-radius: 22px;
+      border: 1.5px solid rgba(13, 115, 119, 0.35);
+      box-shadow: 0 28px 65px rgba(15, 23, 42, 0.4);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: rxPrintWindowIn 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .rx-print-preview-backdrop.is-closing .rx-print-preview-window {
+      animation: rxPrintWindowOut 0.2s ease-in both;
+    }
+    .rx-print-preview-toolbar {
+      background: #FFFFFF;
+      border-bottom: 1px solid #CBD5E1;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .rx-print-paper-stage {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 14px 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      background: radial-gradient(circle at top, #E2E8F0 0%, #CBD5E1 100%);
+    }
+    .rx-print-paper-card {
+      width: 100%;
+      transition: max-width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      animation: rxPaperUnfold 0.44s cubic-bezier(0.16, 1, 0.3, 1) 0.06s both;
+    }
+    .rx-print-paper-card.is-a5 { max-width: 560px; }
+    .rx-print-paper-card.is-a4 { max-width: 760px; }
+    .rx-print-paper-card .rx-sheet-frame {
+      box-shadow: 0 18px 46px rgba(15, 23, 42, 0.22);
+      min-height: auto;
+    }
+    .rx-print-paper-card .rx-brand-header {
+      animation: rxStaggerReveal 0.35s ease-out 0.14s both;
+    }
+    .rx-print-paper-card .rx-patient-strip {
+      animation: rxStaggerReveal 0.35s ease-out 0.2s both;
+    }
+    .rx-print-paper-card .rx-table {
+      animation: rxStaggerReveal 0.35s ease-out 0.26s both;
+    }
+
+    /* EMR Prescription Timeline */
+    .emr-timeline-shell {
+      background: #FFFFFF;
+      border: 1.5px solid rgba(13, 115, 119, 0.28);
+      border-radius: 18px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .emr-timeline-rail {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 2px 6px;
+      scrollbar-width: thin;
+    }
+    .emr-timeline-jump-chip {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 36px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      border: 1px solid #CBD5E1;
+      background: #F8FAFC;
+      color: #0F172A;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .emr-timeline-jump-chip:hover,
+    .emr-timeline-jump-chip.active {
+      border-color: #0D7377;
+      background: var(--teal-soft);
+      color: var(--teal-text);
+      transform: translateY(-1px);
+    }
+    .emr-timeline-list {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-inline-start: 22px;
+    }
+    .emr-timeline-list::before {
+      content: '';
+      position: absolute;
+      inset-inline-start: 8px;
+      top: 10px;
+      bottom: 10px;
+      width: 2.5px;
+      background: linear-gradient(180deg, #0D7377 0%, #99F6E4 100%);
+      border-radius: 99px;
+    }
+    .emr-timeline-item {
+      position: relative;
+    }
+    .emr-timeline-dot {
+      position: absolute;
+      inset-inline-start: -21px;
+      top: 16px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #0D7377;
+      border: 3px solid #CCFBF1;
+      box-shadow: 0 0 0 2px #0D7377;
+    }
+    .emr-timeline-dot.is-external {
+      background: #D97706;
+      border-color: #FEF3C7;
+      box-shadow: 0 0 0 2px #D97706;
+    }
+    .emr-timeline-dot.is-lab {
+      background: #4338CA;
+      border-color: #E0E7FF;
+      box-shadow: 0 0 0 2px #4338CA;
+    }
+    @keyframes emrPulseHighlight {
+      0% { box-shadow: 0 0 0 0 rgba(13, 115, 119, 0.5); }
+      50% { box-shadow: 0 0 0 6px rgba(13, 115, 119, 0.22); }
+      100% { box-shadow: 0 0 0 0 rgba(13, 115, 119, 0); }
+    }
+    .emr-timeline-item.is-highlighted > article {
+      border-color: #0D7377 !important;
+      background: #F0FDFD !important;
+      animation: emrPulseHighlight 1.1s ease-out;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .modal-backdrop, .modal-panel, .rx-print-preview-backdrop, .rx-print-preview-window, .rx-print-paper-card,
+      .rx-print-paper-card .rx-brand-header, .rx-print-paper-card .rx-patient-strip, .rx-print-paper-card .rx-table {
+        animation: none !important;
       }
     }
 
@@ -2003,6 +2337,7 @@
   </nav>
 
   <div id="modalRoot"></div>
+  <div id="rxPrintPreviewRoot"></div>
   <div id="toast" class="toast" style="display:none" role="status" aria-live="polite"></div>
   <iframe id="apkDownloadFrame" title="تحميل تطبيق طب الحجايزة" aria-hidden="true" tabindex="-1" style="display:none;width:0;height:0;border:0;position:absolute;left:-9999px;"></iframe>
   <div id="printSheet"></div>
@@ -7592,12 +7927,9 @@
         return list.find((m) => m.id === db.activeMemberId) || list[0];
       }
 
-      function printPrescription(record, isEnOverride, printOpts) {
+      function buildBrandedPrescriptionSheetHtml(record, isEn, paperSize) {
         const cfg = db.config || DEFAULT_CONFIG;
         const rec = record || {};
-        const isEn = typeof isEnOverride === 'boolean'
-          ? isEnOverride
-          : (rec && rec.id && ui.cardLangOverrides[rec.id] ? (ui.cardLangOverrides[rec.id] === 'en') : (ui.lang === 'en'));
         const localized = BilingualMedicalTranslator.resolveForDisplay(rec, isEn);
 
         const docObj = (db.doctors || []).find((d) =>
@@ -7609,9 +7941,7 @@
           specialty: rec.specialty || '',
           clinicName: cfg.platformNameAr
         });
-        const paperSize = (printOpts && printOpts.paperSize) ? String(printOpts.paperSize).toUpperCase() : (lh.paperSize || 'A5');
-        const isA5 = paperSize !== 'A4';
-        applyDynamicPrintPageSize(isA5 ? 'A5' : 'A4');
+        const isA5 = String(paperSize || lh.paperSize || 'A5').toUpperCase() !== 'A4';
 
         const patientMem = (db.familyMembers || []).find((m) =>
           (rec.familyMemberId && m.id === rec.familyMemberId) ||
@@ -7655,10 +7985,7 @@
         const headerDegree = isEn ? (localized.specialty || lh.specialtyDegree) : (lh.specialtyDegree || localized.specialty);
         const logoSrc = lh.logoUrl || './icon-192.png';
 
-        const sheet = document.getElementById('printSheet');
-        sheet.classList.toggle('rx-print-ltr', isEn);
-        sheet.innerHTML =
-          '<div class="rx-sheet-frame ' + (isA5 ? 'rx-paper-a5' : 'rx-paper-a4') + '">' +
+        return '<div class="rx-sheet-frame ' + (isA5 ? 'rx-paper-a5' : 'rx-paper-a4') + '">' +
             '<div>' +
               '<div class="rx-brand-header">' +
                 '<div class="rx-brand-identity">' +
@@ -7700,8 +8027,132 @@
               '</div>' +
             '</div>' +
           '</div>';
+      }
 
-        window.print();
+      let rxPreviewAutoPrintTimer = null;
+      function closeRxPrintPreview() {
+        if (rxPreviewAutoPrintTimer) {
+          clearTimeout(rxPreviewAutoPrintTimer);
+          rxPreviewAutoPrintTimer = null;
+        }
+        const root = document.getElementById('rxPrintPreviewRoot');
+        if (!root) return;
+        const backdrop = document.getElementById('rxPrintPreviewBackdrop');
+        if (!backdrop) {
+          root.innerHTML = '';
+          return;
+        }
+        backdrop.classList.add('is-closing');
+        setTimeout(function () {
+          const r = document.getElementById('rxPrintPreviewRoot');
+          if (r) r.innerHTML = '';
+          if (tebCloudRuntime.pendingDeferredRender && !isUiBusyForBackgroundRender()) {
+            tebCloudRuntime.pendingDeferredRender = false;
+            renderApp();
+          }
+        }, 210);
+      }
+
+      function openRxPrintPreviewModal(record, initialIsEn, initialPaperSize, autoTriggerNativePrint) {
+        const root = document.getElementById('rxPrintPreviewRoot');
+        if (!root) return;
+        if (rxPreviewAutoPrintTimer) {
+          clearTimeout(rxPreviewAutoPrintTimer);
+          rxPreviewAutoPrintTimer = null;
+        }
+        let curIsEn = Boolean(initialIsEn);
+        let curPaper = String(initialPaperSize || 'A5').toUpperCase() === 'A4' ? 'A4' : 'A5';
+
+        function syncPrintSheetAndStage() {
+          applyDynamicPrintPageSize(curPaper);
+          const sheetHtml = buildBrandedPrescriptionSheetHtml(record, curIsEn, curPaper);
+          const printSheet = document.getElementById('printSheet');
+          if (printSheet) {
+            printSheet.classList.toggle('rx-print-ltr', curIsEn);
+            printSheet.innerHTML = sheetHtml;
+          }
+          const cardEl = document.getElementById('rxPrintPaperCard');
+          if (cardEl) {
+            cardEl.classList.toggle('is-a5', curPaper === 'A5');
+            cardEl.classList.toggle('is-a4', curPaper === 'A4');
+            cardEl.classList.toggle('rx-print-ltr', curIsEn);
+            cardEl.setAttribute('dir', curIsEn ? 'ltr' : 'rtl');
+            cardEl.innerHTML = sheetHtml;
+          }
+          const bA5 = document.getElementById('rxPreviewSizeA5');
+          const bA4 = document.getElementById('rxPreviewSizeA4');
+          const bAr = document.getElementById('rxPreviewLangAr');
+          const bEn = document.getElementById('rxPreviewLangEn');
+          if (bA5) bA5.classList.toggle('active', curPaper === 'A5');
+          if (bA4) bA4.classList.toggle('active', curPaper === 'A4');
+          if (bAr) bAr.classList.toggle('active', !curIsEn);
+          if (bEn) bEn.classList.toggle('active', curIsEn);
+        }
+
+        root.innerHTML =
+          '<div class="rx-print-preview-backdrop" id="rxPrintPreviewBackdrop">' +
+            '<div class="rx-print-preview-window" role="dialog" aria-modal="true" aria-label="' + esc(bi('معاينة وطباعة الروشتة الطبية', 'Prescription Print Preview')) + '">' +
+              '<div class="rx-print-preview-toolbar">' +
+                '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                  '<strong style="font-size:1rem;color:var(--teal);">🖨️ ' + esc(bi('معاينة طباعة الروشتة الرسمية', 'Branded Rx Print Preview')) + '</strong>' +
+                  '<div class="chips-row" style="gap:5px;">' +
+                    '<button class="chip ' + (curPaper === 'A5' ? 'active' : '') + '" id="rxPreviewSizeA5" type="button" style="min-height:34px;padding:4px 10px;">📄 A5</button>' +
+                    '<button class="chip ' + (curPaper === 'A4' ? 'active' : '') + '" id="rxPreviewSizeA4" type="button" style="min-height:34px;padding:4px 10px;">📃 A4</button>' +
+                    '<button class="chip ' + (!curIsEn ? 'active' : '') + '" id="rxPreviewLangAr" type="button" style="min-height:34px;padding:4px 10px;">عربي</button>' +
+                    '<button class="chip ' + (curIsEn ? 'active' : '') + '" id="rxPreviewLangEn" type="button" style="min-height:34px;padding:4px 10px;">EN</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                  '<button class="btn btn-green" id="btnRxPreviewPrintNow" type="button" style="min-height:40px;padding:6px 16px;">🖨️ ' + esc(bi('طباعة الآن', 'Print Now')) + '</button>' +
+                  '<button class="btn btn-outline" id="btnRxPreviewClose" type="button" style="min-height:40px;padding:6px 14px;">✕ ' + esc(bi('إغلاق', 'Close')) + '</button>' +
+                '</div>' +
+              '</div>' +
+              '<div class="rx-print-paper-stage">' +
+                '<div class="rx-print-paper-card ' + (curPaper === 'A5' ? 'is-a5' : 'is-a4') + '" id="rxPrintPaperCard"></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+
+        syncPrintSheetAndStage();
+
+        document.getElementById('rxPreviewSizeA5').onclick = function () { curPaper = 'A5'; syncPrintSheetAndStage(); };
+        document.getElementById('rxPreviewSizeA4').onclick = function () { curPaper = 'A4'; syncPrintSheetAndStage(); };
+        document.getElementById('rxPreviewLangAr').onclick = function () { curIsEn = false; syncPrintSheetAndStage(); };
+        document.getElementById('rxPreviewLangEn').onclick = function () { curIsEn = true; syncPrintSheetAndStage(); };
+        document.getElementById('btnRxPreviewPrintNow').onclick = function () { window.print(); };
+        document.getElementById('btnRxPreviewClose').onclick = closeRxPrintPreview;
+        document.getElementById('rxPrintPreviewBackdrop').onclick = function (e) {
+          if (e.target && e.target.id === 'rxPrintPreviewBackdrop') closeRxPrintPreview();
+        };
+
+        if (autoTriggerNativePrint && !isInsideAndroidApk()) {
+          rxPreviewAutoPrintTimer = setTimeout(function () {
+            rxPreviewAutoPrintTimer = null;
+            if (document.getElementById('rxPrintPreviewBackdrop')) {
+              window.print();
+            }
+          }, 460);
+        }
+      }
+
+      function printPrescription(record, isEnOverride, printOpts) {
+        const cfg = db.config || DEFAULT_CONFIG;
+        const rec = record || {};
+        const isEn = typeof isEnOverride === 'boolean'
+          ? isEnOverride
+          : (rec && rec.id && ui.cardLangOverrides[rec.id] ? (ui.cardLangOverrides[rec.id] === 'en') : (ui.lang === 'en'));
+        const docObj = (db.doctors || []).find((d) =>
+          (rec.doctorId && d.id === rec.doctorId) ||
+          (rec.doctorName && d.doctorName === rec.doctorName)
+        ) || null;
+        const lh = getClinicLetterhead(docObj || {
+          doctorName: rec.doctorName || '',
+          specialty: rec.specialty || '',
+          clinicName: cfg.platformNameAr
+        });
+        const paperSize = (printOpts && printOpts.paperSize) ? String(printOpts.paperSize).toUpperCase() : (lh.paperSize || 'A5');
+        const autoPrint = !(printOpts && printOpts.previewOnly);
+        openRxPrintPreviewModal(rec, isEn, paperSize, autoPrint);
       }
 
       function printClinicVisitReceipt(slot, doc) {
@@ -8848,7 +9299,7 @@
 
           (records.length === 0
             ? '<div class="card" style="text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد سجلات طبية مسجلة لـ ' + activeMember.fullName + ' بعد.', 'No medical records found for ' + activeMember.fullName + ' yet.')) + '</div>'
-            : '<div style="display:flex;flex-direction:column;gap:12px;">' + records.map(renderMedicalRecordCardHtml).join('') + '</div>');
+            : renderEmrPrescriptionTimelineSectionHtml(records, activeMember.fullName));
       }
 
       function renderDoctorLoginGate() {
@@ -10312,6 +10763,10 @@
 
       function isUiBusyForBackgroundRender() {
         try {
+          const rxPrev = document.getElementById('rxPrintPreviewRoot');
+          if (rxPrev && rxPrev.innerHTML && rxPrev.innerHTML.trim() !== '') {
+            return true;
+          }
           const modalRoot = document.getElementById('modalRoot');
           if (modalRoot && modalRoot.innerHTML && modalRoot.innerHTML.trim() !== '') {
             return true;
@@ -12891,6 +13346,79 @@
         );
       }
 
+      function renderEmrPrescriptionTimelineSectionHtml(records, patientName) {
+        const allRecs = Array.isArray(records) ? records.slice().sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0)) : [];
+        if (allRecs.length === 0) {
+          return '<div style="padding:18px;text-align:center;color:var(--text-muted);">' +
+            esc(bi('لا توجد زيارات أو تحاليل مسجلة لهذا المريض.', 'No previous visits or lab reports recorded for this patient.')) +
+          '</div>';
+        }
+        const isRxType = (r) => !r.recordType || r.recordType === 'PRESCRIPTION' || r.recordType === 'EXTERNAL_VISIT';
+        const rxCount = allRecs.filter(isRxType).length;
+        const labCount = allRecs.length - rxCount;
+        const defaultTab = rxCount > 0 ? 'RX' : 'ALL';
+        const activeFilter = ui.emrTimelineFilter || defaultTab;
+        const activeQuery = (ui.emrTimelineQuery || '').trim().toLowerCase();
+
+        const filtered = allRecs.filter((r) => {
+          if (activeFilter === 'RX' && !isRxType(r)) return false;
+          if (activeFilter === 'LAB' && isRxType(r)) return false;
+          if (!activeQuery) return true;
+          const hay = [
+            r.doctorName, r.specialty, r.diagnosis, r.diagnosisEn,
+            r.medications, r.medicationsEn, r.notes, r.followUpDate, r.visitDateLabel
+          ].join(' ').toLowerCase();
+          return hay.includes(activeQuery);
+        });
+
+        ui.lastEmrTimelineContext = { records: allRecs, patientName: patientName || '' };
+
+        const jumpRailHtml = filtered.length > 0
+          ? '<div class="emr-timeline-rail" aria-label="' + esc(bi('شريط التنقل الزمني للروشتات', 'Prescription Timeline Quick Jump')) + '">' +
+              filtered.map((r, idx) => {
+                const icon = r.recordType === 'LAB_RESULT' ? '🧪' : (r.recordType === 'PATIENT_UPLOAD' ? '📎' : (r.recordType === 'EXTERNAL_VISIT' ? '🏥' : '💊'));
+                const shortDiag = String(r.diagnosis || '').trim().slice(0, 22) || (r.visitDateLabel || '');
+                return '<button class="emr-timeline-jump-chip ' + (idx === 0 ? 'active' : '') + '" type="button" data-emr-jump-rec="' + esc(r.id) + '">' +
+                  '<span>' + icon + '</span>' +
+                  '<span>' + esc(r.visitDateLabel || bi('زيارة', 'Visit')) + '</span>' +
+                  '<span style="color:var(--text-muted);font-weight:600;">• ' + esc(shortDiag) + '</span>' +
+                '</button>';
+              }).join('') +
+            '</div>'
+          : '';
+
+        const timelineItemsHtml = filtered.length === 0
+          ? '<div style="padding:16px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد نتائج مطابقة للبحث أو التصنيف المحدد.', 'No records match your search or filter.')) + '</div>'
+          : '<div class="emr-timeline-list">' +
+              filtered.map((rec) => {
+                const dotClass = rec.recordType === 'EXTERNAL_VISIT'
+                  ? 'is-external'
+                  : ((rec.recordType === 'LAB_RESULT' || rec.recordType === 'PATIENT_UPLOAD') ? 'is-lab' : '');
+                return '<div class="emr-timeline-item" id="emrTimelineNode_' + esc(rec.id) + '" data-emr-timeline-node="' + esc(rec.id) + '">' +
+                  '<span class="emr-timeline-dot ' + dotClass + '" aria-hidden="true"></span>' +
+                  renderMedicalRecordCardHtml(rec) +
+                '</div>';
+              }).join('') +
+            '</div>';
+
+        return '<section class="emr-timeline-shell" id="emrPrescriptionTimelineSection">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<div style="font-weight:800;font-size:1.02rem;color:var(--teal);">💊 ' + esc(bi('سجل الروشتات والزيارات السابقة (الجدول الزمني)', 'Previous Prescriptions & Visits Timeline')) + '</div>' +
+                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(bi('اضغط على أي تاريخ في الشريط للانتقال السريع أو الطباعة المباشرة للروشتة.', 'Tap any date chip to jump directly to a visit or reprint the prescription.')) + '</div>' +
+              '</div>' +
+              '<div class="chips-row">' +
+                '<button class="chip ' + (activeFilter === 'RX' ? 'active' : '') + '" type="button" data-emr-filter="RX">💊 ' + esc(bi('الروشتات (' + rxCount + ')', 'Rx (' + rxCount + ')')) + '</button>' +
+                '<button class="chip ' + (activeFilter === 'LAB' ? 'active' : '') + '" type="button" data-emr-filter="LAB">🧪 ' + esc(bi('التحاليل (' + labCount + ')', 'Labs (' + labCount + ')')) + '</button>' +
+                '<button class="chip ' + (activeFilter === 'ALL' ? 'active' : '') + '" type="button" data-emr-filter="ALL">' + esc(bi('الكل (' + allRecs.length + ')', 'All (' + allRecs.length + ')')) + '</button>' +
+              '</div>' +
+            '</div>' +
+            '<input class="input" id="emrTimelineSearchInput" type="search" value="' + esc(ui.emrTimelineQuery || '') + '" placeholder="' + esc(bi('🔍 ابحث داخل الجدول الزمني باسم الدواء أو التشخيص أو الطبيب...', '🔍 Search timeline by medication, diagnosis, or doctor...')) + '" />' +
+            jumpRailHtml +
+            timelineItemsHtml +
+          '</section>';
+      }
+
       function openPatientEmrModal(slotId) {
         const slot = db.slots.find((s) => s.id === slotId);
         const memberObj = findMemberBySlotOrId(slot);
@@ -12910,13 +13438,13 @@
                 : ((b.eventTimestampMillis || 0) - (a.eventTimestampMillis || 0))
             );
 
+        ui.emrTimelineFilter = '';
+        ui.emrTimelineQuery = '';
         openModal(bi('الملف الطبي: ', 'Medical Record: ') + slot.patientName,
           renderDoctorMedicalAlertBannerHtml(memberObj) +
           renderAiMedicalSummaryCardHtml(slot.patientName, recs, memberObj) +
-          renderPermanentMedicalLogSectionHtml(slot.patientName, permLogs, memberObj) +
-          (recs.length === 0
-            ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد زيارات أو تحاليل مسجلة لهذا المريض.', 'No previous visits or lab reports recorded for this patient.')) + '</div>'
-            : recs.map(renderMedicalRecordCardHtml).join('')),
+          renderEmrPrescriptionTimelineSectionHtml(recs, slot.patientName) +
+          renderPermanentMedicalLogSectionHtml(slot.patientName, permLogs, memberObj),
           bindSharedRecordActions
         );
       }
@@ -12951,14 +13479,14 @@
               ).join('') +
             '</div>'
           : '';
+        ui.emrTimelineFilter = '';
+        ui.emrTimelineQuery = '';
         openModal(bi('الملف الطبي: ', 'Medical Record: ') + targetName,
           switcherHtml +
           renderDoctorMedicalAlertBannerHtml(activeMem) +
           renderAiMedicalSummaryCardHtml(targetName, recs, activeMem) +
-          renderPermanentMedicalLogSectionHtml(targetName, permLogs, activeMem) +
-          (recs.length === 0
-            ? '<div style="padding:18px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد زيارات أو تحاليل مسجلة لهذا المريض.', 'No previous visits or lab reports recorded for this patient.')) + '</div>'
-            : recs.map(renderMedicalRecordCardHtml).join('')),
+          renderEmrPrescriptionTimelineSectionHtml(recs, targetName) +
+          renderPermanentMedicalLogSectionHtml(targetName, permLogs, activeMem),
           function () {
             bindSharedRecordActions();
             document.querySelectorAll('[data-doc-switch-emr-mem]').forEach((btn) => {
@@ -13049,6 +13577,50 @@
               bindSharedRecordActions();
             } else {
               renderApp();
+            }
+          };
+        });
+        document.querySelectorAll('[data-emr-filter]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.emrTimelineFilter = btn.getAttribute('data-emr-filter') || 'ALL';
+            const sec = btn.closest('#emrPrescriptionTimelineSection');
+            if (sec && ui.lastEmrTimelineContext) {
+              sec.outerHTML = renderEmrPrescriptionTimelineSectionHtml(ui.lastEmrTimelineContext.records, ui.lastEmrTimelineContext.patientName);
+              bindSharedRecordActions();
+            }
+          };
+        });
+        const emrSearchInp = document.getElementById('emrTimelineSearchInput');
+        if (emrSearchInp) {
+          emrSearchInp.oninput = function () {
+            ui.emrTimelineQuery = emrSearchInp.value || '';
+            const sec = emrSearchInp.closest('#emrPrescriptionTimelineSection');
+            if (sec && ui.lastEmrTimelineContext) {
+              sec.outerHTML = renderEmrPrescriptionTimelineSectionHtml(ui.lastEmrTimelineContext.records, ui.lastEmrTimelineContext.patientName);
+              bindSharedRecordActions();
+              const nextInp = document.getElementById('emrTimelineSearchInput');
+              if (nextInp) {
+                nextInp.focus();
+                try {
+                  const len = nextInp.value.length;
+                  nextInp.setSelectionRange(len, len);
+                } catch (err) {}
+              }
+            }
+          };
+        }
+        document.querySelectorAll('[data-emr-jump-rec]').forEach((btn) => {
+          btn.onclick = function () {
+            const recId = btn.getAttribute('data-emr-jump-rec');
+            document.querySelectorAll('[data-emr-jump-rec]').forEach((c) => {
+              c.classList.toggle('active', c.getAttribute('data-emr-jump-rec') === recId);
+            });
+            const node = document.getElementById('emrTimelineNode_' + recId);
+            if (node) {
+              node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              node.classList.remove('is-highlighted');
+              void node.offsetWidth;
+              node.classList.add('is-highlighted');
             }
           };
         });
@@ -15199,6 +15771,11 @@
       document.addEventListener('keydown', function (e) {
         unlockClinicAudioContext();
         if (e.key === 'Escape') {
+          const rxPrev = document.getElementById('rxPrintPreviewBackdrop');
+          if (rxPrev) {
+            closeRxPrintPreview();
+            return;
+          }
           const mr = document.getElementById('modalRoot');
           if (mr && mr.innerHTML && mr.innerHTML.trim() !== '') {
             closeModal();
@@ -15206,6 +15783,11 @@
           return;
         }
         if ((e.ctrlKey || e.metaKey) && String(e.key || '').toLowerCase() === 'p') {
+          if (document.getElementById('rxPrintPreviewBackdrop')) {
+            e.preventDefault();
+            window.print();
+            return;
+          }
           const printRxBtn = document.getElementById('btnPrintRxModalAr');
           if (printRxBtn) {
             e.preventDefault();
