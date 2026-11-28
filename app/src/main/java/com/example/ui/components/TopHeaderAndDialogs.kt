@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -116,6 +118,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.config.PlatformBrandConfig
+import com.example.data.local.AppointmentSlotEntity
 import com.example.data.local.ChatThreadType
 import com.example.data.local.ClinicDoctorEntity
 import com.example.data.local.DelayNotificationEntity
@@ -125,9 +128,14 @@ import com.example.data.local.FamilyLinkStatus
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MessageSenderRole
 import com.example.data.local.PatientAccountEntity
+import com.example.data.local.SlotStatus
 import com.example.ui.AppLanguage
 import com.example.ui.AppRoleMode
 import com.example.ui.bi
+import com.example.ui.theme.OnTealContainer
+import com.example.ui.theme.TealContainer
+import com.example.util.GoogleCalendarHelper
+import com.example.util.TimeUtils
 import com.example.ui.theme.DelayWarningBg
 import com.example.ui.theme.DelayWarningBorder
 import com.example.ui.theme.DelayWarningText
@@ -1543,6 +1551,8 @@ fun NotificationsDialog(
     notifications: List<DelayNotificationEntity>,
     directMessages: List<DirectMessageEntity> = emptyList(),
     allAccounts: List<PatientAccountEntity> = emptyList(),
+    bookedSlots: List<AppointmentSlotEntity> = emptyList(),
+    doctors: List<ClinicDoctorEntity> = emptyList(),
     roleMode: AppRoleMode = AppRoleMode.PATIENT,
     activeAccount: PatientAccountEntity? = null,
     loggedInDoctor: ClinicDoctorEntity? = null,
@@ -1553,7 +1563,16 @@ fun NotificationsDialog(
     onRegenerateOtp: (accountId: String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val doctorsById = remember(doctors) { doctors.associateBy { it.id } }
+    val activeBookedPatientSlots = remember(bookedSlots, roleMode) {
+        if (roleMode == AppRoleMode.PATIENT) {
+            bookedSlots.filter { it.status == SlotStatus.BOOKED }.sortedBy { it.startMinutes }
+        } else {
+            emptyList()
+        }
+    }
     val activeThreads = remember(directMessages, roleMode, activeAccount?.id, loggedInDoctor?.id) {
         when (roleMode) {
             AppRoleMode.PATIENT -> {
@@ -1701,7 +1720,7 @@ fun NotificationsDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                if (notifications.isEmpty() && activeThreads.isEmpty()) {
+                if (notifications.isEmpty() && activeThreads.isEmpty() && activeBookedPatientSlots.isEmpty()) {
                     Text(
                         text = bi(
                             isEn,
@@ -1718,6 +1737,80 @@ fun NotificationsDialog(
                         contentPadding = PaddingValues(vertical = 4.dp),
                         modifier = Modifier.height(360.dp),
                     ) {
+                        if (activeBookedPatientSlots.isNotEmpty()) {
+                            item(key = "notif_booked_gcal_header") {
+                                Text(
+                                    text = bi(
+                                        isEn,
+                                        "تأكيدات المواعيد القادمة — تقويم جوجل (${activeBookedPatientSlots.size})",
+                                        "Confirmed Upcoming Appointments — Google Calendar (${activeBookedPatientSlots.size})",
+                                    ),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = TealPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            items(activeBookedPatientSlots, key = { "gcal_${it.id}" }) { bSlot ->
+                                val bDoc = doctorsById[bSlot.doctorId]
+                                val timeText = TimeUtils.formatMinutesAr(bSlot.effectiveMinutes, isEn)
+                                Surface(
+                                    color = TealContainer.copy(alpha = 0.45f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                                        ) {
+                                            Text(
+                                                text = bDoc?.doctorName.orEmpty().ifBlank { bi(isEn, "موعد مؤكد", "Confirmed Slot") },
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = OnTealContainer,
+                                            )
+                                            Text(
+                                                text = "${bDoc?.clinicName.orEmpty()} • ${bSlot.dateLabel} — $timeText",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Button(
+                                            onClick = {
+                                                GoogleCalendarHelper.openGoogleCalendarForAppointment(
+                                                    context = context,
+                                                    slot = bSlot,
+                                                    doctor = bDoc,
+                                                    isEn = isEn,
+                                                )
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("notif_gcal_slot_${bSlot.id}"),
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.CalendarMonth,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = bi(isEn, "أضف للتقويم", "Add Calendar"),
+                                                style = MaterialTheme.typography.labelMedium,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         if (activeThreads.isNotEmpty()) {
                             item(key = "notif_threads_header") {
                                 Text(
@@ -1819,6 +1912,45 @@ fun NotificationsDialog(
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = if (!alert.isRead) DelayWarningText else MaterialTheme.colorScheme.onSurface,
                                             )
+                                            val matchedConfirmSlot = if (
+                                                roleMode == AppRoleMode.PATIENT &&
+                                                (alert.message.contains("تأكيد حجز") ||
+                                                    alert.message.contains("تم حجز") ||
+                                                    alert.message.contains("confirmed", ignoreCase = true))
+                                            ) {
+                                                activeBookedPatientSlots.firstOrNull { it.doctorId == alert.doctorId }
+                                                    ?: activeBookedPatientSlots.firstOrNull()
+                                            } else {
+                                                null
+                                            }
+                                            if (matchedConfirmSlot != null) {
+                                                val matchedDoc = doctorsById[matchedConfirmSlot.doctorId]
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        GoogleCalendarHelper.openGoogleCalendarForAppointment(
+                                                            context = context,
+                                                            slot = matchedConfirmSlot,
+                                                            doctor = matchedDoc,
+                                                            isEn = isEn,
+                                                        )
+                                                    },
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                    modifier = Modifier
+                                                        .heightIn(min = 48.dp)
+                                                        .testTag("alert_gcal_btn_${alert.id}"),
+                                                ) {
+                                                    Icon(
+                                                        Icons.Filled.CalendarMonth,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = bi(isEn, "📅 أضف لتقويم جوجل", "📅 Add to Google Calendar"),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                    )
+                                                }
+                                            }
                                             val matchedAccount = if (roleMode == AppRoleMode.SUPER_ADMIN) {
                                                 allAccounts.firstOrNull { acc ->
                                                     (acc.phone.isNotBlank() && alert.message.contains(acc.phone)) ||

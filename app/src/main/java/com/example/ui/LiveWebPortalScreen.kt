@@ -116,6 +116,8 @@ private fun isExternalPortalUrl(url: String, liveHost: String): Boolean {
         lower.contains("maps.google.") ||
         lower.contains("maps.app.goo.gl") ||
         lower.contains("goo.gl/maps") ||
+        lower.contains("calendar.google.") ||
+        lower.contains("google.com/calendar") ||
         lower.endsWith(".apk")
     ) {
         return true
@@ -385,6 +387,15 @@ fun LiveWebPortalScreen(
                                     bridgeScope.launch(Dispatchers.Main) {
                                         if (apkUrl.isNotBlank()) {
                                             openExternalUri(ctx, apkUrl)
+                                        }
+                                    }
+                                }
+
+                                @JavascriptInterface
+                                fun openExternalUrl(url: String) {
+                                    bridgeScope.launch(Dispatchers.Main) {
+                                        if (url.isNotBlank()) {
+                                            openExternalUri(ctx, url)
                                         }
                                     }
                                 }

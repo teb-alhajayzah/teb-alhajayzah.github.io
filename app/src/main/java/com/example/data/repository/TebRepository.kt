@@ -1463,6 +1463,24 @@ class TebRepository(
             targetId = bookedSlot.id,
             namespacePath = CloudNamespacePaths.APPOINTMENTS,
         )
+        if (source == BookingSource.APP) {
+            val confirmMsg = "✓ تم تأكيد حجز موعدك مع ${doc?.doctorName.orEmpty()} (${doc?.clinicName.orEmpty()}) الساعة $formattedTime للمريض: ${patientName.trim()}"
+            val patientConfirmNotif = DelayNotificationEntity(
+                doctorId = slot.doctorId,
+                doctorName = doc?.doctorName.orEmpty(),
+                clinicName = doc?.clinicName.orEmpty(),
+                delayMinutes = bookedSlot.delayMinutes,
+                message = confirmMsg,
+                targetAudience = NotificationAudience.PATIENT,
+                targetId = familyMemberId.ifBlank { cleanPhone },
+                senderLabel = doc?.clinicName.orEmpty().ifBlank { doc?.doctorName.orEmpty() },
+            )
+            val confirmId = dao.insertNotification(patientConfirmNotif)
+            val savedConfirm = patientConfirmNotif.copy(id = confirmId)
+            pushDocAsync("notifications", "notif_${savedConfirm.id}_${savedConfirm.createdAtMillis}") {
+                FirestoreCloudSyncService.notificationToJson(savedConfirm)
+            }
+        }
         return Result.success(Unit)
     }
 

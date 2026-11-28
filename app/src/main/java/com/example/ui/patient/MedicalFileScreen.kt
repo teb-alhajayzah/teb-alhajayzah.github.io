@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
@@ -95,6 +97,7 @@ import com.example.config.PlatformBrandConfig
 import com.example.data.local.FamilyMemberEntity
 import com.example.data.local.MedicalRecordEntity
 import com.example.data.local.MedicalRecordType
+import com.example.data.local.SlotStatus
 import com.example.ui.TebUiState
 import com.example.ui.bi
 import com.example.ui.components.AiMedicalSummaryCard
@@ -103,8 +106,11 @@ import com.example.ui.components.DeleteFileConfirmationDialog
 import com.example.ui.components.EditPatientBioDialog
 import com.example.ui.components.PatientBioOverviewCard
 import com.example.ui.components.PermanentMedicalLogSection
+import com.example.ui.theme.OnTealContainer
+import com.example.ui.theme.TealContainer
 import com.example.ui.theme.TealPrimary
 import com.example.util.BilingualMedicalTranslator
+import com.example.util.GoogleCalendarHelper
 import com.example.util.ImageStorageHelper
 import com.example.util.MedicalSummaryAnalyzer
 import com.example.util.PrescriptionPrintHelper
@@ -390,6 +396,117 @@ fun MedicalFileScreen(
                         onRefreshAiSummary = { onRefreshAiSummary(activeMember.id) },
                         isEn = isEn,
                     )
+                }
+
+                // Active upcoming appointments for this family member with 1-tap Google Calendar export
+                val activeMemberBookedSlots = state.allSlots.filter { slot ->
+                    slot.status == SlotStatus.BOOKED && (
+                        slot.familyMemberId == activeMember.id ||
+                            (slot.patientName == activeMember.fullName &&
+                                (slot.patientPhone == activeMember.phone || slot.patientPhone == state.activeAccount.phone))
+                        )
+                }.sortedBy { it.startMinutes }
+                if (activeMemberBookedSlots.isNotEmpty()) {
+                    item(key = "patient_emr_booked_calendar") {
+                        val doctorsById = remember(state.doctors) { state.doctors.associateBy { it.id } }
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = TealContainer.copy(alpha = 0.45f)),
+                            border = BorderStroke(1.5.dp, TealPrimary.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("emr_booked_appointments_card"),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CalendarMonth,
+                                        contentDescription = null,
+                                        tint = TealPrimary,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                    Text(
+                                        text = bi(
+                                            isEn,
+                                            "📅 مواعيدك المحجوزة — أضف إلى تقويم جوجل",
+                                            "📅 Booked Appointments — Add to Google Calendar",
+                                        ),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = OnTealContainer,
+                                    )
+                                }
+                                activeMemberBookedSlots.forEach { bookedSlot ->
+                                    val bookedDoctor = doctorsById[bookedSlot.doctorId]
+                                    val timeFormatted = TimeUtils.formatMinutesAr(bookedSlot.effectiveMinutes, isEn)
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Text(
+                                                text = bookedDoctor?.doctorName.orEmpty().ifBlank { bi(isEn, "عيادة", "Clinic") },
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                            Text(
+                                                text = "${bookedDoctor?.clinicName.orEmpty()} • ${bookedSlot.dateLabel} — $timeFormatted",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            Button(
+                                                onClick = {
+                                                    val opened = GoogleCalendarHelper.openGoogleCalendarForAppointment(
+                                                        context = context,
+                                                        slot = bookedSlot,
+                                                        doctor = bookedDoctor,
+                                                        isEn = isEn,
+                                                    )
+                                                    if (!opened) {
+                                                        onShowMessage(
+                                                            bi(
+                                                                isEn,
+                                                                "تعذر فتح تطبيق التقويم على هذا الجهاز",
+                                                                "Could not open calendar app on this device",
+                                                            )
+                                                        )
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                                shape = RoundedCornerShape(12.dp),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("emr_gcal_btn_${bookedSlot.id}"),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.CalendarMonth,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = bi(isEn, "📅 أضف لتقويم جوجل", "📅 Add to Google Calendar"),
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Permanent Lifetime Medical Log section (auto-written & preserved independently forever)

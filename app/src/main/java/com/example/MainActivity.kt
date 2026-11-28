@@ -889,10 +889,28 @@ fun TebAlHajayzahAppRoot(
     }
 
     if (showNotificationsDialog) {
+        val patientFamilyIds = remember(state.familyMembers) { state.familyMembers.map { it.id }.toSet() }
+        val patientFamilyNames = remember(state.familyMembers) { state.familyMembers.map { it.fullName }.toSet() }
+        val activeAccPhone = state.activeAccount?.phone.orEmpty()
+        val patientBookedSlots = remember(state.allSlots, state.roleMode, activeAccPhone, patientFamilyIds, patientFamilyNames) {
+            if (state.roleMode == AppRoleMode.PATIENT && state.activeAccount != null) {
+                state.allSlots.filter { slot ->
+                    slot.status == com.example.data.local.SlotStatus.BOOKED && (
+                        slot.familyMemberId in patientFamilyIds ||
+                            (activeAccPhone.isNotBlank() && slot.patientPhone == activeAccPhone) ||
+                            slot.patientName in patientFamilyNames
+                        )
+                }
+            } else {
+                emptyList()
+            }
+        }
         NotificationsDialog(
             notifications = state.visibleNotificationsForCurrentRole(),
             directMessages = state.directMessages,
             allAccounts = state.allAccounts,
+            bookedSlots = patientBookedSlots,
+            doctors = state.doctors,
             roleMode = state.roleMode,
             activeAccount = state.activeAccount,
             loggedInDoctor = state.loggedInDoctor,

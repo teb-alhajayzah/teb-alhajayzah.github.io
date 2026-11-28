@@ -57,10 +57,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -468,11 +468,14 @@ fun DoctorDashboardScreen(
             }
 
             item {
-                TabRow(selectedTabIndex = selectedTab) {
+                ScrollableTabRow(
+                    selectedTabIndex = selectedTab,
+                    edgePadding = 8.dp,
+                ) {
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text(bi(isEn, "جدول المواعيد والعيادة", "Schedule & Clinic")) },
+                        text = { Text(bi(isEn, "جدول المواعيد", "Schedule"), maxLines = 1) },
                     )
                     Tab(
                         selected = selectedTab == 1,
@@ -498,10 +501,24 @@ fun DoctorDashboardScreen(
                         },
                         modifier = Modifier.testTag("doctor_messages_tab"),
                     )
+                    Tab(
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3 },
+                        text = { Text(bi(isEn, "📊 الإحصائيات", "📊 Analytics"), maxLines = 1) },
+                        modifier = Modifier.testTag("doctor_analytics_tab"),
+                    )
                 }
             }
 
-            if (selectedTab == 2) {
+            if (selectedTab == 3) {
+                item(key = "doctor_analytics_panel") {
+                    DoctorAnalyticsSection(
+                        state = state,
+                        activeDoctor = activeDoctor,
+                        isEn = isEn,
+                    )
+                }
+            } else if (selectedTab == 2) {
                 val patientThreads = state.directMessages
                     .filter { it.doctorId == activeDoctor.id && it.threadType == ChatThreadType.PATIENT_CLINIC }
                     .groupBy { it.patientAccountId }

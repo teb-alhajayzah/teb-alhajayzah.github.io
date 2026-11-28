@@ -19,6 +19,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-is@18.3.1/umd/react-is.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js" crossorigin="anonymous"></script>
   <style>
     :root {
       --teal: #0D7377;
@@ -2356,6 +2361,79 @@
         font-weight: 700;
         color: var(--text-muted);
       }
+    }
+    .btn-gcal {
+      background: #EEF6FF;
+      color: #1D4ED8;
+      border: 1.5px solid #93C5FD;
+      font-weight: 800;
+    }
+    .btn-gcal:hover {
+      background: #DBEAFE;
+      border-color: #2563EB;
+    }
+    .pc-analytics-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    @media (min-width: 860px) {
+      .pc-analytics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .pc-chart-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: var(--shadow);
+    }
+    .pc-donut-wrap {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .pc-legend-list {
+      flex: 1;
+      min-width: 190px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pc-legend-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.84rem;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+    .pc-bar-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .pc-bar-track {
+      width: 100%;
+      height: 11px;
+      border-radius: 999px;
+      background: var(--surface-soft);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .pc-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.35s ease;
     }
   </style>
 </head>
@@ -5227,6 +5305,78 @@
         return d.getTime();
       }
 
+      function formatGoogleCalendarUtcStamp(dateObj) {
+        function pad2(n) { return n < 10 ? ('0' + n) : String(n); }
+        return String(dateObj.getFullYear()) +
+          pad2(dateObj.getMonth() + 1) +
+          pad2(dateObj.getDate()) + 'T' +
+          pad2(dateObj.getHours()) +
+          pad2(dateObj.getMinutes()) +
+          pad2(dateObj.getSeconds());
+      }
+
+      function buildGoogleCalendarBookingUrl(slot, docObj) {
+        if (!slot) return '';
+        const doc = docObj || (db.doctors || []).find((d) => d.id === slot.doctorId) || null;
+        const rawTs = Number(slot.appointmentTimestamp) || 0;
+        const effMin = (Number(slot.startMinutes) || 0) + Math.max(Number(slot.delayMinutes) || 0, doc ? (Number(doc.currentDelayMinutes) || 0) : 0);
+        let startDate = rawTs > 0 ? new Date(rawTs) : new Date();
+        if (!(rawTs > 0)) {
+          startDate.setHours(Math.floor(effMin / 60), effMin % 60, 0, 0);
+        }
+        const durationMin = Math.max(10, Number(doc && doc.slotDurationMinutes) || 20);
+        const endDate = new Date(startDate.getTime() + durationMin * 60000);
+        const docTitle = doc ? getDoctorDisplayName(doc) : bi('طبيب', 'Doctor');
+        const clinicTitle = doc ? getClinicDisplayName(doc) : bi('العيادة', 'Clinic');
+        const specTitle = doc ? formatDoctorSpecialties(doc) : '';
+        const locationLabel = doc ? (getDoctorLocationDisplay(doc) || clinicTitle) : clinicTitle;
+        const summary = ui.lang === 'en'
+          ? ('Medical Appointment: ' + docTitle + ' — ' + clinicTitle)
+          : ('موعد كشف طبي: ' + docTitle + ' — ' + clinicTitle);
+        const detailsLines = [
+          bi('المريض: ', 'Patient: ') + (slot.patientName || (getActiveMember() ? getActiveMember().fullName : '')),
+          bi('الطبيب: ', 'Doctor: ') + docTitle,
+          bi('العيادة: ', 'Clinic: ') + clinicTitle,
+          specTitle ? (bi('التخصص: ', 'Specialty: ') + specTitle) : '',
+          bi('وقت الكشف: ', 'Appointment Time: ') + formatMinutesAr(effMin),
+          (doc && doc.mapsUrl) ? (bi('الموقع على الخرائط: ', 'Google Maps: ') + doc.mapsUrl) : '',
+          bi('عبر منصة ', 'Via ') + (db.config.platformNameAr || 'طب الحجايزة')
+        ].filter(Boolean).join('\n');
+        const params = new URLSearchParams({
+          action: 'TEMPLATE',
+          text: summary,
+          dates: formatGoogleCalendarUtcStamp(startDate) + '/' + formatGoogleCalendarUtcStamp(endDate),
+          details: detailsLines,
+          location: locationLabel,
+          ctz: 'Africa/Cairo'
+        });
+        return 'https://calendar.google.com/calendar/render?' + params.toString();
+      }
+
+      function openGoogleCalendarForSlotWeb(slotId) {
+        const slot = (db.slots || []).find((s) => s.id === slotId);
+        if (!slot) {
+          showToast(bi('تعذر العثور على بيانات الموعد لإضافته للتقويم', 'Could not locate appointment slot'));
+          return;
+        }
+        const doc = (db.doctors || []).find((d) => d.id === slot.doctorId) || null;
+        const gcalUrl = buildGoogleCalendarBookingUrl(slot, doc);
+        if (!gcalUrl) return;
+        try {
+          if (window.AndroidAppHost && typeof window.AndroidAppHost.openExternalUrl === 'function') {
+            window.AndroidAppHost.openExternalUrl(gcalUrl);
+            showToast(bi('📅 تم فتح تقويم جوجل لإضافة الموعد', '📅 Opening Google Calendar...'), 2600, { isSuccess: true });
+            return;
+          }
+        } catch (e) {}
+        const opened = window.open(gcalUrl, '_blank', 'noopener,noreferrer');
+        if (!opened) {
+          window.location.href = gcalUrl;
+        } else {
+          showToast(bi('📅 تم فتح تقويم جوجل لإضافة الموعد', '📅 Google Calendar opened for this appointment'), 2600, { isSuccess: true });
+        }
+      }
+
       const DESKTOP_1H_PUSH_PREF_KEY = 'teb_desktop_1h_push_enabled_v1';
       const DESKTOP_1H_PUSH_FIRED_KEY = 'teb_pc_1h_push_fired_v1';
 
@@ -5738,7 +5888,9 @@
         searchQuery: '',
         homeSearchQuery: '',
         loggedInDoctorId: null,
-        doctorTab: 'SLOTS', // SLOTS | QUICK_RX | ACTIVATE_PATIENT | MESSAGES | CLINIC_SETTINGS
+        doctorTab: 'SLOTS', // SLOTS | QUICK_RX | ANALYTICS | ACTIVATE_PATIENT | MESSAGES | CLINIC_SETTINGS
+        doctorAnalyticsScope: 'PLATFORM', // PLATFORM | CLINIC
+        doctorAnalyticsChart: 'ALL', // ALL | AGE | SPECIALTY
         desktopSlotsFilter: 'ALL', // ALL | BOOKED | COMPLETED | NO_SHOW | AVAILABLE
         desktopDoctorFilterId: 'CURRENT', // CURRENT | ALL_HOSPITAL | ALL_DOCS | <doctorId>
         desktopSlotsSearch: '',
@@ -9304,7 +9456,8 @@
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap;">' +
                       '<span style="font-weight:700;">' + esc(bi('المريض: ', 'Patient: ')) + esc(slot.patientName) + '</span>' +
                       '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-                        '<button class="btn btn-outline" type="button" data-reschedule-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 10px;">📅 ' + esc(bi('تعديل الموعد', 'Reschedule')) + '</button>' +
+                        '<button class="btn btn-gcal" type="button" data-gcal-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 10px;">📅 ' + esc(bi('تقويم جوجل', 'Google Calendar')) + '</button>' +
+                        '<button class="btn btn-outline" type="button" data-reschedule-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 10px;">🕒 ' + esc(bi('تعديل الموعد', 'Reschedule')) + '</button>' +
                         '<button class="btn btn-danger-outline" type="button" data-cancel-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 10px;">' + esc(bi('إلغاء', 'Cancel')) + '</button>' +
                         '<button class="btn btn-primary" type="button" data-open-doc="' + esc(doc.id) + '" style="min-height:38px;padding:6px 12px;">' + esc(bi('تفاصيل العيادة', 'Details')) + '</button>' +
                       '</div>' +
@@ -9537,6 +9690,37 @@
           renderPatientBioOverviewCardHtml(activeMember) +
 
           renderAiMedicalSummaryCardHtml(activeMember.fullName, records, activeMember) +
+
+          (function () {
+            const accDigits = normalizePhoneDigits(db.account && db.account.phone);
+            const activeBooked = (db.slots || [])
+              .filter((s) => {
+                if (s.status !== 'BOOKED') return false;
+                if (s.familyMemberId && s.familyMemberId === activeMember.id) return true;
+                if (s.patientName && s.patientName === activeMember.fullName) return true;
+                return accDigits && normalizePhoneDigits(s.patientPhone) === accDigits && visibleMembers.some((m) => m.id === activeMember.id);
+              })
+              .sort((a, b) => ((a.startMinutes || 0) + (a.delayMinutes || 0)) - ((b.startMinutes || 0) + (b.delayMinutes || 0)));
+            if (activeBooked.length === 0) return '';
+            return '<section class="card" style="background:linear-gradient(135deg,#EFF6FF 0%,#F8FAFC 100%);border:1.5px solid #93C5FD;display:flex;flex-direction:column;gap:10px;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                '<div style="font-weight:800;color:#1E40AF;font-size:1rem;">📅 ' + esc(bi('مواعيدك المحجوزة — أضف إلى تقويم جوجل (' + activeBooked.length + ')', 'Upcoming Booked Appointments — Google Calendar (' + activeBooked.length + ')')) + '</div>' +
+                '<span class="badge" style="background:#DBEAFE;color:#1D4ED8;">Google Calendar</span>' +
+              '</div>' +
+              activeBooked.map((slot) => {
+                const docObj = (db.doctors || []).find((d) => d.id === slot.doctorId);
+                const eff = (slot.startMinutes || 0) + (slot.delayMinutes || 0);
+                return '<div style="background:#fff;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+                  '<div style="min-width:170px;flex:1;">' +
+                    '<div style="font-weight:800;color:var(--text);">' + esc(docObj ? getDoctorDisplayName(docObj) : bi('عيادة طبية', 'Medical Clinic')) + '</div>' +
+                    '<div style="font-size:0.82rem;color:var(--text-muted);">' + esc(docObj ? (getClinicDisplayName(docObj) + ' • ' + formatDoctorSpecialties(docObj)) : '') + '</div>' +
+                    '<div style="font-size:0.84rem;color:#1D4ED8;font-weight:700;margin-top:2px;">🕒 ' + formatMinutesAr(eff) + ' • ' + esc(slot.patientName || activeMember.fullName) + '</div>' +
+                  '</div>' +
+                  '<button class="btn btn-gcal" type="button" data-gcal-slot="' + esc(slot.id) + '" style="min-height:42px;padding:6px 14px;">📅 ' + esc(bi('أضف لتقويم جوجل', 'Add to Google Calendar')) + '</button>' +
+                '</div>';
+              }).join('') +
+            '</section>';
+          })() +
 
           renderPermanentMedicalLogSectionHtml(activeMember.fullName, getPermanentLogsForMemberWeb(activeMember), activeMember) +
 
@@ -10152,6 +10336,439 @@
           '</section>';
       }
 
+      function extractAgeFromEgyptianNationalId(nationalId) {
+        const clean = String(nationalId || '').replace(/\D/g, '');
+        if (clean.length !== 14) return 0;
+        const century = clean.charAt(0);
+        const yy = parseInt(clean.slice(1, 3), 10);
+        const mm = parseInt(clean.slice(3, 5), 10);
+        const dd = parseInt(clean.slice(5, 7), 10);
+        if (isNaN(yy) || isNaN(mm) || isNaN(dd) || mm < 1 || mm > 12 || dd < 1 || dd > 31) return 0;
+        const birthYear = century === '2' ? (1900 + yy) : (century === '3' ? (2000 + yy) : 0);
+        if (!birthYear) return 0;
+        const now = new Date();
+        let age = now.getFullYear() - birthYear;
+        if ((now.getMonth() + 1) < mm || ((now.getMonth() + 1) === mm && now.getDate() < dd)) {
+          age -= 1;
+        }
+        return age >= 0 && age <= 120 ? age : 0;
+      }
+
+      function resolvePatientAgeForAnalytics(familyMemberId, patientName, patientPhone) {
+        const cleanId = String(familyMemberId || '').trim();
+        const cleanName = String(patientName || '').trim();
+        const cleanDigits = normalizePhoneDigits(patientPhone);
+        const famList = db.familyMembers || [];
+        let matchedMember = null;
+        if (cleanId) matchedMember = famList.find((m) => m.id === cleanId) || null;
+        if (!matchedMember && cleanName) {
+          matchedMember = famList.find((m) =>
+            String(m.fullName || '').trim() === cleanName &&
+            (!cleanDigits || normalizePhoneDigits(m.phone) === cleanDigits)
+          ) || famList.find((m) => String(m.fullName || '').trim() === cleanName) || null;
+        }
+        if (matchedMember) {
+          const directAge = Number(matchedMember.age) || 0;
+          if (directAge > 0) return directAge;
+          const nidAge = extractAgeFromEgyptianNationalId(matchedMember.nationalId);
+          if (nidAge > 0) return nidAge;
+        }
+        if (cleanDigits) {
+          const acc = (db.accounts || []).find((a) => normalizePhoneDigits(a.phone) === cleanDigits);
+          if (acc) {
+            const accNidAge = extractAgeFromEgyptianNationalId(acc.nationalId);
+            if (accNidAge > 0) return accNidAge;
+          }
+        }
+        return 0;
+      }
+
+      function computeDoctorAnalyticsMetricsWeb(doc, scopeMode) {
+        const isPlatformScope = scopeMode === 'PLATFORM';
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth();
+        const monthLabel = now.toLocaleDateString(ui.lang === 'en' ? 'en-US' : 'ar-EG', { month: 'long', year: 'numeric' });
+
+        function isCurrentMonthTs(tsMs, fallbackTrue) {
+          const n = Number(tsMs) || 0;
+          if (n <= 0) return Boolean(fallbackTrue);
+          const d = new Date(n);
+          return d.getFullYear() === curYear && d.getMonth() === curMonth;
+        }
+
+        const scopedSlots = (db.slots || []).filter((s) =>
+          s.status !== 'AVAILABLE' && (isPlatformScope || (doc && s.doctorId === doc.id))
+        );
+        const scopedRecords = (db.records || []).filter((r) =>
+          (isPlatformScope || (doc && r.doctorId === doc.id)) &&
+          r.recordType !== 'LAB_RESULT'
+        );
+
+        const patientMap = {};
+        function trackPatient(familyMemberId, patientName, patientPhone) {
+          const pName = String(patientName || '').trim();
+          const pDigits = normalizePhoneDigits(patientPhone);
+          const pKey = familyMemberId ? ('id:' + familyMemberId) : (pDigits ? ('ph:' + pDigits + ':' + pName) : ('nm:' + pName));
+          if (!pName && !pDigits && !familyMemberId) return;
+          if (!patientMap[pKey]) {
+            patientMap[pKey] = resolvePatientAgeForAnalytics(familyMemberId, pName, patientPhone);
+          } else if (patientMap[pKey] <= 0) {
+            patientMap[pKey] = resolvePatientAgeForAnalytics(familyMemberId, pName, patientPhone);
+          }
+        }
+        scopedSlots.forEach((s) => trackPatient(s.familyMemberId, s.patientName, s.patientPhone));
+        scopedRecords.forEach((r) => trackPatient(r.familyMemberId, r.patientName, r.patientPhone));
+        if (isPlatformScope) {
+          (db.familyMembers || []).forEach((m) => trackPatient(m.id, m.fullName, m.phone));
+        }
+
+        const brackets = [
+          { key: '0_12', shortLabel: '0-12', labelAr: 'أطفال (0-12 سنة)', labelEn: 'Children (0-12)', color: '#0EA5E9', count: 0 },
+          { key: '13_25', shortLabel: '13-25', labelAr: 'شباب (13-25 سنة)', labelEn: 'Youth (13-25)', color: '#10B981', count: 0 },
+          { key: '26_45', shortLabel: '26-45', labelAr: 'بالغون (26-45 سنة)', labelEn: 'Adults (26-45)', color: '#0D7377', count: 0 },
+          { key: '46_60', shortLabel: '46-60', labelAr: 'متوسط العمر (46-60 سنة)', labelEn: 'Middle-Aged (46-60)', color: '#F59E0B', count: 0 },
+          { key: '61_PLUS', shortLabel: '+60', labelAr: 'كبار السن (+60 سنة)', labelEn: 'Seniors (+60)', color: '#7C3AED', count: 0 }
+        ];
+        let totalUniquePatients = 0;
+        let knownAgePatients = 0;
+        let unknownAgePatients = 0;
+        Object.values(patientMap).forEach((age) => {
+          totalUniquePatients += 1;
+          if (!age || age <= 0) {
+            unknownAgePatients += 1;
+          } else {
+            knownAgePatients += 1;
+            if (age <= 12) brackets[0].count += 1;
+            else if (age <= 25) brackets[1].count += 1;
+            else if (age <= 45) brackets[2].count += 1;
+            else if (age <= 60) brackets[3].count += 1;
+            else brackets[4].count += 1;
+          }
+        });
+        brackets.forEach((b) => {
+          b.pct = knownAgePatients > 0 ? Math.round((b.count / knownAgePatients) * 100) : 0;
+          b.fullLabel = bi(b.labelAr, b.labelEn);
+        });
+
+        const specCounts = {};
+        const monthlySlots = (db.slots || []).filter((s) =>
+          s.status !== 'AVAILABLE' &&
+          (isPlatformScope || (doc && s.doctorId === doc.id)) &&
+          isCurrentMonthTs(s.bookedAtMillis || s.appointmentTimestamp, true)
+        );
+        monthlySlots.forEach((s) => {
+          const dObj = (db.doctors || []).find((d) => d.id === s.doctorId);
+          const rawSpec = dObj ? (dObj.specialty || 'طب عام') : 'طب عام';
+          const specLabel = displaySpecialty(rawSpec);
+          specCounts[specLabel] = (specCounts[specLabel] || 0) + 1;
+        });
+
+        const monthlyRecords = scopedRecords.filter((r) => isCurrentMonthTs(r.createdAtMillis, false));
+        monthlyRecords.forEach((r) => {
+          const dObj = (db.doctors || []).find((d) => d.id === r.doctorId);
+          const rawSpec = (r.specialty && String(r.specialty).trim()) || (dObj ? dObj.specialty : '');
+          if (!rawSpec) return;
+          const specLabel = displaySpecialty(rawSpec);
+          specCounts[specLabel] = (specCounts[specLabel] || 0) + 1;
+        });
+
+        const chartPalette = ['#0D7377', '#2563EB', '#16A34A', '#D97706', '#7C3AED', '#DC2626', '#0891B2', '#4F46E5'];
+        const specialtiesRanked = Object.keys(specCounts)
+          .map((name, idx) => ({
+            name: name,
+            count: specCounts[name],
+            color: chartPalette[idx % chartPalette.length]
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 8)
+          .map((item, idx) => ({
+            name: item.name,
+            count: item.count,
+            color: chartPalette[idx % chartPalette.length]
+          }));
+        const totalMonthlyRequests = specialtiesRanked.reduce((sum, x) => sum + x.count, 0);
+        specialtiesRanked.forEach((sp) => {
+          sp.pct = totalMonthlyRequests > 0 ? Math.round((sp.count / totalMonthlyRequests) * 100) : 0;
+        });
+
+        return {
+          monthLabel: monthLabel,
+          totalUniquePatients: totalUniquePatients,
+          knownAgePatients: knownAgePatients,
+          unknownAgePatients: unknownAgePatients,
+          brackets: brackets,
+          specialtiesRanked: specialtiesRanked,
+          totalMonthlyRequests: totalMonthlyRequests,
+          topSpecialty: specialtiesRanked[0] || null
+        };
+      }
+
+      let doctorRechartsRoots = [];
+      function cleanupDoctorRechartsRoots() {
+        doctorRechartsRoots.forEach((r) => {
+          try {
+            if (r && typeof r.unmount === 'function') r.unmount();
+          } catch (e) {}
+        });
+        doctorRechartsRoots = [];
+      }
+
+      function renderDoctorAnalyticsWorkspaceHtml(doc) {
+        const scopeMode = ui.doctorAnalyticsScope || 'PLATFORM';
+        const chartView = ui.doctorAnalyticsChart || 'ALL';
+        const m = computeDoctorAnalyticsMetricsWeb(doc, scopeMode);
+
+        const specialtyPieCardHtml =
+          '<section class="pc-chart-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<h3 style="font-size:1.05rem;color:var(--teal-text);">🥧 ' + esc(bi('توزيع الحجوزات حسب التخصصات الطبية (الشهر الحالي)', 'Monthly Bookings by Medical Specialty (Pie Chart)')) + '</h3>' +
+                '<div style="font-size:0.8rem;color:var(--text-muted);">📅 ' + esc(m.monthLabel) + ' • ' + esc(bi('مخطط دائري تفاعلي عبر Recharts', 'Interactive Recharts Pie Chart')) + '</div>' +
+              '</div>' +
+              '<span class="badge" style="background:#EFF6FF;color:#1D4ED8;">' + m.totalMonthlyRequests + ' ' + esc(bi('حجز/كشف', 'bookings')) + '</span>' +
+            '</div>' +
+            (m.specialtiesRanked.length === 0
+              ? '<div style="padding:26px 14px;text-align:center;background:var(--bg);border-radius:14px;border:1px dashed var(--border);color:var(--text-muted);">' +
+                  '<div style="font-size:1.8rem;margin-bottom:6px;">🥧</div>' +
+                  '<div style="font-weight:700;color:var(--text);">' + esc(bi('لا توجد حجوزات أو زيارات مسجلة خلال الشهر الحالي بعد', 'No bookings or visits recorded for the current month yet')) + '</div>' +
+                  '<div style="font-size:0.82rem;margin-top:4px;">' + esc(bi('سيظهر توزيع التخصصات الطبية تلقائياً فور تسجيل المواعيد.', 'Medical specialty distribution updates automatically once bookings exist.')) + '</div>' +
+                '</div>'
+              : '<div data-recharts-specialty-pie="1" style="width:100%;height:300px;direction:ltr;"></div>' +
+                '<div class="pc-legend-list">' +
+                  m.specialtiesRanked.map((sp) =>
+                    '<div class="pc-legend-item">' +
+                      '<div style="display:flex;align-items:center;gap:8px;">' +
+                        '<span style="width:12px;height:12px;border-radius:4px;background:' + sp.color + ';display:inline-block;flex-shrink:0;"></span>' +
+                        '<span style="font-weight:700;">' + esc(sp.name) + '</span>' +
+                      '</div>' +
+                      '<span style="font-weight:800;color:' + sp.color + ';">' + sp.count + ' ' + esc(bi('حجز', 'req')) + ' (' + sp.pct + '%)</span>' +
+                    '</div>'
+                  ).join('') +
+                '</div>') +
+          '</section>';
+
+        const ageBarCardHtml =
+          '<section class="pc-chart-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<h3 style="font-size:1.05rem;color:var(--teal-text);">📊 ' + esc(bi('توزيع المرضى حسب الفئات العمرية (Bar Chart)', 'Patients by Age Group (Bar Chart)')) + '</h3>' +
+                '<div style="font-size:0.8rem;color:var(--text-muted);">' + esc(bi('الفئات: 0-12، 13-25، 26-45، 46-60، +60 من البيانات المسجلة', 'Brackets: 0-12, 13-25, 26-45, 46-60, +60 from live records')) + '</div>' +
+              '</div>' +
+              '<span class="badge" style="background:var(--teal-soft);color:var(--teal-text);">' + m.knownAgePatients + ' ' + esc(bi('مريض بعمر مسجل', 'with age')) + '</span>' +
+            '</div>' +
+            (m.knownAgePatients === 0
+              ? '<div style="padding:26px 14px;text-align:center;background:var(--bg);border-radius:14px;border:1px dashed var(--border);color:var(--text-muted);">' +
+                  '<div style="font-size:1.8rem;margin-bottom:6px;">📊</div>' +
+                  '<div style="font-weight:700;color:var(--text);">' + esc(bi('لا توجد بيانات عمرية مسجلة للمرضى حتى الآن', 'No patient age records available yet')) + '</div>' +
+                  '<div style="font-size:0.82rem;margin-top:4px;">' + esc(bi('بمجرد حجز المرضى أو تحديث السن / الرقم القومي سيظهر الرسم البياني تلقائياً.', 'Bar chart updates automatically once patients add age or National ID details.')) + '</div>' +
+                '</div>'
+              : '<div data-recharts-age-bar="1" style="width:100%;height:300px;direction:ltr;"></div>' +
+                '<div class="pc-legend-list">' +
+                  m.brackets.map((b) =>
+                    '<div class="pc-legend-item">' +
+                      '<div style="display:flex;align-items:center;gap:8px;">' +
+                        '<span style="width:12px;height:12px;border-radius:4px;background:' + b.color + ';display:inline-block;flex-shrink:0;"></span>' +
+                        '<span style="font-weight:700;">' + esc(bi(b.labelAr, b.labelEn)) + '</span>' +
+                      '</div>' +
+                      '<span style="font-weight:800;color:' + b.color + ';">' + b.count + ' (' + b.pct + '%)</span>' +
+                    '</div>'
+                  ).join('') +
+                '</div>') +
+            (m.unknownAgePatients > 0
+              ? '<div style="font-size:0.78rem;color:var(--text-muted);background:var(--bg);padding:8px 10px;border-radius:10px;">ℹ️ ' + esc(bi('يوجد ' + m.unknownAgePatients + ' مريض بحجوزات بدون سن مسجل في الملف الطبي.', m.unknownAgePatients + ' patient(s) do not have a recorded age yet.')) + '</div>'
+              : '') +
+          '</section>';
+
+        return '<section class="card" style="display:flex;flex-direction:column;gap:12px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+              '<div>' +
+                '<h3 style="font-size:1.15rem;color:var(--teal);">📊 ' + esc(bi('لوحة الإحصائيات البيانية (Recharts Analytics)', 'Clinic Analytics & Statistics (Recharts)')) + '</h3>' +
+                '<div style="font-size:0.84rem;color:var(--text-muted);">' + esc(bi('توزيع حجوزات المرضى حسب التخصصات الطبية خلال الشهر والفئات العمرية', 'Monthly specialty distribution Pie Chart and patient age Bar Chart')) + '</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                '<button class="chip ' + (scopeMode === 'PLATFORM' ? 'active' : '') + '" type="button" data-doc-analytics-scope="PLATFORM">🏥 ' + esc(bi('كامل المنصة', 'All Clinics')) + '</button>' +
+                '<button class="chip ' + (scopeMode === 'CLINIC' ? 'active' : '') + '" type="button" data-doc-analytics-scope="CLINIC">🩺 ' + esc(bi('عيادتي الحالية', 'My Clinic')) + '</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="stats-row-2x2">' +
+              '<div class="stat-box" style="background:var(--teal-soft);color:var(--teal-text);"><div class="stat-num">' + m.totalUniquePatients + '</div><div>' + esc(bi('إجمالي المرضى', 'Total Patients')) + '</div></div>' +
+              '<div class="stat-box" style="background:#EFF6FF;color:#1D4ED8;"><div class="stat-num">' + m.knownAgePatients + '</div><div>' + esc(bi('بعمر محدد', 'Known Age')) + '</div></div>' +
+              '<div class="stat-box" style="background:var(--avail-bg);color:var(--avail-text);"><div class="stat-num">' + m.totalMonthlyRequests + '</div><div>' + esc(bi('حجوزات الشهر', 'Month Demand')) + '</div></div>' +
+              '<div class="stat-box" style="background:#F5F3FF;color:#6D28D9;"><div class="stat-num" style="font-size:1.05rem;">' + esc(m.topSpecialty ? m.topSpecialty.name : '—') + '</div><div>' + esc(bi('الأكثر طلباً', 'Top Specialty')) + '</div></div>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+              '<button class="chip ' + (chartView === 'ALL' ? 'active' : '') + '" type="button" data-doc-analytics-view="ALL">📊 ' + esc(bi('عرض جميع الرسوم', 'Show All')) + '</button>' +
+              '<button class="chip ' + (chartView === 'SPECIALTY' ? 'active' : '') + '" type="button" data-doc-analytics-view="SPECIALTY">🥧 ' + esc(bi('تخصصات الشهر (Pie)', 'Monthly Specialties (Pie)')) + '</button>' +
+              '<button class="chip ' + (chartView === 'AGE' ? 'active' : '') + '" type="button" data-doc-analytics-view="AGE">📊 ' + esc(bi('الفئات العمرية (Bar)', 'Age Groups (Bar)')) + '</button>' +
+            '</div>' +
+          '</section>' +
+          '<div class="pc-analytics-grid" style="' + (chartView !== 'ALL' ? 'grid-template-columns:1fr;' : '') + '">' +
+            (chartView === 'ALL' || chartView === 'SPECIALTY' ? specialtyPieCardHtml : '') +
+            (chartView === 'ALL' || chartView === 'AGE' ? ageBarCardHtml : '') +
+          '</div>';
+      }
+
+      function mountDoctorRechartsCharts(doc) {
+        if (!doc) return;
+        const scopeMode = ui.doctorAnalyticsScope || 'PLATFORM';
+        const m = computeDoctorAnalyticsMetricsWeb(doc, scopeMode);
+        const ReactLib = window.React;
+        const ReactDOMLib = window.ReactDOM;
+        const RechartsLib = window.Recharts;
+        const hasRecharts = Boolean(ReactLib && ReactDOMLib && RechartsLib && RechartsLib.PieChart && RechartsLib.BarChart);
+
+        document.querySelectorAll('[data-recharts-specialty-pie]').forEach((container) => {
+          if (container.offsetParent === null && container.offsetWidth === 0) return;
+          if (!m.specialtiesRanked.length) return;
+          if (hasRecharts) {
+            try {
+              const h = ReactLib.createElement;
+              const { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } = RechartsLib;
+              const pieData = m.specialtiesRanked.map((sp) => ({
+                name: sp.name,
+                count: sp.count,
+                pct: sp.pct,
+                color: sp.color
+              }));
+              const chartEl = h(
+                ResponsiveContainer,
+                { width: '100%', height: 290 },
+                h(
+                  PieChart,
+                  null,
+                  h(
+                    Pie,
+                    {
+                      data: pieData,
+                      dataKey: 'count',
+                      nameKey: 'name',
+                      cx: '50%',
+                      cy: '48%',
+                      outerRadius: 92,
+                      innerRadius: 34,
+                      paddingAngle: 2,
+                      label: function (entry) { return entry.pct + '%'; },
+                      isAnimationActive: true
+                    },
+                    pieData.map((entry, idx) =>
+                      h(Cell, { key: 'sp_cell_' + idx, fill: entry.color })
+                    )
+                  ),
+                  h(Tooltip, {
+                    formatter: function (value, name, props) {
+                      const pct = props && props.payload ? props.payload.pct : 0;
+                      return [value + ' ' + bi('حجز', 'bookings') + ' (' + pct + '%)', name];
+                    }
+                  }),
+                  h(Legend, {
+                    verticalAlign: 'bottom',
+                    height: 36,
+                    wrapperStyle: { fontSize: '12px', direction: ui.lang === 'en' ? 'ltr' : 'rtl' }
+                  })
+                )
+              );
+              const root = ReactDOMLib.createRoot(container);
+              root.render(chartEl);
+              doctorRechartsRoots.push(root);
+              return;
+            } catch (e) {
+              console.warn('Recharts PieChart fallback:', e);
+            }
+          }
+          // Offline fallback SVG Pie if CDN is unreachable
+          const total = m.totalMonthlyRequests || 1;
+          let acc = 0;
+          const r = 74;
+          const c = 2 * Math.PI * r;
+          const slices = m.specialtiesRanked.map((sp) => {
+            const len = (sp.count / total) * c;
+            const seg = '<circle cx="110" cy="110" r="' + (r / 2) + '" fill="none" stroke="' + sp.color + '" stroke-width="' + r + '" stroke-dasharray="' + (len / 2).toFixed(2) + ' ' + ((c / 2) - (len / 2)).toFixed(2) + '" stroke-dashoffset="' + (-(acc / 2)).toFixed(2) + '" transform="rotate(-90 110 110)" />';
+            acc += len;
+            return seg;
+          }).join('');
+          container.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;"><svg width="220" height="220" viewBox="0 0 220 220">' + slices + '</svg></div>';
+        });
+
+        document.querySelectorAll('[data-recharts-age-bar]').forEach((container) => {
+          if (container.offsetParent === null && container.offsetWidth === 0) return;
+          if (m.knownAgePatients <= 0) return;
+          if (hasRecharts) {
+            try {
+              const h = ReactLib.createElement;
+              const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } = RechartsLib;
+              const barData = m.brackets.map((b) => ({
+                shortLabel: b.shortLabel,
+                fullLabel: b.fullLabel,
+                count: b.count,
+                pct: b.pct,
+                color: b.color
+              }));
+              const chartEl = h(
+                ResponsiveContainer,
+                { width: '100%', height: 290 },
+                h(
+                  BarChart,
+                  { data: barData, margin: { top: 16, right: 16, left: 0, bottom: 8 } },
+                  h(CartesianGrid, { strokeDasharray: '3 3', vertical: false, stroke: '#DCE6E9' }),
+                  h(XAxis, { dataKey: 'shortLabel', tick: { fill: '#132226', fontSize: 12, fontWeight: 700 } }),
+                  h(YAxis, { allowDecimals: false, width: 34, tick: { fill: '#4F646B', fontSize: 12 } }),
+                  h(Tooltip, {
+                    formatter: function (value, name, props) {
+                      const pct = props && props.payload ? props.payload.pct : 0;
+                      const lbl = props && props.payload ? props.payload.fullLabel : '';
+                      return [value + ' ' + bi('مريض', 'patients') + ' (' + pct + '%)', lbl];
+                    }
+                  }),
+                  h(
+                    Bar,
+                    { dataKey: 'count', radius: [8, 8, 0, 0], maxBarSize: 56, isAnimationActive: true },
+                    barData.map((entry, idx) =>
+                      h(Cell, { key: 'age_bar_' + idx, fill: entry.color })
+                    )
+                  )
+                )
+              );
+              const root = ReactDOMLib.createRoot(container);
+              root.render(chartEl);
+              doctorRechartsRoots.push(root);
+              return;
+            } catch (e) {
+              console.warn('Recharts BarChart fallback:', e);
+            }
+          }
+          // Offline fallback SVG Bar Chart if CDN is unreachable
+          const maxB = Math.max(1, ...m.brackets.map((b) => b.count));
+          container.innerHTML =
+            '<div style="display:flex;align-items:flex-end;justify-content:space-around;height:100%;padding:24px 12px 12px;gap:10px;border-bottom:2px solid var(--border);">' +
+              m.brackets.map((b) => {
+                const hPct = Math.max(8, Math.round((b.count / maxB) * 180));
+                return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;">' +
+                  '<span style="font-size:0.78rem;font-weight:800;color:' + b.color + ';">' + b.count + '</span>' +
+                  '<div style="width:100%;max-width:44px;height:' + hPct + 'px;background:' + b.color + ';border-radius:8px 8px 0 0;"></div>' +
+                  '<span style="font-size:0.78rem;font-weight:800;color:var(--text);">' + esc(b.shortLabel) + '</span>' +
+                '</div>';
+              }).join('') +
+            '</div>';
+        });
+      }
+
+      if (typeof window !== 'undefined' && window.matchMedia) {
+        const pcAnalyticsMq = window.matchMedia('(min-width: 1024px)');
+        const onPcAnalyticsBreakpointChange = function () {
+          if (ui.roleMode === 'DOCTOR' && ui.doctorTab === 'ANALYTICS' && ui.loggedInDoctorId) {
+            const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
+            if (doc) {
+              cleanupDoctorRechartsRoots();
+              mountDoctorRechartsCharts(doc);
+            }
+          }
+        };
+        if (typeof pcAnalyticsMq.addEventListener === 'function') {
+          pcAnalyticsMq.addEventListener('change', onPcAnalyticsBreakpointChange);
+        }
+      }
+
       function renderDoctorDashboard() {
         const doc = db.doctors.find((d) => d.id === ui.loggedInDoctorId);
         if (!doc) return renderDoctorLoginGate();
@@ -10168,11 +10785,13 @@
           ? renderDoctorActivationSectionHtml(doc)
           : (activeDocTab === 'MESSAGES'
               ? renderDoctorMessagesSectionHtml(doc)
-              : (activeDocTab === 'QUICK_RX'
-                  ? renderDoctorQuickRxWorkspaceHtml(doc, slots)
-                  : (activeDocTab === 'CLINIC_SETTINGS'
-                      ? renderDoctorClinicSettingsWorkspaceHtml(doc)
-                      : '<section class="card">' +
+              : (activeDocTab === 'ANALYTICS'
+                  ? renderDoctorAnalyticsWorkspaceHtml(doc)
+                  : (activeDocTab === 'QUICK_RX'
+                      ? renderDoctorQuickRxWorkspaceHtml(doc, slots)
+                      : (activeDocTab === 'CLINIC_SETTINGS'
+                          ? renderDoctorClinicSettingsWorkspaceHtml(doc)
+                          : '<section class="card">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">' +
                 '<div>' +
                   '<h3 style="font-size:1.15rem;">' + esc(getClinicDisplayName(doc)) + ' (' + esc(formatDoctorSpecialties(doc)) + ')</h3>' +
@@ -10243,17 +10862,19 @@
                   '</div>';
                 }).join('') +
               '</div>' +
-            '</section>')));
+            '</section>'))));
 
         const desktopMainHtml = activeDocTab === 'ACTIVATE_PATIENT'
           ? renderDoctorActivationSectionHtml(doc)
           : (activeDocTab === 'MESSAGES'
               ? renderDoctorMessagesSectionHtml(doc)
-              : (activeDocTab === 'QUICK_RX'
-                  ? renderDoctorQuickRxWorkspaceHtml(doc, slots)
-                  : (activeDocTab === 'CLINIC_SETTINGS'
-                      ? renderDoctorClinicSettingsWorkspaceHtml(doc)
-                      : renderDesktopAppointmentsSectionHtml(doc, desktopScope))));
+              : (activeDocTab === 'ANALYTICS'
+                  ? renderDoctorAnalyticsWorkspaceHtml(doc)
+                  : (activeDocTab === 'QUICK_RX'
+                      ? renderDoctorQuickRxWorkspaceHtml(doc, slots)
+                      : (activeDocTab === 'CLINIC_SETTINGS'
+                          ? renderDoctorClinicSettingsWorkspaceHtml(doc)
+                          : renderDesktopAppointmentsSectionHtml(doc, desktopScope)))));
 
         const topActivationHtml =
           '<section class="card" style="background:linear-gradient(135deg,#ECFDF5 0%,#F0FDF4 100%);border:1.5px solid #16A34A;display:flex;flex-direction:column;gap:8px;">' +
@@ -10276,6 +10897,7 @@
                 '</div>' +
                 '<button class="pc-nav-item ' + (activeDocTab === 'SLOTS' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS"><span>📅 ' + esc(bi('حجوزات اليوم', 'Today\'s Appointments')) + '</span><span class="badge badge-booked" style="font-size:0.75rem;">' + bookedCount + '</span></button>' +
                 '<button class="pc-nav-item ' + (activeDocTab === 'QUICK_RX' ? 'active' : '') + '" type="button" data-doc-tab="QUICK_RX"><span>🩺 ' + esc(bi('كشف سريع وكتابة روشتة', 'Quick Exam & Rx')) + '</span></button>' +
+                '<button class="pc-nav-item ' + (activeDocTab === 'ANALYTICS' ? 'active' : '') + '" type="button" data-doc-tab="ANALYTICS"><span>📊 ' + esc(bi('الإحصائيات البيانية', 'Analytics Charts')) + '</span></button>' +
                 '<button class="pc-nav-item ' + (activeDocTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT"><span>📁 ' + esc(bi('سجل المرضى والتفعيل', 'Patients & Activation')) + '</span></button>' +
                 '<button class="pc-nav-item ' + (activeDocTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-doc-tab="MESSAGES"><span>💬 ' + esc(bi('رسائل المرضى', 'Patient Messages')) + '</span>' + (unreadClinicMsgs > 0 ? '<span class="badge badge-booked">' + unreadClinicMsgs + '</span>' : '') + '</button>' +
                 '<button class="pc-nav-item ' + (activeDocTab === 'CLINIC_SETTINGS' ? 'active' : '') + '" type="button" data-doc-tab="CLINIC_SETTINGS"><span>⚙️ ' + esc(bi('إعدادات العيادة و Drive', 'Clinic & Drive Settings')) + '</span></button>' +
@@ -10329,6 +10951,7 @@
             renderNotificationStatusCardHtml('doctor_notif') +
             '<div class="chips-row">' +
               '<button class="chip ' + (activeDocTab === 'SLOTS' ? 'active' : '') + '" type="button" data-doc-tab="SLOTS">📅 ' + esc(bi('جدول المواعيد والعيادة', 'Clinic Schedule')) + '</button>' +
+              '<button class="chip ' + (activeDocTab === 'ANALYTICS' ? 'active' : '') + '" type="button" data-doc-tab="ANALYTICS">📊 ' + esc(bi('الإحصائيات البيانية', 'Analytics')) + '</button>' +
               '<button class="chip ' + (activeDocTab === 'ACTIVATE_PATIENT' ? 'active' : '') + '" type="button" data-doc-tab="ACTIVATE_PATIENT">✅ ' + esc(bi('تفعيل / ملف مريض برقم الهاتف', 'Activate / Patient EMR')) + '</button>' +
               '<button class="chip ' + (activeDocTab === 'MESSAGES' ? 'active' : '') + '" type="button" data-doc-tab="MESSAGES">💬 ' + esc(bi('رسائل المرضى', 'Patient Messages')) + (unreadClinicMsgs > 0 ? ' (' + unreadClinicMsgs + ')' : '') + '</button>' +
               '<button class="chip ' + (activeDocTab === 'CLINIC_SETTINGS' ? 'active' : '') + '" type="button" data-doc-tab="CLINIC_SETTINGS">🏥 ' + esc(bi('إعدادات العيادة وترويسة الروشتة', 'Clinic & Rx Header')) + '</button>' +
@@ -11210,6 +11833,7 @@
           return;
         }
         tebCloudRuntime.pendingDeferredRender = false;
+        cleanupDoctorRechartsRoots();
         updateHeader();
         const root = document.getElementById('appRoot');
         if (ui.roleMode === 'ADMIN') {
@@ -11387,24 +12011,56 @@
                   latestSlot.reminded30m = false;
                   const newBookTime = formatMinutesAr((latestSlot.startMinutes || 0) + (latestSlot.delayMinutes || 0));
                   const bookAlert = '🩺 حجز جديد في ' + getClinicDisplayName(doc) + ': ' + member.fullName + ' (' + newBookTime + ')';
+                  const nowNotifTs = Date.now();
+                  const patientConfirmNotif = {
+                    id: nowNotifTs + 1,
+                    doctorId: doc.id,
+                    slotId: latestSlot.id,
+                    doctorName: getDoctorDisplayName(doc),
+                    clinicName: getClinicDisplayName(doc),
+                    message: '✓ تم تأكيد حجز موعدك لدى ' + getDoctorDisplayName(doc) + ' (' + getClinicDisplayName(doc) + ') الساعة ' + newBookTime + ' للمريض: ' + member.fullName,
+                    isRead: false,
+                    targetAudience: 'PATIENT',
+                    targetId: db.account.id,
+                    senderLabel: getClinicDisplayName(doc),
+                    createdAtMillis: nowNotifTs + 1
+                  };
                   db.notifications.unshift({
-                    id: Date.now(),
+                    id: nowNotifTs,
                     message: bookAlert,
                     isRead: false,
                     targetAudience: 'CLINIC',
                     targetId: doc.id,
                     senderLabel: member.fullName,
-                    createdAtMillis: Date.now()
+                    createdAtMillis: nowNotifTs
                   });
+                  db.notifications.unshift(patientConfirmNotif);
                   saveState(db);
                   scheduleSlotRemindersWeb(latestSlot, doc);
                   syncDocToFirestoreNamespace('slots', latestSlot.id, latestSlot);
-                  syncDocToFirestoreNamespace('notifications', String(db.notifications[0].id), db.notifications[0]);
+                  syncDocToFirestoreNamespace('notifications', String(nowNotifTs), db.notifications[1]);
+                  syncDocToFirestoreNamespace('notifications', String(patientConfirmNotif.id), patientConfirmNotif);
                   dispatchWorkerPush('NEW_BOOKING', getClinicDisplayName(doc), bookAlert, 'CLINIC', doc.id, CLOUD_PATHS.appointments);
                   dispatchWorkerPush('NEW_BOOKING', '🩺 حجز جديد — ' + getClinicDisplayName(doc), bookAlert, 'ADMIN', latestSlot.id, CLOUD_PATHS.appointments);
                   closeModal();
                   showToast(bi('تم تأكيد الحجز باسم ' + member.fullName + ' بنجاح', 'Appointment booked for ' + member.fullName));
                   renderApp();
+                  openModal(
+                    bi('✓ تم تأكيد الحجز بنجاح', '✓ Appointment Confirmed'),
+                    '<div class="card" style="background:var(--avail-bg);border-color:var(--avail-border);color:var(--avail-text);padding:12px;">' +
+                      '<div style="font-weight:800;font-size:1rem;">✓ ' + esc(bi('تم تأكيد موعد الكشف الطبي', 'Your medical appointment is confirmed')) + '</div>' +
+                      '<div style="margin-top:6px;font-size:0.9rem;">🩺 <strong>' + esc(getDoctorDisplayName(doc)) + '</strong> — ' + esc(getClinicDisplayName(doc)) + '</div>' +
+                      '<div style="margin-top:4px;font-size:0.9rem;">🕒 ' + esc(bi('الموعد: ', 'Time: ')) + '<strong>' + esc(newBookTime) + '</strong> • ' + esc(bi('المريض: ', 'Patient: ')) + esc(member.fullName) + '</div>' +
+                    '</div>' +
+                    '<button class="btn btn-gcal btn-block" id="btnConfirmModalAddGcal" type="button" style="min-height:48px;">📅 ' + esc(bi('إضافة الموعد إلى تقويم جوجل (Google Calendar)', 'Add Appointment to Google Calendar')) + '</button>' +
+                    '<button class="btn btn-primary btn-block" id="btnConfirmModalDone" type="button" style="min-height:46px;">' + esc(bi('تم', 'Done')) + '</button>',
+                    function () {
+                      const gBtn = document.getElementById('btnConfirmModalAddGcal');
+                      if (gBtn) gBtn.onclick = function () { openGoogleCalendarForSlotWeb(latestSlot.id); };
+                      const dBtn = document.getElementById('btnConfirmModalDone');
+                      if (dBtn) dBtn.onclick = closeModal;
+                    }
+                  );
                 } finally {
                   isSubmittingBook = false;
                   if (confirmBtn) confirmBtn.disabled = false;
@@ -12747,6 +13403,36 @@
               }).join('')
             : '';
 
+          const patientConfirmedBookingsHtml = (function () {
+            if (roleMode !== 'PATIENT' || !db.account) return '';
+            const visibleMem = getVisibleMembersForActiveAccount();
+            const memIds = new Set(visibleMem.map((m) => m.id));
+            const memNames = new Set(visibleMem.map((m) => m.fullName));
+            const accDigits = normalizePhoneDigits(db.account.phone);
+            const activeBooked = (db.slots || [])
+              .filter((s) =>
+                s.status === 'BOOKED' && (
+                  memIds.has(s.familyMemberId) ||
+                  memNames.has(s.patientName) ||
+                  (accDigits && normalizePhoneDigits(s.patientPhone) === accDigits)
+                )
+              )
+              .sort((a, b) => ((a.startMinutes || 0) + (a.delayMinutes || 0)) - ((b.startMinutes || 0) + (b.delayMinutes || 0)));
+            if (activeBooked.length === 0) return '';
+            return '<h4 style="margin-top:4px;">📅 ' + esc(bi('تأكيدات المواعيد القادمة — تقويم جوجل', 'Confirmed Appointments — Google Calendar')) + '</h4>' +
+              activeBooked.map((slot) => {
+                const docObj = (db.doctors || []).find((d) => d.id === slot.doctorId);
+                const eff = (slot.startMinutes || 0) + (slot.delayMinutes || 0);
+                return '<div class="card" style="padding:10px;background:#EFF6FF;border-color:#93C5FD;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                  '<div style="flex:1;min-width:165px;">' +
+                    '<div style="font-weight:800;color:#1E3A8A;">✓ ' + esc(docObj ? getDoctorDisplayName(docObj) : bi('عيادة طبية', 'Clinic')) + '</div>' +
+                    '<div style="font-size:0.82rem;color:#1D4ED8;font-weight:700;">🕒 ' + formatMinutesAr(eff) + ' • ' + esc(slot.patientName) + '</div>' +
+                  '</div>' +
+                  '<button class="btn btn-gcal" type="button" data-gcal-slot="' + esc(slot.id) + '" style="min-height:38px;padding:6px 12px;font-size:0.82rem;">📅 ' + esc(bi('أضف لتقويم جوجل', 'Add to Google Calendar')) + '</button>' +
+                '</div>';
+              }).join('');
+          })();
+
           const alertsHtml = visibleAlerts.length === 0
             ? '<div style="padding:14px;text-align:center;color:var(--text-muted);">' + esc(bi('لا توجد إشعارات أو تنبيهات حالياً.', 'No alerts or notifications right now.')) + '</div>'
             : '<h4 style="margin-top:4px;">🔔 ' + esc(bi('الإشعارات والتنبيهات', 'Alerts & Broadcasts')) + '</h4>' +
@@ -12754,10 +13440,22 @@
                 const matchedAcc = (roleMode === 'ADMIN' && n.targetAudience === 'ADMIN' && n.targetId)
                   ? (db.accounts || []).find((a) => a.id === n.targetId)
                   : null;
+                const matchedGcalSlot = (roleMode === 'PATIENT')
+                  ? (n.slotId
+                      ? (db.slots || []).find((s) => s.id === n.slotId && s.status === 'BOOKED')
+                      : ((String(n.message || '').indexOf('تأكيد حجز') >= 0 || String(n.message || '').indexOf('confirmed') >= 0)
+                          ? (db.slots || []).find((s) => s.status === 'BOOKED' && (!n.doctorId || s.doctorId === n.doctorId))
+                          : null))
+                  : null;
                 const isWarnNotif = String(n.message || '').indexOf('تحذير') >= 0 || String(n.senderLabel || '').indexOf('تحذير') >= 0;
                 return '<div class="alert-banner" style="flex-direction:column;align-items:stretch;' + (isWarnNotif ? 'background:#FEF2F2;border-color:#DC2626;color:#991B1B;' : '') + (n.isRead ? 'opacity:0.86;' : 'border-width:2px;') + '">' +
                   (n.senderLabel ? '<div style="font-size:0.76rem;font-weight:800;margin-bottom:2px;">' + esc(n.senderLabel) + '</div>' : '') +
                   '<div>' + esc(n.message) + '</div>' +
+                  (matchedGcalSlot
+                    ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' +
+                        '<button class="btn btn-gcal" type="button" data-gcal-slot="' + esc(matchedGcalSlot.id) + '" style="min-height:36px;padding:4px 12px;font-size:0.8rem;">📅 ' + esc(bi('أضف الموعد لتقويم جوجل', 'Add to Google Calendar')) + '</button>' +
+                      '</div>'
+                    : '') +
                   (matchedAcc
                     ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' +
                         (matchedAcc.isPhoneVerified === false
@@ -12770,10 +13468,15 @@
                 '</div>';
               }).join('');
 
-          return markAllBtnHtml + threadsHtml + alertsHtml;
+          return markAllBtnHtml + patientConfirmedBookingsHtml + threadsHtml + alertsHtml;
         }
 
         function mountNotificationsHandlers() {
+          document.querySelectorAll('#modalBody [data-gcal-slot]').forEach((btn) => {
+            btn.onclick = function () {
+              openGoogleCalendarForSlotWeb(btn.getAttribute('data-gcal-slot'));
+            };
+          });
           const threads = buildThreadsForModal();
           const markBtn = document.getElementById('btnNotifMarkAllRead');
           if (markBtn) {
@@ -14134,6 +14837,11 @@
         document.querySelectorAll('[data-reschedule-slot]').forEach((btn) => {
           btn.onclick = function () {
             openRescheduleSlotModal(btn.getAttribute('data-reschedule-slot'), 'PATIENT');
+          };
+        });
+        document.querySelectorAll('[data-gcal-slot]').forEach((btn) => {
+          btn.onclick = function () {
+            openGoogleCalendarForSlotWeb(btn.getAttribute('data-gcal-slot'));
           };
         });
       }
@@ -15533,6 +16241,24 @@
             renderApp();
           };
         });
+
+        document.querySelectorAll('[data-doc-analytics-scope]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.doctorAnalyticsScope = btn.getAttribute('data-doc-analytics-scope') || 'PLATFORM';
+            renderApp();
+          };
+        });
+
+        document.querySelectorAll('[data-doc-analytics-view]').forEach((btn) => {
+          btn.onclick = function () {
+            ui.doctorAnalyticsChart = btn.getAttribute('data-doc-analytics-view') || 'ALL';
+            renderApp();
+          };
+        });
+
+        if (ui.doctorTab === 'ANALYTICS') {
+          mountDoctorRechartsCharts(doc);
+        }
 
         document.querySelectorAll('[data-install-desktop-app]').forEach((btn) => {
           btn.onclick = triggerDesktopAppInstall;

@@ -1352,6 +1352,7 @@ private fun MyBookingCard(
     onReschedule: () -> Unit = {},
     onCancel: () -> Unit,
 ) {
+    val context = LocalContext.current
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(18.dp),
@@ -1443,6 +1444,32 @@ private fun MyBookingCard(
                     ) {
                         Text(bi(isEn, "العيادة", "Clinic"))
                     }
+                }
+                OutlinedButton(
+                    onClick = {
+                        com.example.util.GoogleCalendarHelper.openGoogleCalendarForAppointment(
+                            context = context,
+                            slot = slot,
+                            doctor = doctor,
+                            isEn = isEn,
+                        )
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("my_booking_gcal_${slot.id}"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = bi(isEn, "📅 أضف لتقويم جوجل", "📅 Add to Google Calendar"),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
             }
         }
@@ -1868,6 +1895,7 @@ fun DoctorBookingScreen(
 
     val context = LocalContext.current
     var slotPendingConfirm by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
+    var confirmedBookingSummary by remember { mutableStateOf<Pair<AppointmentSlotEntity, FamilyMemberEntity>?>(null) }
     var slotPendingReschedule by remember { mutableStateOf<AppointmentSlotEntity?>(null) }
     val familyIds = remember(familyMembers) { familyMembers.map { it.id }.toSet() }
     val familyNames = remember(familyMembers) { familyMembers.map { it.fullName }.toSet() }
@@ -2246,6 +2274,12 @@ fun DoctorBookingScreen(
                     onClick = {
                         if (!isBookingSubmitting) {
                             onBookSlot(pendingSlot.id, activeMember)
+                            confirmedBookingSummary = pendingSlot.copy(
+                                status = SlotStatus.BOOKED,
+                                patientName = activeMember.fullName,
+                                patientPhone = activeMember.phone,
+                                familyMemberId = activeMember.id,
+                            ) to activeMember
                             slotPendingConfirm = null
                         }
                     },
@@ -2269,6 +2303,73 @@ fun DoctorBookingScreen(
             dismissButton = {
                 OutlinedButton(onClick = { slotPendingConfirm = null }) {
                     Text(bi(isEn, "تراجع", "Back"))
+                }
+            },
+        )
+    }
+
+    val bookedSummary = confirmedBookingSummary
+    if (bookedSummary != null) {
+        val (bookedSlot, bookedMember) = bookedSummary
+        val timeFormatted = TimeUtils.formatMinutesAr(bookedSlot.effectiveMinutes, isEn)
+        AlertDialog(
+            onDismissRequest = { confirmedBookingSummary = null },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = SlotAvailableBorder,
+                    )
+                    Text(bi(isEn, "✓ تم تأكيد حجز الموعد", "✓ Appointment Confirmed"))
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(bi(isEn, "الطبيب: ${doctor.doctorName}", "Doctor: ${doctor.doctorName}"))
+                    Text(bi(isEn, "العيادة: ${doctor.clinicName}", "Clinic: ${doctor.clinicName}"))
+                    Text(bi(isEn, "الموعد: ${bookedSlot.dateLabel} — $timeFormatted", "Time: ${bookedSlot.dateLabel} — $timeFormatted"))
+                    Text(bi(isEn, "المريض: ${bookedMember.fullName}", "Patient: ${bookedMember.fullName}"))
+                    Text(
+                        text = bi(
+                            isEn,
+                            "يمكنك إضافة الموعد الآن إلى تقويم جوجل لتلقي تذكير تلقائي قبل الزيارة.",
+                            "Add this appointment to your Google Calendar for automatic reminders.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        com.example.util.GoogleCalendarHelper.openGoogleCalendarForAppointment(
+                            context = context,
+                            slot = bookedSlot,
+                            doctor = doctor,
+                            isEn = isEn,
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("post_booking_add_gcal_button"),
+                ) {
+                    Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(bi(isEn, "📅 أضف لتقويم جوجل", "📅 Add to Google Calendar"))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { confirmedBookingSummary = null },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(bi(isEn, "تم", "Done"))
                 }
             },
         )
